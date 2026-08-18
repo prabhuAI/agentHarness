@@ -129,7 +129,7 @@ describe("app verification", () => {
     expect(result.checks.every((entry) => entry.result !== "passed")).toBe(true);
   });
 
-  it("rejects the untouched zero-test seed while confirming that it builds and serves", async () => {
+  it("accepts the participant runtime seed when its generic product journey builds and serves", async () => {
     const artifactDirectory = await mkdtemp(path.join(os.tmpdir(), "agent-cofounder-seed-check-"));
     temporaryDirectories.push(artifactDirectory);
 
@@ -139,8 +139,8 @@ describe("app verification", () => {
       port: await getFreePort(),
     });
 
-    expect(result.passed).toBe(false);
-    expect(result.checks.map((entry) => entry.result)).toEqual(["failed", "passed", "passed"]);
+    expect(result.passed).toBe(true);
+    expect(result.checks.map((entry) => entry.result)).toEqual(["passed", "passed", "passed"]);
   }, 45_000);
 
   it("never accepts HTTP from a server that already owned the configured port", async () => {

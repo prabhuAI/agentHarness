@@ -17,6 +17,7 @@ import { collectUsageFromJsonLines } from "./usage.js";
 import type { RunResult } from "./types.js";
 import { validateResultObject } from "./validate-result.js";
 import { portHasListener, unavailableAppVerification, verifyGeneratedApp } from "./verify-app.js";
+import { verifyRequiredArtifacts } from "./validate-artifacts.js";
 
 interface Arguments {
   ideaFile: string;
@@ -134,6 +135,16 @@ export async function runPi(
   stderrFile: string,
   timeoutMs: number,
 ): Promise<CommandResult> {
+  const piAgentDirectory = path.join(path.dirname(eventFile), "pi-agent");
+  await mkdir(piAgentDirectory, { recursive: true });
+  const modelConfiguration = await readFile(
+    path.join(REPOSITORY_ROOT, "solution", "provider-config", "models.json"),
+    "utf8",
+  );
+  await writeFile(path.join(piAgentDirectory, "models.json"), modelConfiguration, {
+    encoding: "utf8",
+    flag: "wx",
+  });
   const events = createWriteStream(eventFile, { flags: "wx" });
   const errors = createWriteStream(stderrFile, { flags: "wx" });
   let lineBuffer = "";
@@ -150,7 +161,11 @@ export async function runPi(
       const child = spawn(piBinary, args, {
         cwd,
         detached: usesDetachedProcessGroup(),
-        env: { ...process.env, PI_OFFLINE: "1" },
+        env: {
+          ...process.env,
+          PI_CODING_AGENT_DIR: piAgentDirectory,
+          PI_OFFLINE: "1",
+        },
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
       });
@@ -215,8 +230,8 @@ export function buildPiArguments(
     path.join(artifactDirectory, "sessions"),
     "--extension",
     path.join(REPOSITORY_ROOT, "solution", "extensions", "protected-paths.ts"),
-    "--skill",
-    path.join(REPOSITORY_ROOT, "solution", "skills", "mvp-builder"),
+    "--extension",
+    path.join(REPOSITORY_ROOT, "solution", "extensions", "product-compiler.ts"),
   ];
   if (process.env.CHALLENGE_PROVIDER) args.push("--provider", process.env.CHALLENGE_PROVIDER);
   if (process.env.CHALLENGE_MODEL) args.push("--model", process.env.CHALLENGE_MODEL);
@@ -295,7 +310,12 @@ async function main(): Promise<void> {
     [rootResultPath],
   );
   if (canVerifyApp) {
-    verification = await verifyGeneratedApp(outputDirectory, artifactDirectory, { displayRoot: REPOSITORY_ROOT });
+    const appVerification = await verifyGeneratedApp(outputDirectory, artifactDirectory, { displayRoot: REPOSITORY_ROOT });
+    const artifactCheck = await verifyRequiredArtifacts(outputDirectory);
+    verification = {
+      passed: appVerification.passed && artifactCheck.result === "passed",
+      checks: [...appVerification.checks, artifactCheck],
+    };
     result = composeResult(partial, usage, pi.exitCode, verification, portReclamation, startCommand);
     resultPaths = await writeResult(outputDirectory, result, [rootResultPath]);
   }

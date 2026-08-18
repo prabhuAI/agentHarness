@@ -1,0 +1,2190 @@
+# PRD — AgentCofounder Competition Entry
+
+**Version:** 2.0
+**Status:** Implementation Ready
+**Date:** August 17, 2026
+**Submission Deadline:** September 4, 2026
+**Primary Objective:** Win the AgentCofounder Hackathon by maximizing functional reliability and minimizing weighted token expenditure.
+
+> Implementation tracking: the repository implementation is mapped in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Code-complete capabilities are distinguished from provider-dependent benchmark and submission gates.
+
+---
+
+# 1. Product Summary
+
+This project implements an autonomous AI product-building system for the Stockholm AI AgentCofounder Hackathon.
+
+The system accepts a raw, informal startup idea and autonomously converts it into a working micro-application.
+
+The official challenge defines Phase 1 as:
+
+> From a raw, unstructured human idea to a fully working, token-efficient micro-application.
+
+The generated application must be usable, tested, persistent, maintainable, and runnable locally at:
+
+`http://localhost:3000`
+
+using:
+
+`npm run dev`
+
+The entire execution must occur without human intervention or manual post-processing.
+
+---
+
+# 2. Product Thesis
+
+The project will NOT treat every startup idea as a greenfield code-generation problem.
+
+Instead:
+
+> **LLMs handle ambiguity and novel reasoning. Deterministic software handles known engineering patterns.**
+
+The system converts the user's idea into a compact structured representation called **Product IR**.
+
+Product IR is then executed through the cheapest capable path:
+
+```text
+Idea
+ ↓
+Product Interpretation
+ ↓
+Product IR
+ ↓
+Capability Router
+ ↓
+┌───────────────────┬─────────────────────┐
+│ Known pattern     │ Novel requirement   │
+│                   │                     │
+│ Deterministic     │ Targeted coding     │
+│ compiler          │ agent               │
+└─────────┬─────────┴──────────┬──────────┘
+          └─────────┬──────────┘
+                    ↓
+              Working App
+                    ↓
+              Automated QA
+                    ↓
+              Repair if needed
+                    ↓
+              VERIFIED APP
+```
+
+This architecture is designed specifically around the competition's token-efficiency metric.
+
+---
+
+# 3. Official Challenge Contract
+
+This section contains competition requirements rather than implementation preferences.
+
+## 3.1 Input
+
+The system receives a raw startup idea.
+
+The idea may be:
+
+* informal;
+* non-technical;
+* incomplete;
+* ambiguous;
+* conversational.
+
+The system must infer sensible product requirements without requiring clarification from the user during execution.
+
+---
+
+# 4. Required Autonomous Execution Loop
+
+The system MUST autonomously perform all six official stages.
+
+## 4.1 Understand Intent
+
+Extract:
+
+* target audience;
+* user's problem;
+* core product utility;
+* primary workflow;
+* important entities.
+
+## 4.2 Translate Requirements
+
+Convert the raw idea into explicit:
+
+* product requirements;
+* engineering requirements;
+* features;
+* data requirements;
+* interaction requirements.
+
+## 4.3 Scope Prioritization
+
+Determine the smallest useful MVP.
+
+The system should deliberately decide what NOT to implement.
+
+Examples:
+
+* mock payments if payment processing is not core;
+* stub authentication if identity is not core;
+* avoid unnecessary settings;
+* avoid speculative features.
+
+## 4.4 Application Generation
+
+Generate and compile application code inside the required project structure.
+
+## 4.5 Automated Testing
+
+Test critical user journeys automatically.
+
+## 4.6 Zero-Friction Delivery
+
+Deliver an application accessible at:
+
+`http://localhost:3000`
+
+through:
+
+`npm run dev`
+
+No manual post-processing is allowed between receiving the idea and producing the final output.
+
+---
+
+# 5. Required Product Outputs
+
+A successful execution must produce:
+
+```text
+Raw Idea
+   ↓
+idea_spec.json
+   ↓
+Runnable Application
+   ↓
+summary.md
+   ↓
+trace.jsonl
+   ↓
+result.json
+```
+
+The organizers explicitly expect the system to produce a runnable POC together with specification, summary and transparent execution traces.
+
+---
+
+# 6. Required `idea_spec.json`
+
+`idea_spec.json` represents the system's interpretation of the idea.
+
+It must contain enough information to explain:
+
+* target user;
+* core utility;
+* included features;
+* excluded features;
+* assumptions.
+
+Recommended internal structure:
+
+```json
+{
+  "target_user": "...",
+  "core_utility": "...",
+
+  "included_features": [
+    "..."
+  ],
+
+  "excluded_features": [
+    "..."
+  ],
+
+  "assumptions": [
+    "..."
+  ]
+}
+```
+
+The specification SHOULD be generated from Product IR rather than through an additional LLM call.
+
+---
+
+# 7. Required `result.json`
+
+At the conclusion of every run, the system MUST produce a machine-readable `result.json` reconciled with actual Pi/session telemetry.
+
+Required information includes:
+
+```json
+{
+  "status": "success",
+  "app_url": "http://localhost:3000",
+  "start_command": "npm run dev",
+  "summary": "...",
+
+  "implemented_features": [],
+
+  "assumptions": [],
+
+  "tests_run": [
+    {
+      "command": "npm test",
+      "journey": "...",
+      "result": "passed"
+    }
+  ],
+
+  "model_calls": 0,
+
+  "input_tokens": 0,
+  "output_tokens": 0,
+
+  "cache_read_tokens": 0,
+  "cache_write_tokens": 0,
+
+  "total_tokens": 0,
+
+  "call_log": []
+}
+```
+
+Token information MUST originate from real telemetry rather than estimates generated by the model.
+
+---
+
+# 8. Required `trace.jsonl`
+
+Every important autonomous decision must be traceable.
+
+Example:
+
+```json
+{"step":1,"agent":"product","action":"interpret_idea","status":"success"}
+{"step":2,"agent":"product","action":"select_scope","status":"success"}
+{"step":3,"agent":"router","action":"select_strategy","strategy":"compile"}
+{"step":4,"agent":"compiler","action":"generate_application","status":"success"}
+{"step":5,"agent":"qa","action":"run_journeys","passed":7,"failed":0}
+{"step":6,"agent":"delivery","action":"finalize","status":"success"}
+```
+
+The trace SHOULD contain decisions and execution information.
+
+It SHOULD NOT contain:
+
+* unnecessary full prompts;
+* huge source files;
+* chain-of-thought;
+* redundant model output.
+
+The official challenge requires decisions to be auditable and replayable through `trace.jsonl`.
+
+---
+
+# 9. Primary Competition Metric
+
+Functional qualification comes first.
+
+An application that fails baseline user journeys does not benefit from being token-efficient.
+
+After qualifying, entries are ranked strictly by weighted token expenditure:
+
+`Efficiency = Input Tokens + (Output Tokens × 3) + (Cache Read Tokens × 0.1)`
+
+Therefore the architecture MUST treat model calls as expensive resources.
+
+Particularly:
+
+**Output tokens are three times as expensive as input tokens.**
+
+Cache reads are only weighted at `0.1×`, encouraging effective prompt caching.
+
+---
+
+# 10. Optimization Objective
+
+The real optimization objective is:
+
+```text
+                functional success
+maximize  ─────────────────────────────
+             weighted token expenditure
+```
+
+The project MUST NOT optimize token usage so aggressively that application reliability decreases below qualification thresholds.
+
+Priority:
+
+1. Pass.
+2. Pass reliably.
+3. Reduce tokens.
+4. Reduce tokens further without lowering reliability.
+
+---
+
+# 11. Application Readiness Requirements
+
+The official application-readiness score totals 100 points.
+
+## 11.1 Usability & UX — 30 points
+
+Generated applications should provide:
+
+* clear navigation;
+* responsive layout;
+* intuitive actions;
+* validation feedback;
+* clean error messages.
+
+## 11.2 Data & State Persistence — 20 points
+
+Applications should provide:
+
+* reliable state;
+* persistence across refresh;
+* clean data structures.
+
+## 11.3 Robustness — 20 points
+
+Applications should handle:
+
+* invalid inputs;
+* edge cases;
+* repeated operations;
+* runtime failures.
+
+## 11.4 API & Integration Readiness — 15 points
+
+Applications should use decoupled boundaries that make future databases and external services easy to integrate.
+
+## 11.5 Maintainability & Extensibility — 15 points
+
+Applications should have:
+
+* clean project layout;
+* separation of concerns;
+* readable code;
+* structures another developer or agent can extend.
+
+These categories and weights are defined directly in the challenge specification.
+
+---
+
+# 12. Framework Strategy
+
+The competition states:
+
+> The harness is a contract, not a framework.
+
+The system therefore MUST comply with the challenge contracts regardless of implementation technology.
+
+The competition permits:
+
+* Pi;
+* LangChain;
+* AutoGen;
+* CrewAI;
+* custom Python;
+* custom TypeScript.
+
+The official starter repository comes preconfigured with Pi contracts and verification tooling, while the Contracts Track is specifically recommended for maximizing evaluation score and token efficiency.
+
+---
+
+# 13. Selected Architecture
+
+For this submission:
+
+**Pi will be used as the agent runtime/orchestration layer.**
+
+However:
+
+> Pi is infrastructure, not the competitive advantage.
+
+The competitive system will sit on top of Pi.
+
+```text
+              PI HARNESS
+                  │
+                  ▼
+          TOKEN-AWARE ROUTER
+                  │
+          ┌───────┴────────┐
+          ▼                ▼
+   Product Intelligence   Tools
+          │
+          ▼
+       Product IR
+          │
+          ▼
+   Capability Router
+       ↙       ↘
+ Compiler     Coding Agent
+       ↘       ↙
+       Application
+           │
+           ▼
+          QA
+           │
+        PASS/FAIL
+           │
+         Repair
+```
+
+---
+
+# 14. Logical Agents
+
+The system contains four logical agents.
+
+They do NOT all require independent LLM sessions.
+
+## Product Agent
+
+Implementation:
+
+**LLM**
+
+Purpose:
+
+Understand what should be built.
+
+---
+
+## Builder Agent
+
+Implementation:
+
+**Deterministic compiler + selective LLM**
+
+Purpose:
+
+Produce the application.
+
+---
+
+## QA Agent
+
+Implementation:
+
+**Deterministic testing**
+
+Purpose:
+
+Determine whether the product actually works.
+
+---
+
+## Repair Agent
+
+Implementation:
+
+**Rules first; LLM fallback**
+
+Purpose:
+
+Fix failures.
+
+---
+
+# 15. Product Agent
+
+The Product Agent is responsible for the highest-value reasoning step.
+
+Input:
+
+```text
+raw startup idea
+```
+
+Output:
+
+```text
+Product IR
+```
+
+Responsibilities:
+
+* infer target user;
+* identify problem;
+* identify core utility;
+* determine core user loop;
+* identify entities;
+* identify fields;
+* identify important behaviors;
+* resolve ambiguity;
+* select MVP features;
+* exclude unnecessary features;
+* select closest application pattern.
+
+The Product Agent SHOULD normally require one model invocation.
+
+---
+
+# 16. Product IR
+
+Product IR is the canonical intermediate representation between human intent and application implementation.
+
+It MUST describe:
+
+* product;
+* users;
+* entities;
+* fields;
+* capabilities;
+* workflows;
+* filters;
+* calculations;
+* persistence;
+* assumptions;
+* exclusions;
+* custom requirements.
+
+It MUST NOT describe React implementation details.
+
+---
+
+# 17. Product IR Example
+
+```json
+{
+  "version": "1",
+
+  "product": {
+    "name": "Shelf Keeper",
+    "description": "Track books and who has borrowed them.",
+    "targetUser": "Household sharing books",
+    "genome": "tracker"
+  },
+
+  "entities": [
+    {
+      "name": "book",
+
+      "fields": [
+        {
+          "id": "title",
+          "type": "text",
+          "required": true
+        },
+
+        {
+          "id": "author",
+          "type": "text",
+          "required": true
+        },
+
+        {
+          "id": "category",
+          "type": "category",
+          "required": true,
+          "allowCustom": true
+        },
+
+        {
+          "id": "borrower",
+          "type": "text",
+          "required": false
+        }
+      ]
+    }
+  ],
+
+  "capabilities": {
+    "create": true,
+    "edit": true,
+    "delete": true,
+    "search": true
+  },
+
+  "persistence": {
+    "strategy": "localStorage"
+  },
+
+  "assumptions": [],
+
+  "excluded": [
+    "authentication",
+    "cloud database"
+  ]
+}
+```
+
+---
+
+# 18. Supported Field Types
+
+Initial field types:
+
+```text
+text
+longText
+number
+currency
+date
+datetime
+boolean
+category
+status
+email
+url
+```
+
+Additional types SHOULD only be introduced when benchmark evidence demonstrates a need.
+
+---
+
+# 19. Supported Product Behaviors
+
+The compiler SHOULD understand reusable semantic behaviors:
+
+```text
+create
+edit
+delete
+search
+filter
+sort
+group
+status transition
+calculate
+count
+sum
+date tracking
+simple relationships
+```
+
+These abstractions are more valuable than domain-specific concepts.
+
+For example:
+
+Do NOT implement:
+
+```text
+BookBorrowerComponent
+PlantWateringComponent
+JobApplicationComponent
+```
+
+Prefer:
+
+```text
+Entity
+Status
+Date
+Category
+Relationship
+Transition
+Filter
+DerivedValue
+```
+
+---
+
+# 20. Product Interpreter Prompt
+
+The initial interpreter prompt SHOULD be extremely concise.
+
+Conceptually:
+
+```text
+Convert the startup idea into valid ProductIR.
+
+Rules:
+
+Build the smallest useful MVP.
+
+Preserve the user's core workflow.
+
+Resolve reasonable ambiguity.
+
+Prefer local single-user persistence.
+
+Mock external services unless essential.
+
+Do not invent unrelated features.
+
+Choose the closest supported application pattern.
+
+Identify unsupported custom behavior explicitly.
+
+Return JSON only.
+```
+
+Then:
+
+```text
+IDEA:
+
+{{idea}}
+```
+
+The Product Agent MUST NOT generate:
+
+* application source code;
+* README;
+* test implementation;
+* architecture essays;
+* explanations;
+* marketing material.
+
+---
+
+# 21. IR Validation
+
+Product IR MUST pass deterministic schema validation.
+
+Recommended implementation:
+
+**Zod**
+
+Pipeline:
+
+```text
+LLM output
+   ↓
+JSON parse
+   ↓
+Zod validation
+   ↓
+normalization
+   ↓
+Product IR
+```
+
+Trivial schema problems SHOULD be corrected deterministically rather than invoking another model.
+
+---
+
+# 22. IR Normalization
+
+Normalization applies product conventions.
+
+Examples:
+
+```text
+Persistence unspecified
+→ localStorage
+
+Authentication not central
+→ omit authentication
+
+Payment not central
+→ mock payment
+
+Unknown category universe
+→ custom category permitted
+
+External API nonessential
+→ mock/stub integration
+
+Single-person utility
+→ single-user application
+```
+
+These defaults reduce both ambiguity and model output.
+
+---
+
+# 23. Application Genomes
+
+The deterministic compiler initially supports five broad application patterns.
+
+## Tracker
+
+Examples:
+
+* books;
+* plants;
+* inventory;
+* expenses;
+* subscriptions.
+
+## Workflow
+
+Examples:
+
+* bugs;
+* tasks;
+* applications;
+* sales leads.
+
+## Catalog
+
+Examples:
+
+* recipes;
+* resources;
+* products;
+* movies.
+
+## Planner
+
+Examples:
+
+* trips;
+* meals;
+* events;
+* study schedules.
+
+## Dashboard
+
+Examples:
+
+* budgets;
+* sales;
+* project metrics;
+* operational reporting.
+
+Genomes represent interaction patterns, NOT domain-specific templates.
+
+---
+
+# 24. Generic UI Engine
+
+The compiler SHOULD avoid generating large amounts of React source.
+
+Prefer:
+
+```text
+Product IR
+ ↓
+app.config.ts
+ ↓
+Generic Application Runtime
+```
+
+For example:
+
+```ts
+export const appConfig = {
+  name: "Job Application Tracker",
+
+  fields: [
+    {
+      key: "company",
+      type: "text",
+      required: true
+    },
+
+    {
+      key: "role",
+      type: "text",
+      required: true
+    },
+
+    {
+      key: "status",
+      type: "category"
+    }
+  ]
+};
+```
+
+Reusable components interpret this configuration.
+
+---
+
+# 25. UI Primitives
+
+Build reusable components for:
+
+```text
+AppShell
+Header
+Navigation
+Page
+Button
+Input
+TextArea
+Select
+DateInput
+Checkbox
+FormField
+EntityForm
+EntityList
+EntityTable
+Card
+SearchBar
+FilterBar
+StatusBadge
+SummaryCard
+EmptyState
+ErrorState
+Modal
+ConfirmDialog
+Toast
+```
+
+These primitives MUST be polished before broadening the number of supported product patterns.
+
+---
+
+# 26. Persistence Architecture
+
+UI components MUST NOT access `localStorage` directly.
+
+Define:
+
+```ts
+interface Repository<T> {
+  list(): T[];
+  get(id: string): T | undefined;
+  create(value: T): T;
+  update(id: string, value: Partial<T>): T;
+  remove(id: string): void;
+}
+```
+
+Initial implementation:
+
+```text
+LocalStorageRepository
+```
+
+This allows future replacement with:
+
+```text
+RESTRepository
+SupabaseRepository
+FirebaseRepository
+```
+
+without rewriting UI components.
+
+---
+
+# 27. Capability Router
+
+After Product IR validation, classify the application.
+
+## Route A — Fully Supported
+
+All required behaviors exist.
+
+Execution:
+
+```text
+Product IR
+ ↓
+Compiler
+ ↓
+App
+```
+
+Additional coding-model calls:
+
+**0**
+
+---
+
+## Route B — Partially Supported
+
+Most requirements exist, but one or more custom behaviors are required.
+
+Example:
+
+> A Pomodoro timer where a tree grows while the timer runs.
+
+Standard compiler handles:
+
+* application shell;
+* settings;
+* persistence;
+* layout.
+
+Coding model handles:
+
+* timer;
+* growth behavior.
+
+---
+
+## Route C — Novel Application
+
+The core interaction cannot reasonably be represented by existing primitives.
+
+Use the coding agent more extensively.
+
+This route SHOULD be rare.
+
+---
+
+# 28. Selective Code Generation
+
+When custom generation is necessary, send the model:
+
+* specific feature;
+* relevant Product IR subset;
+* component interface;
+* relevant files only;
+* acceptance criteria.
+
+Example:
+
+```text
+Implement FocusTimer.tsx.
+
+Requirements:
+
+- 25-minute countdown.
+- Pause/resume.
+- Reset.
+- emit onComplete().
+- no external dependencies.
+
+Existing interfaces:
+...
+
+Return minimal patch only.
+```
+
+Do NOT send the entire repository unless absolutely necessary.
+
+---
+
+# 29. Automated QA
+
+Product IR automatically determines which tests are required.
+
+Example:
+
+```text
+create=true
+→ create journey
+
+edit=true
+→ edit journey
+
+delete=true
+→ delete journey
+
+persistence=true
+→ reload journey
+
+filters exist
+→ filter journey
+
+derived values exist
+→ calculation journey
+```
+
+---
+
+# 30. Standard Product Journeys
+
+Where applicable:
+
+```text
+J1 Application loads
+
+J2 Empty state renders
+
+J3 Create valid record
+
+J4 Created record appears
+
+J5 Refresh application
+
+J6 Record survives refresh
+
+J7 Edit record
+
+J8 Updated value appears
+
+J9 Apply filter
+
+J10 Verify correct result
+
+J11 Invalid input
+
+J12 Validation shown
+
+J13 Delete record
+
+J14 Record removed
+```
+
+Only relevant journeys should execute.
+
+---
+
+# 31. Self-Review Contract
+
+The challenge explicitly requires the system to review its own work and send broken work back for repair before shipping.
+
+Therefore:
+
+```text
+BUILD
+ ↓
+VERIFY
+ ↓
+PASS? ───── YES ─────→ DELIVERY
+ │
+ NO
+ ↓
+REPAIR
+ ↓
+VERIFY AGAIN
+```
+
+A generated application MUST NOT be considered finished merely because compilation succeeded.
+
+---
+
+# 32. Failure Classification
+
+Classify failures before invoking an LLM.
+
+Categories:
+
+```text
+dependency
+compile
+runtime
+configuration
+validation
+persistence
+selector
+rendering
+journey
+custom-feature
+unknown
+```
+
+---
+
+# 33. Repair Strategy
+
+Use cheapest repair first.
+
+```text
+Failure
+ ↓
+Classifier
+ ↓
+Known fix?
+ ↙      ↘
+YES      NO
+ ↓        ↓
+Rule      Targeted
+repair    LLM
+ ↓        ↓
+ └──→ Re-test
+```
+
+Examples of deterministic fixes:
+
+* missing generated configuration;
+* invalid default;
+* persistence adapter misconfiguration;
+* malformed derived-value mapping;
+* known build configuration issue.
+
+---
+
+# 34. LLM Repair
+
+If deterministic repair fails, invoke a repair model.
+
+Provide ONLY:
+
+```text
+failed journey
+error
+expected behavior
+relevant Product IR
+relevant files
+```
+
+Request:
+
+```text
+minimal patch only
+```
+
+Do NOT request:
+
+* explanation;
+* root-cause essay;
+* complete files unless necessary;
+* unrelated refactoring.
+
+---
+
+# 35. Repair Limits
+
+Default:
+
+```text
+MAX_LLM_REPAIR_ATTEMPTS = 2
+```
+
+Infinite agent loops are forbidden.
+
+After budget exhaustion, accurately report failure.
+
+---
+
+# 36. Token Governor
+
+Maintain a runtime token budget.
+
+Example states:
+
+## GREEN
+
+Normal execution.
+
+Product interpretation permitted.
+
+Targeted custom generation permitted.
+
+## YELLOW
+
+Only calls necessary for qualification.
+
+No optional improvements.
+
+## RED
+
+No optional model calls.
+
+Only deterministic completion/verification.
+
+The governor SHOULD estimate weighted cost before optional calls.
+
+---
+
+# 37. Prompt Caching
+
+Stable content SHOULD be structured to maximize cache reuse.
+
+Potential stable prefixes:
+
+* Product IR schema;
+* product interpretation rules;
+* coding conventions;
+* repair protocol.
+
+Because cache-read tokens receive only a `0.1×` weight, effective caching can materially improve competition ranking.
+
+---
+
+# 38. Public Development Benchmark
+
+The official public prompt is **Book Lending Tracker**.
+
+It tests:
+
+* one entity;
+* four attributes;
+* category filtering;
+* one derived value;
+* page-refresh persistence;
+* single-user operation.
+
+It intentionally contains ambiguity around:
+
+> “roughly what kind of book”
+
+specifically testing fixed dropdown versus free-text category interpretation.
+
+The system SHOULD resolve this product ambiguity sensibly rather than hard-code a Book Tracker solution.
+
+Recommended interpretation:
+
+**Common category suggestions + custom category support.**
+
+---
+
+# 39. Anti-Overfitting Requirement
+
+Reusable infrastructure MUST NOT contain Book Tracker-specific behavior.
+
+Bad:
+
+```text
+borrower
+bookTitle
+author
+cookbook
+novel
+```
+
+inside generic compiler logic.
+
+Good:
+
+```text
+entity
+field
+category
+optionalRelationship
+filter
+derivedValue
+```
+
+The public benchmark is a development test, not the hidden evaluation target.
+
+---
+
+# 40. Internal Benchmark Suite
+
+Create at least 100 synthetic startup ideas.
+
+Cover:
+
+```text
+tracking
+workflow
+planning
+catalogs
+dashboards
+calculations
+state transitions
+dates
+categories
+simple relationships
+custom behavior
+```
+
+Examples:
+
+```text
+Plant care tracker
+
+Job application tracker
+
+Household expense manager
+
+Football attendance manager
+
+Inventory tracker
+
+Subscription manager
+
+Bug workflow
+
+Meal planner
+
+Travel planner
+
+Sales lead tracker
+
+Study planner
+
+Equipment checkout
+
+Event organizer
+
+Personal budget
+
+Recipe catalog
+```
+
+---
+
+# 41. Benchmark Metrics
+
+For every run record:
+
+```text
+functional success
+
+first-pass success
+
+build success
+
+journey success
+
+persistence success
+
+number of model calls
+
+input tokens
+
+output tokens
+
+cache reads
+
+weighted tokens
+
+repair attempts
+
+runtime
+```
+
+---
+
+# 42. Target Performance
+
+Before submission:
+
+```text
+Final functional success     > 90%
+
+First-pass success           > 80%
+
+Build success                > 98%
+
+Persistence success          > 98%
+
+Median normal model calls       1
+
+LLM repair frequency         < 15%
+```
+
+Stretch target:
+
+```text
+>95% final success
+```
+
+while continuing to reduce weighted token expenditure.
+
+---
+
+# 43. Implementation Repository
+
+Recommended participant-owned structure:
+
+```text
+solution/
+│
+├── orchestrator/
+│   ├── run.ts
+│   ├── router.ts
+│   └── budget.ts
+│
+├── product/
+│   ├── interpreter.ts
+│   └── prompt.ts
+│
+├── ir/
+│   ├── schema.ts
+│   ├── validate.ts
+│   └── normalize.ts
+│
+├── compiler/
+│   ├── compile.ts
+│   ├── config-generator.ts
+│   └── capability-map.ts
+│
+├── genomes/
+│   ├── tracker.ts
+│   ├── workflow.ts
+│   ├── catalog.ts
+│   ├── planner.ts
+│   └── dashboard.ts
+│
+├── primitives/
+│   ├── ui/
+│   ├── forms/
+│   ├── data/
+│   └── storage/
+│
+├── qa/
+│   ├── derive-journeys.ts
+│   ├── verify.ts
+│   └── classify.ts
+│
+├── repair/
+│   ├── deterministic.ts
+│   └── llm.ts
+│
+└── telemetry/
+    ├── trace.ts
+    └── metrics.ts
+```
+
+Preserve official starter/contracts outside participant-owned architecture where appropriate.
+
+---
+
+# 44. Execution Algorithm
+
+Conceptual runtime:
+
+```ts
+async function execute(idea) {
+
+  const budget = createTokenBudget();
+
+  trace("run_started");
+
+  const rawIR =
+    await productAgent.interpret(idea);
+
+  const ir =
+    normalize(validate(rawIR));
+
+  trace("product_interpreted");
+
+  writeIdeaSpec(ir);
+
+  const strategy =
+    capabilityRouter.classify(ir);
+
+  trace("strategy_selected", strategy);
+
+  prepareWorkspace();
+
+  compileSupportedFeatures(ir);
+
+  if (strategy.requiresCustomCode) {
+    await generateCustomFeatures(
+      ir,
+      strategy.unsupportedFeatures,
+      budget
+    );
+  }
+
+  generateTests(ir);
+
+  let verification =
+    await verify();
+
+  if (!verification.passed) {
+
+    verification =
+      await deterministicRepair(
+        verification
+      );
+  }
+
+  if (
+    !verification.passed &&
+    budget.canRepair()
+  ) {
+
+    verification =
+      await targetedLLMRepair(
+        verification
+      );
+  }
+
+  const finalVerification =
+    await verify();
+
+  writeSummary(ir, finalVerification);
+
+  writeTrace();
+
+  reconcileTelemetry();
+
+  writeResult();
+
+  return finalVerification;
+}
+```
+
+---
+
+# 45. Definition of Done — Generated Application
+
+A generated application is complete only when:
+
+* project installs successfully;
+* project builds successfully;
+* application starts successfully;
+* `npm run dev` works;
+* application responds on port 3000;
+* core user journey passes;
+* persistence works where required;
+* invalid input does not crash the app;
+* required artifacts exist;
+* telemetry reconciles;
+* execution trace is valid.
+
+---
+
+# 46. Definition of Done — Competition Submission
+
+The submission is ready only when:
+
+* clean checkout works;
+* single-command challenge execution works;
+* public development prompt passes;
+* internal benchmark meets target success rate;
+* no manual fixes are required;
+* generated app launches at `localhost:3000`;
+* `idea_spec.json` is valid;
+* `summary.md` exists;
+* `trace.jsonl` exists;
+* `result.json` exists;
+* token counts come from telemetry;
+* dependencies are pinned appropriately;
+* repository contains no benchmark-specific hacks;
+* final verification has been executed from a clean environment.
+
+The official submission requires the repository, verification output and `trace.jsonl` by September 4, 2026.
+
+---
+
+# 47. Implementation Schedule
+
+## Aug 17–19 — Foundation
+
+* official repository running;
+* Pi configured;
+* understand verifier;
+* hard-coded Product IR;
+* Book Tracker compiled;
+* official public journey passing.
+
+### Exit criterion
+
+```text
+Hardcoded IR → verified app
+```
+
+---
+
+## Aug 20–21 — Product Compiler
+
+Implement:
+
+* Product IR schema;
+* validator;
+* normalizer;
+* generic configuration;
+* Tracker genome.
+
+### Exit criterion
+
+```text
+Different Product IRs → different working apps
+```
+
+No LLM required yet.
+
+---
+
+## Aug 22–23 — Application Runtime
+
+Implement:
+
+* polished UI primitives;
+* repository abstraction;
+* local persistence;
+* validation;
+* filtering;
+* derived values;
+* responsive UX.
+
+### Exit criterion
+
+Multiple tracker applications work from configuration alone.
+
+---
+
+## Aug 24 — Product Intelligence
+
+Connect:
+
+```text
+idea
+ ↓
+Qwen
+ ↓
+Product IR
+ ↓
+compiler
+```
+
+### Exit criterion
+
+Raw Book Tracker prompt completes autonomously.
+
+---
+
+## Aug 25–26 — Generalization
+
+Add:
+
+* Workflow;
+* Catalog;
+* Planner;
+* Dashboard;
+* capability router.
+
+### Exit criterion
+
+At least 20 diverse prompts compile successfully.
+
+---
+
+## Aug 27 — Autonomous QA
+
+Implement:
+
+* journey derivation;
+* tests;
+* persistence verification;
+* validation verification.
+
+### Exit criterion
+
+Tests are generated from Product IR rather than hard-coded per domain.
+
+---
+
+## Aug 28 — Repair
+
+Implement:
+
+* failure classifier;
+* deterministic repair;
+* targeted LLM repair;
+* retry limits.
+
+### Critical milestone
+
+**The entire official autonomous execution loop must work by August 28.**
+
+---
+
+## Aug 29–30 — Benchmark
+
+Run 50–100 prompts.
+
+Measure:
+
+* success;
+* first-pass rate;
+* model calls;
+* weighted tokens;
+* failures.
+
+Fix systemic issues.
+
+---
+
+## Aug 31 — Token Optimization
+
+Optimize:
+
+* prompts;
+* Product IR verbosity;
+* caching;
+* repair context;
+* unnecessary calls;
+* model output.
+
+Do NOT introduce optimizations that materially reduce reliability.
+
+---
+
+## Sep 1 — Product Quality
+
+Improve:
+
+* UX;
+* responsive behavior;
+* validation;
+* errors;
+* accessibility;
+* maintainability.
+
+---
+
+## Sep 2 — Demo / Optional Launch Mode
+
+Only after competition core is stable.
+
+---
+
+## Sep 3 — Submission Hardening
+
+* clean repository;
+* clean-environment run;
+* telemetry reconciliation;
+* documentation;
+* trace verification;
+* final benchmark.
+
+---
+
+## Sep 4 — Submission
+
+Run official verification from clean checkout.
+
+Submit before deadline.
+
+---
+
+# 48. OPTIONAL — Launch Mode
+
+**This section is NOT part of the scored core execution pipeline.**
+
+It exists only as a demonstration of the broader product vision.
+
+Launch Mode becomes available after:
+
+```text
+VERIFIED_PASS
+```
+
+Then:
+
+```text
+Verified Product
+       ↓
+    Launch Kit
+       ↓
+├── positioning
+├── tagline
+├── landing-page content
+├── screenshots
+├── demo-video plan
+├── launch-video script
+├── LinkedIn draft
+├── Product Hunt draft
+└── announcement copy
+```
+
+Do NOT allow Launch Mode to consume tokens during official core evaluation unless specifically required.
+
+---
+
+# 49. Why Launch Mode Matters
+
+The organizers' own long-term vision describes an AI cofounder that does more than code: it turns ideas into products, markets them, sells them, supports them and even handles bookkeeping.
+
+However, the organizers explicitly describe this hackathon as the **first milestone**, focused on building the coding module.
+
+Therefore:
+
+```text
+COMPETITION
+
+Idea → Code → Product → Verify
+
+
+VISION
+
+Idea
+ ↓
+Product
+ ↓
+Build
+ ↓
+Verify
+ ↓
+Launch
+ ↓
+Market
+ ↓
+Sell
+ ↓
+Support
+ ↓
+Operate
+```
+
+Launch Mode demonstrates the second story without compromising the first.
+
+---
+
+# 50. Demo Narrative
+
+The competition demonstration should first prove the scored system.
+
+Use an unfamiliar idea.
+
+Show:
+
+```text
+IDEA
+ ↓
+Product interpretation
+ ↓
+Product IR
+ ↓
+Build strategy
+ ↓
+Application generation
+ ↓
+Automated journeys
+ ↓
+VERIFIED PASS
+```
+
+Then display:
+
+```text
+Application        READY
+
+Journeys           7 / 7
+
+Model calls        1
+
+Input tokens       XXX
+
+Output tokens      XXX
+
+Cache reads        XXX
+
+Weighted tokens    XXX
+
+URL
+localhost:3000
+```
+
+Then open the application.
+
+Only after proving the challenge should the presentation transition to the broader vision:
+
+> **“The challenge ends when localhost starts. A real cofounder doesn't.”**
+
+Then optionally demonstrate Launch Mode.
+
+---
+
+# 51. Competitive Positioning
+
+Do NOT pitch:
+
+> We built several AI agents that generate React applications.
+
+Instead:
+
+> **We built a token-aware autonomous product compiler on top of an agent harness.**
+
+Technical thesis:
+
+> **Treat application generation as a compilation problem rather than a conversation problem.**
+
+Supporting principle:
+
+> **LLMs for judgment. Software for repetition.**
+
+---
+
+# 52. What Makes the Architecture Different
+
+A conventional coding agent may execute:
+
+```text
+Idea
+ ↓
+Plan with LLM
+ ↓
+Generate with LLM
+ ↓
+Review with LLM
+ ↓
+Rewrite with LLM
+ ↓
+Test
+ ↓
+Debug with LLM
+ ↓
+Rewrite
+```
+
+AgentCofounder should attempt:
+
+```text
+Idea
+ ↓
+Understand once
+ ↓
+Product IR
+ ↓
+Compile
+ ↓
+Test
+ ↓
+Ship
+```
+
+Only exceptions invoke additional intelligence.
+
+---
+
+# 53. Engineering Principles
+
+### Principle 1
+
+**LLMs resolve ambiguity.**
+
+### Principle 2
+
+**Deterministic software handles solved problems.**
+
+### Principle 3
+
+**Product intent must be separated from implementation.**
+
+### Principle 4
+
+**Never regenerate reusable boilerplate.**
+
+### Principle 5
+
+**Tests, not confidence, determine completion.**
+
+### Principle 6
+
+**Known failures receive known fixes.**
+
+### Principle 7
+
+**Unknown failures receive targeted intelligence.**
+
+### Principle 8
+
+**Every model call must justify its weighted-token cost.**
+
+### Principle 9
+
+**Never send more context than the model needs.**
+
+### Principle 10
+
+**Qualification beats token optimization.**
+
+---
+
+# 54. North-Star Metric
+
+The project's primary internal metric is:
+
+> **Percentage of unseen startup ideas transformed into usable, verified applications per weighted token spent.**
+
+Supporting metrics:
+
+```text
+Functional success %
+
+First-pass success %
+
+Weighted tokens / successful app
+
+Model calls / successful app
+
+Repair rate
+
+Persistence success %
+
+Build success %
+
+Journey success %
+```
+
+---
+
+# 55. Final Acceptance Test
+
+Before submission, choose a startup idea that has never been used during development.
+
+Run the complete system from a clean environment.
+
+No developer may modify anything during execution.
+
+The system must autonomously:
+
+```text
+READ IDEA
+
+↓
+
+UNDERSTAND USER
+
+↓
+
+DEFINE MVP
+
+↓
+
+CREATE idea_spec.json
+
+↓
+
+GENERATE Product IR
+
+↓
+
+SELECT BUILD STRATEGY
+
+↓
+
+BUILD APPLICATION
+
+↓
+
+START APPLICATION
+
+↓
+
+TEST CORE JOURNEYS
+
+↓
+
+DETECT FAILURES
+
+↓
+
+REPAIR IF NECESSARY
+
+↓
+
+RE-VERIFY
+
+↓
+
+WRITE summary.md
+
+↓
+
+WRITE trace.jsonl
+
+↓
+
+WRITE result.json
+
+↓
+
+RECONCILE TOKEN TELEMETRY
+
+↓
+
+SERVE localhost:3000
+
+↓
+
+VERIFIED_PASS
+```
+
+If that works reliably across unseen ideas while consuming fewer weighted tokens than competing systems, the architecture has achieved its objective.
+
+---
+
+# 56. Final Product Statement
+
+**AgentCofounder is not an AI that writes as much code as possible.**
+
+It is an autonomous product-building system that decides:
+
+* what should be built;
+* what should not be built;
+* what software already knows how to build;
+* where AI reasoning is actually necessary;
+* whether the result works;
+* whether it needs repair;
+* when the product is ready to ship.
+
+The competition implementation focuses entirely on:
+
+> **Idea → Working, Verified Micro-Application**
+
+The architecture is deliberately designed so the same system can later extend toward:
+
+> **Idea → Product → Launch → Market → Sell → Support**
+
+without compromising the token efficiency required to win Phase 1.

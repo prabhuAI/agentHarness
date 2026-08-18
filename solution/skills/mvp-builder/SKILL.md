@@ -6,14 +6,15 @@ description: Turn a non-technical product idea into a small, tested browser appl
 # MVP Builder
 
 1. Extract the entity, its attributes, every journey detailed or implied by the idea, and any ambiguity.
-2. Use the public journey guidance as a coverage check. Implement every applicable pattern, but omit patterns the idea does not imply instead of inventing substitute features; record the rationale in `assumptions`.
-3. Prefer browser-local persistence unless the idea genuinely requires a backend. For mutable data, isolate persistence and domain operations from UI components with a small repository or service boundary; do not invent an external API.
-4. Implement accessible controls, validation, empty states, errors, and responsive layout. Handle duplicate or repeated actions, boundary values, malformed stored data, and recoverable storage or runtime failures where relevant.
-5. Keep components focused, separate concerns, and avoid duplication so another developer or agent can extend the app without a rewrite.
-6. Use only the dependencies already installed from the committed lockfile. Do not add packages or run dependency-install commands.
-7. Test every applicable observable user behavior with the included Vitest, jsdom, and Testing Library setup. Startup and assumptions reporting are runner obligations, not UI test journeys. Every committed test must run and pass; do not leave skipped or todo tests.
-8. Run the tests and production build before reporting success.
-9. Write `report.partial.json` with this exact shape:
+2. Call `compile_product` once with the complete Product IR. Do not inspect or edit files first. The compiler owns configuration, CRUD, validation, persistence, search, filters, summaries, artifacts, and standard QA.
+3. Use the public journey guidance as a coverage check. Implement every applicable pattern, but omit patterns the idea does not imply instead of inventing substitute features; record the rationale in `assumptions`.
+4. Prefer browser-local persistence unless the idea genuinely requires a backend. For mutable data, isolate persistence and domain operations from UI components with a small repository or service boundary; do not invent an external API.
+5. Implement accessible controls, validation, empty states, errors, and responsive layout. Handle duplicate or repeated actions, boundary values, malformed stored data, and recoverable storage or runtime failures where relevant.
+6. Keep components focused, separate concerns, and avoid duplication so another developer or agent can extend the app without a rewrite.
+7. Use only the dependencies already installed from the committed lockfile. Do not add packages or run dependency-install commands.
+8. Test every applicable observable user behavior with the included Vitest, jsdom, and Testing Library setup. Startup and assumptions reporting are runner obligations, not UI test journeys. Every committed test must run and pass; do not leave skipped or todo tests.
+9. Run the tests and production build before reporting success.
+10. The compiler writes `idea_spec.json`, `summary.md`, compact `trace.jsonl`, and `report.partial.json`. For a focused custom route, call `finalize_product` after the patch; do not rewrite these artifacts manually. `report.partial.json` uses this exact shape:
 
 ```json
 {

@@ -1,0 +1,29 @@
+{
+  "name": "Idea Ledger",
+  "tagline": "Capture, shape, and revisit promising product ideas.",
+  "entityName": "idea",
+  "entityNamePlural": "ideas",
+  "genome": "tracker",
+  "eyebrow": "Tracker",
+  "collectionLabel": "Collection",
+  "accent": "#5b5bd6",
+  "primaryField": "title",
+  "secondaryFields": ["category", "status", "notes"],
+  "searchableFields": ["title", "category", "notes"],
+  "filters": [
+    { "id": "inbox", "label": "Inbox", "field": "status", "operator": "equals", "value": "Inbox" },
+    { "id": "exploring", "label": "Exploring", "field": "status", "operator": "equals", "value": "Exploring" },
+    { "id": "validated", "label": "Validated", "field": "status", "operator": "equals", "value": "Validated" }
+  ],
+  "summaries": [
+    { "id": "total", "label": "Total ideas", "operation": "count" },
+    { "id": "exploring", "label": "Exploring", "operation": "countWhere", "field": "status", "operator": "equals", "value": "Exploring" }
+  ],
+  "capabilities": { "create": true, "edit": true, "delete": true, "search": true, "sort": true, "group": false },
+  "fields": [
+    { "key": "title", "label": "Idea", "type": "text", "required": true, "placeholder": "What could exist?" },
+    { "key": "category", "label": "Category", "type": "category", "options": ["Product", "Service", "Research"], "allowCustom": true },
+    { "key": "status", "label": "Stage", "type": "status", "required": true, "options": ["Inbox", "Exploring", "Validated"] },
+    { "key": "notes", "label": "Notes", "type": "longText", "placeholder": "Problem, audience, or next step" }
+  ]
+}

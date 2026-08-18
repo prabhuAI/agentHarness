@@ -1,5 +1,7 @@
 # AgentCofounder starter
 
+> Participant entry: **CompileKit** — a token-aware product compiler. One model call resolves product ambiguity into a compact configuration; deterministic software supplies polished application behavior and verification. See [PRD.md](PRD.md) for the product strategy.
+
 A forkable baseline for the AgentCofounder challenge. It gives every team the same pinned Pi runtime, neutral web application seed, execution command, telemetry collector, and public contract while leaving the actual agent strategy participant-owned.
 
 This repository installs Pi as a local dependency at exactly `@earendil-works/pi-coding-agent@0.84.1`. Do not use the floating shell installer and do not run `pi update` during the challenge.
@@ -39,6 +41,17 @@ export CHALLENGE_MODEL="model-id"
 export CHALLENGE_THINKING="off"
 ```
 
+For the Berget endpoint shown in the competition dashboard, create a key there and configure the shell that will run the challenge:
+
+```bash
+export BERGET_API_KEY="your-key-from-the-Berget-dashboard"
+export CHALLENGE_PROVIDER="berget"
+export CHALLENGE_MODEL="zai-org/GLM-5.2"
+export CHALLENGE_THINKING="off"
+```
+
+The checked-in `solution/provider-config/models.json` contains only the public endpoint and model metadata. For each run, the runner copies it into an isolated audit directory and Pi resolves the key from `BERGET_API_KEY`; the secret is never written into the repository configuration.
+
 Never commit credentials. `.env.example` documents variable names, but the runner intentionally does not load `.env` files.
 
 The default thinking level is `off` to avoid multiplying output-token cost in the efficiency ranking. Raise it only when measurements show the extra reasoning improves completion quality.
@@ -76,9 +89,24 @@ The app must be available at `http://localhost:3000`. In another terminal, valid
 npm run validate:result -- output/app/result.json
 ```
 
+## Compiler execution
+
+The Product Agent does not generate React source for normal ideas. It submits one compact Product IR through the terminating `compile_product` tool:
+
+```text
+raw idea → Product IR → validate → normalize → capability route
+                                      ├─ compile → QA → deliver
+                                      ├─ hybrid  → focused patch → finalize
+                                      └─ custom  → bounded patch → finalize
+```
+
+The compiler writes `product.config.json`, `product-ir.json`, `idea_spec.json`, `summary.md`, `trace.jsonl`, and `report.partial.json`. The domain-neutral runtime interprets the configuration. Supported routes terminate after the initial tool call, avoiding a paid follow-up response. Hybrid and custom routes permit at most two focused repair turns.
+
+The five supported interaction genomes are tracker, workflow, catalog, planner, and dashboard. Reusable behavior includes fields, CRUD, search, preset filters, sorting, category/status grouping, status transitions through editing, count/count-where/sum summaries, validation, and browser-local persistence.
+
 ## Result and telemetry ownership
 
-The model writes `report.partial.json`, containing the product summary, assumptions, features, and tests. The runner writes `result.json` after parsing Pi's completed `message_end` events. This prevents the model from inventing headline token totals.
+The deterministic compiler writes `report.partial.json`, containing the product summary, assumptions, features, and derived journeys. The runner writes `result.json` after parsing Pi's completed `message_end` events. This prevents the model from inventing headline token totals.
 
 The runner appends the canonical domain-neutral journey guidance from `contract-public/journeys.md` to Pi's built-in system prompt. The protected-paths extension removes only Pi's documentation-reference block, retaining its tool list and usage guidance without steering the model toward package internals. The challenge guidance prevents implied behaviors from being dropped for simplicity while explicitly rejecting unrelated substitute features; the input idea remains authoritative.
 
@@ -90,7 +118,7 @@ A provisional result is written before app verification starts. Verification fai
 
 The raw event stream and Pi session files are retained for audit. Official judging must independently recompute usage and compare it with `result.json`; the participant-controlled report is never the final scoring authority.
 
-`reasoning_tokens` and `cost_total` are included as additional audit fields. No efficiency score is calculated here because the public specification must first define the cache-write weighting and whether ranking uses the custom token formula or Pi's monetary cost.
+`reasoning_tokens` and `cost_total` are included as additional audit fields. `weighted_token_expenditure` is reconciled from audited telemetry using `input + output × 3 + cache read × 0.1`; cache writes remain separately reported because the published formula does not weight them.
 
 ## Develop the harness
 
@@ -104,6 +132,34 @@ The starter deliberately makes one autonomous Pi invocation. Possible participan
 - a different Pi integration through its SDK or RPC mode.
 
 Do not add a challenge idea's domain vocabulary or expected records to reusable code. The official judging idea will be different.
+
+### Participant strategy
+
+The generated workspace starts with a domain-neutral application runtime driven by `product.config.json`. Supported ideas require no model-authored application code. The runtime includes:
+
+- accessible create, edit, delete, validation, empty, and error states;
+- text search and category/status filtering;
+- responsive cards and derived collection summaries;
+- a repository boundary over versioned browser-local persistence;
+- recovery from malformed stored data;
+- a configuration-driven end-to-end component test.
+
+Novel core interactions can still take the fallback path: the same Pi session may add a focused component and tests, then invoke deterministic finalization. This preserves generality while minimizing the output tokens weighted most heavily by the competition formula.
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `npm run challenge` | Execute the public idea through Pi and the product compiler |
+| `npm run challenge -- --prepare-only` | Reset the generated workspace without a model call |
+| `npm run check` | Run type checks, harness tests, runtime journeys, and build |
+| `npm run benchmark -- --limit 20` | Run an audited multi-idea benchmark; use `--limit 120` for the full suite |
+| `npm run validate:result -- output/app/result.json` | Validate schema and telemetry reconciliation |
+| `npm --prefix output/app run dev` | Serve the generated product on port 3000 |
+
+Set `CHALLENGE_LAUNCH_MODE=1` to generate the optional post-verification `launch-kit.md`. Keep it disabled for scored runs.
+
+See [PRESENTATION_GUIDE.md](PRESENTATION_GUIDE.md) for the architecture, demo, and judge Q&A; [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for the PRD completion matrix; and [TEST_PLAN.md](TEST_PLAN.md) for acceptance coverage.
 
 ## Security
 

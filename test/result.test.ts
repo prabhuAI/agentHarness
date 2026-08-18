@@ -77,6 +77,7 @@ describe("result contract", () => {
     const result = composeResult(partial, usage, 0, verification, portReclamation, ROOT_START_COMMAND);
     expect(await validateResultObject(result)).toEqual([]);
     expect(result.port_reclamation).toMatchObject({ attempted: false, process_ids: [] });
+    expect(result.weighted_token_expenditure).toBe(25.2);
   });
 
   it("overrides success when Pi exits unsuccessfully", () => {
@@ -226,6 +227,7 @@ describe("result contract", () => {
       "pi_exit_code",
       "telemetry_source",
       "port_reclamation",
+      "weighted_token_expenditure",
     ];
 
     for (const field of auditFields) {

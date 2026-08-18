@@ -100,6 +100,7 @@ export function composeResult(
     tests_run: partial.tests_run,
     harness_checks: verification.checks,
     ...usage,
+    weighted_token_expenditure: usage.input_tokens + usage.output_tokens * 3 + usage.cache_read_tokens * 0.1,
     pi_exit_code: piExitCode,
     telemetry_source: "pi-json-event-stream",
     port_reclamation: portReclamation,

@@ -69,6 +69,7 @@ export interface PortReclamationAudit {
 }
 
 export interface RunResult extends PartialRunResult, UsageSummary {
+  weighted_token_expenditure: number;
   harness_checks: TestRun[];
   pi_exit_code: number;
   telemetry_source: "pi-json-event-stream";

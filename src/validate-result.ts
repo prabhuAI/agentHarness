@@ -46,6 +46,9 @@ export async function validateResultObject(value: unknown): Promise<string[]> {
   if (result.cache_read_tokens !== totals.cacheRead) errors.push("cache_read_tokens does not reconcile with call_log");
   if (result.cache_write_tokens !== totals.cacheWrite) errors.push("cache_write_tokens does not reconcile with call_log");
   if (result.total_tokens !== totals.total) errors.push("total_tokens does not reconcile with call_log");
+  if (!sameNumber(result.weighted_token_expenditure, totals.input + totals.output * 3 + totals.cacheRead * 0.1)) {
+    errors.push("weighted_token_expenditure does not reconcile with call_log");
+  }
   if (!sameNumber(result.cost_total, result.call_log.reduce((sum, call) => sum + (call.cost_total ?? 0), 0))) {
     errors.push("cost_total does not reconcile with call_log");
   }

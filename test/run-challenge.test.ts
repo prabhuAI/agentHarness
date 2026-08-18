@@ -45,6 +45,8 @@ describe("Pi launch", () => {
       expect(args).not.toContain("--approve");
       expect(args[args.indexOf("--thinking") + 1]).toBe("off");
       expect(args).not.toContain("--system-prompt");
+      expect(args).not.toContain("--skill");
+      expect(args).toContain(path.resolve("solution", "extensions", "product-compiler.ts"));
       expect(args[args.indexOf("--append-system-prompt") + 1]).toContain("Stable app contract");
       expect(args[args.indexOf("--append-system-prompt") + 1]).toContain(
         "Create, edit, delete, narrow, derive, and persist",
@@ -160,5 +162,30 @@ describe("Pi launch", () => {
     expect(result.timedOut).toBe(false);
     expect(result.exitCode).not.toBe(124);
     expect(await readFile(stderrFile, "utf8")).toContain("Unknown provider");
+    const copiedModels = JSON.parse(
+      await readFile(path.join(directory, "pi-agent", "models.json"), "utf8"),
+    ) as {
+      providers: Record<
+        string,
+        {
+          apiKey: string;
+          baseUrl: string;
+          compat: { thinkingFormat: string; chatTemplateArgs: Record<string, unknown> };
+          models: Array<{ reasoning: boolean; thinkingLevelMap: { off: string } }>;
+        }
+      >;
+    };
+    expect(copiedModels.providers.berget).toMatchObject({
+      apiKey: "$BERGET_API_KEY",
+      baseUrl: "https://api.berget.ai/v1",
+      compat: {
+        thinkingFormat: "baseten",
+        chatTemplateArgs: { enable_thinking: { $var: "thinking.enabled" } },
+      },
+      models: [{ reasoning: true, thinkingLevelMap: { off: "none" } }],
+    });
+    expect(await readFile(path.join(directory, "pi-agent", "models.json"), "utf8")).not.toMatch(
+      /Bearer\s+[A-Za-z0-9]/u,
+    );
   }, 10_000);
 });

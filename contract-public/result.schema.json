@@ -21,6 +21,7 @@
     "reasoning_tokens",
     "cost_total",
     "call_log",
+    "weighted_token_expenditure",
     "pi_exit_code",
     "telemetry_source",
     "port_reclamation"
@@ -90,6 +91,7 @@
     "cache_read_tokens": { "type": "integer", "minimum": 0 },
     "cache_write_tokens": { "type": "integer", "minimum": 0 },
     "total_tokens": { "type": "integer", "minimum": 0 },
+    "weighted_token_expenditure": { "type": "number", "minimum": 0 },
     "reasoning_tokens": { "type": "integer", "minimum": 0 },
     "cost_total": { "type": "number", "minimum": 0 },
     "call_log": {
