@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FieldConfig, type PredicateOperator, productConfig } from "./product-config.js";
 import { EntityRecord, LocalStorageRepository, RecordValue } from "./repository.js";
 
@@ -8,14 +8,19 @@ const repository = new LocalStorageRepository(storageKey, loaded.records, typeof
 
 type Values = Record<string, RecordValue>;
 type Errors = Record<string, string>;
+const CUSTOM_OPTION_VALUE = "__agent_cofounder_custom_option__";
 
-const emptyValues = (): Values => Object.fromEntries(
-  productConfig.fields.map((field) => [field.key, field.type === "boolean" ? false : ""]),
-);
+const emptyValue = (field: FieldConfig): RecordValue => field.type === "boolean" ? false : "";
+const emptyValues = (): Values => Object.fromEntries(productConfig.fields.map((field) => [field.key, emptyValue(field)]));
+
+function isFieldVisible(field: FieldConfig, values: Values): boolean {
+  return !field.visibleWhen || String(values[field.visibleWhen.field] ?? "") === field.visibleWhen.equals;
+}
 
 function validate(values: Values): Errors {
   const errors: Errors = {};
   for (const field of productConfig.fields) {
+    if (!isFieldVisible(field, values)) continue;
     const value = values[field.key];
     const text = String(value ?? "").trim();
     if (field.required && (text === "" || value === false)) errors[field.key] = `${field.label} is required.`;
@@ -37,21 +42,48 @@ function Field({ field, value, error, onChange }: {
   field: FieldConfig; value: RecordValue; error?: string; onChange: (value: RecordValue) => void;
 }) {
   const id = `field-${field.key}`;
+  const textValue = String(value ?? "");
+  const options = field.options ?? [];
+  const [customMode, setCustomMode] = useState(
+    () => Boolean(field.allowCustom && textValue && !options.includes(textValue)),
+  );
+  useEffect(() => {
+    if (!field.allowCustom || !textValue || options.includes(textValue)) setCustomMode(false);
+    else setCustomMode(true);
+  }, [field.allowCustom, field.options, textValue]);
   const common = { id, name: field.key, "aria-invalid": Boolean(error), "aria-describedby": error ? `${id}-error` : undefined };
   let control;
   if (field.type === "longText") {
-    control = <textarea {...common} rows={4} value={String(value)} placeholder={field.placeholder} onChange={(event) => onChange(event.target.value)} />;
-  } else if ((field.type === "category" || field.type === "status") && field.options && !field.allowCustom) {
-    control = <select {...common} value={String(value)} onChange={(event) => onChange(event.target.value)}>
+    control = <textarea {...common} rows={4} value={textValue} placeholder={field.placeholder} onChange={(event) => onChange(event.target.value)} />;
+  } else if ((field.type === "category" || field.type === "status") && options.length > 0) {
+    control = <div className="choice-control"><select {...common} value={customMode ? CUSTOM_OPTION_VALUE : textValue} onChange={(event) => {
+      if (event.target.value === CUSTOM_OPTION_VALUE) {
+        setCustomMode(true);
+        onChange("");
+      } else {
+        setCustomMode(false);
+        onChange(event.target.value);
+      }
+    }}>
       <option value="">Choose {field.label.toLowerCase()}</option>
-      {field.options.map((option) => <option key={option}>{option}</option>)}
-    </select>;
+      {options.map((option) => <option key={option}>{option}</option>)}
+      {field.allowCustom && <option value={CUSTOM_OPTION_VALUE}>Other…</option>}
+    </select>{customMode && <input
+      id={`${id}-custom`}
+      name={`${field.key}-custom`}
+      aria-label={`Custom ${field.label}`}
+      aria-invalid={Boolean(error)}
+      aria-describedby={error ? `${id}-error` : undefined}
+      autoFocus
+      value={textValue}
+      placeholder={`Enter custom ${field.label.toLowerCase()}`}
+      onChange={(event) => onChange(event.target.value)}
+    />}</div>;
   } else if (field.type === "boolean") {
     control = <label className="check"><input {...common} type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.target.checked)} /><span>Yes</span></label>;
   } else {
     const inputType = field.type === "currency" || field.type === "number" ? "number" : field.type === "datetime" ? "datetime-local" : field.type === "category" || field.type === "status" ? "text" : field.type;
-    control = <><input {...common} type={inputType} value={String(value)} min={field.min} max={field.max} placeholder={field.placeholder} list={field.allowCustom ? `${id}-options` : undefined} onChange={(event) => onChange(event.target.value)} />
-      {field.allowCustom && field.options && <datalist id={`${id}-options`}>{field.options.map((option) => <option key={option} value={option} />)}</datalist>}</>;
+    control = <input {...common} type={inputType} value={textValue} min={field.min} max={field.max} placeholder={field.placeholder} onChange={(event) => onChange(event.target.value)} />;
   }
   return <div className={`field ${field.type === "longText" ? "field-wide" : ""}`}>
     <label htmlFor={id}>{field.label}{field.required && <span aria-hidden="true"> *</span>}</label>
@@ -77,6 +109,14 @@ function matchesPredicate(value: RecordValue | undefined, operator: PredicateOpe
   return value === false || text === "false" || text === "";
 }
 
+function GenomeGlyph({ genome }: { genome: typeof productConfig.genome }) {
+  if (genome === "workflow") return <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="10" width="18" height="16" rx="4"/><rect x="38" y="38" width="18" height="16" rx="4"/><path d="M26 18h12a8 8 0 0 1 8 8v12M38 46H26a8 8 0 0 1-8-8V26"/></svg>;
+  if (genome === "catalog") return <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="9" width="20" height="20" rx="5"/><rect x="36" y="9" width="20" height="20" rx="5"/><rect x="8" y="37" width="20" height="18" rx="5"/><rect x="36" y="37" width="20" height="18" rx="5"/></svg>;
+  if (genome === "planner") return <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="13" width="48" height="42" rx="8"/><path d="M8 26h48M20 8v10M44 8v10M19 37h10M35 37h10M19 46h10"/></svg>;
+  if (genome === "dashboard") return <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 51V35h10v16M27 51V22h10v29M44 51V11h10v40M7 51h50"/></svg>;
+  return <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="23"/><path d="M18 34l9 9 19-23"/></svg>;
+}
+
 export function App() {
   const [records, setRecords] = useState<EntityRecord[]>(repository.list());
   const [values, setValues] = useState<Values>(emptyValues);
@@ -89,6 +129,10 @@ export function App() {
   const dialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => { document.title = productConfig.name; }, []);
+  useEffect(() => {
+    const firstInvalid = productConfig.fields.find((field) => errors[field.key] && isFieldVisible(field, values));
+    if (firstInvalid) document.getElementById(`field-${firstInvalid.key}`)?.focus();
+  }, [errors]);
 
   const visible = useMemo(() => records.filter((record) => {
     const matchesQuery = !query || productConfig.searchableFields.some((key) => String(record.values[key] ?? "").toLowerCase().includes(query.toLowerCase()));
@@ -100,7 +144,7 @@ export function App() {
     if (sort === "created") return left.createdAt.localeCompare(right.createdAt);
     return right.updatedAt.localeCompare(left.updatedAt);
   }), [records, query, filter, sort]);
-  const summaries = useMemo(() => productConfig.summaries.slice(0, 3).map((summary) => {
+  const summaries = useMemo(() => productConfig.summaries.map((summary) => {
     if (summary.operation === "count") return { ...summary, value: records.length };
     if (summary.operation === "sum") return { ...summary, value: records.reduce((total, record) => total + Number(record.values[summary.field ?? ""] || 0), 0) };
     return { ...summary, value: records.filter((record) => matchesPredicate(record.values[summary.field ?? ""], summary.operator ?? "nonEmpty", summary.value)).length };
@@ -124,6 +168,24 @@ export function App() {
   const openEdit = (record: EntityRecord) => { setEditingId(record.id); setValues({ ...emptyValues(), ...record.values }); setErrors({}); dialog.current?.showModal(); };
   const close = () => dialog.current?.close();
 
+  const updateValue = (key: string, value: RecordValue) => {
+    setValues((current) => {
+      const next = { ...current, [key]: value };
+      for (const field of productConfig.fields) {
+        if (field.visibleWhen && !isFieldVisible(field, next)) next[field.key] = emptyValue(field);
+      }
+      return next;
+    });
+    setErrors((current) => {
+      const next = { ...current };
+      delete next[key];
+      for (const field of productConfig.fields) {
+        if (field.visibleWhen?.field === key) delete next[field.key];
+      }
+      return next;
+    });
+  };
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const nextErrors = validate(values);
@@ -144,18 +206,48 @@ export function App() {
     catch (error) { setNotice(error instanceof Error ? error.message : "The item could not be deleted."); }
   };
 
+  const design = productConfig.design;
+  const designStyle = {
+    "--canvas": design.colors.canvas,
+    "--surface": design.colors.surface,
+    "--surface-alt": design.colors.surfaceAlt,
+    "--ink": design.colors.ink,
+    "--muted": design.colors.muted,
+    "--border": design.colors.border,
+    "--accent": design.colors.accent,
+    "--accent-text": design.colors.accentText,
+    "--topbar": design.colors.topbar,
+    "--topbar-text": design.colors.topbarText,
+    "--danger": design.colors.danger,
+    "--font-body": design.typography.body,
+    "--font-display": design.typography.display,
+    "--card-radius": `${design.shape.cardRadius}px`,
+    "--panel-radius": `${design.shape.panelRadius}px`,
+    "--page-space": `${design.spacing.page}px`,
+    "--panel-space": `${design.spacing.panel}px`,
+    "--layout-gap": `${design.spacing.gap}px`,
+  } as CSSProperties;
+
   const recordCard = (record: EntityRecord) => <article className="card" key={record.id}>
     <div className="card-top"><h3>{displayValue(productConfig.fields.find((field) => field.key === productConfig.primaryField)!, record.values[productConfig.primaryField])}</h3>
       <div className="actions">{productConfig.capabilities.edit && <button onClick={() => openEdit(record)}>Edit</button>}{productConfig.capabilities.delete && <button className="danger" onClick={() => remove(record)}>Delete</button>}</div></div>
-    <dl>{productConfig.secondaryFields.map((key) => { const field = productConfig.fields.find((candidate) => candidate.key === key); return field ? <div key={key}><dt>{field.label}</dt><dd className={field.type === "status" ? "badge" : ""}>{displayValue(field, record.values[key])}</dd></div> : null; })}</dl>
+    <dl>{productConfig.secondaryFields.map((key) => { const field = productConfig.fields.find((candidate) => candidate.key === key); return field && isFieldVisible(field, record.values) ? <div key={key}><dt>{field.label}</dt><dd className={field.type === "status" ? "badge" : ""}>{displayValue(field, record.values[key])}</dd></div> : null; })}</dl>
   </article>;
 
-  return <div className="app" style={{ "--accent": productConfig.accent } as React.CSSProperties}>
-    <header className="topbar"><a className="brand" href="#main"><span className="brand-mark">AC</span><span>{productConfig.name}</span></a><span className="local-pill">Private · saved locally</span></header>
+  return <div
+    className={`app genome-${productConfig.genome}`}
+    data-layout={design.layout}
+    data-tone={design.tone}
+    data-density={design.density}
+    data-motion={design.motion}
+    style={designStyle}
+  >
+    <a className="skip-link" href="#main">Skip to content</a>
+    <header className="topbar"><a className="brand" href="#main"><span className="brand-mark"><GenomeGlyph genome={productConfig.genome} /></span><span>{productConfig.name}</span></a><span className="local-pill"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 9V6.8a3.5 3.5 0 0 1 7 0V9M5 9h10v8H5z"/></svg>Private · saved locally</span></header>
     <main id="main">
       <section className="hero">
-        <div><p className="eyebrow">Your working space</p><h1>{productConfig.name}</h1><p>{productConfig.tagline}</p></div>
-        {productConfig.capabilities.create && <button className="primary" onClick={openCreate}>+ Add {productConfig.entityName}</button>}
+        <div className="hero-copy"><p className="eyebrow">{productConfig.eyebrow} workspace</p><h1>{productConfig.name}</h1><p>{productConfig.tagline}</p>{productConfig.capabilities.create && <button className="primary hero-action" onClick={openCreate}><span aria-hidden="true">+</span> Add {productConfig.entityName}</button>}</div>
+        <div className="hero-art" aria-hidden="true"><span className="orbit orbit-one"/><span className="orbit orbit-two"/><span className="hero-glyph"><GenomeGlyph genome={productConfig.genome} /></span></div>
       </section>
       <section className="stats" aria-label="Overview">
         {summaries.map((summary) => <div key={summary.id}><strong>{summary.value}</strong><span>{summary.label}</span></div>)}
@@ -164,7 +256,7 @@ export function App() {
       </section>
       {notice && <div className="notice" role="status"><span>{notice}</span><button aria-label="Dismiss message" onClick={() => setNotice("")}>×</button></div>}
       <section className="collection" aria-labelledby="collection-title">
-        <div className="collection-head"><div><p className="eyebrow">{productConfig.collectionLabel}</p><h2 id="collection-title">All {productConfig.entityNamePlural}</h2></div>
+        <div className="collection-head"><div><p className="eyebrow">{productConfig.collectionLabel}</p><h2 id="collection-title">All {productConfig.entityNamePlural}</h2><span className="result-count">{visible.length} in view</span></div>
           <div className="tools">
             {productConfig.capabilities.search && <label className="search"><span className="sr-only">Search {productConfig.entityNamePlural}</span><input type="search" placeholder={`Search ${productConfig.entityNamePlural}…`} value={query} onChange={(event) => setQuery(event.target.value)} /></label>}
             {productConfig.filters.length > 0 && <label><span className="sr-only">Filter {productConfig.entityNamePlural}</span><select aria-label={`Filter ${productConfig.entityNamePlural}`} value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All {productConfig.entityNamePlural}</option>{productConfig.filters.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}</select></label>}
@@ -181,7 +273,7 @@ export function App() {
       </section>
     </main>
     <dialog ref={dialog} onCancel={close}><form onSubmit={submit} noValidate><div className="dialog-head"><div><p className="eyebrow">{editingId ? "Update" : "New entry"}</p><h2>{editingId ? `Edit ${productConfig.entityName}` : `Add ${productConfig.entityName}`}</h2></div><button type="button" className="icon-button" aria-label="Close" onClick={close}>×</button></div>
-      <div className="form-grid">{productConfig.fields.map((field) => <Field key={field.key} field={field} value={values[field.key]} error={errors[field.key]} onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))} />)}</div>
+      <div className="form-grid">{productConfig.fields.filter((field) => isFieldVisible(field, values)).map((field) => <Field key={field.key} field={field} value={values[field.key]} error={errors[field.key]} onChange={(value) => updateValue(field.key, value)} />)}</div>
       <div className="dialog-actions"><button type="button" className="secondary" onClick={close}>Cancel</button><button className="primary" type="submit">{editingId ? "Save changes" : `Add ${productConfig.entityName}`}</button></div></form></dialog>
   </div>;
 }

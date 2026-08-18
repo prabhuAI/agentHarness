@@ -1,0 +1,90 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "AC Idea Ledger" [ref=e5] [cursor=pointer]:
+      - /url: "#main"
+      - generic [ref=e6]: AC
+      - generic [ref=e7]: Idea Ledger
+    - generic [ref=e8]: Private · saved locally
+  - main [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - paragraph [ref=e12]: Your working space
+        - heading "Idea Ledger" [level=1] [ref=e13]
+        - paragraph [ref=e14]: Capture, shape, and revisit promising product ideas.
+      - button "+ Add idea" [ref=e15] [cursor=pointer]
+    - region "Overview" [ref=e16]:
+      - generic [ref=e17]:
+        - strong [ref=e18]: "0"
+        - generic [ref=e19]: Total ideas
+      - generic [ref=e20]:
+        - strong [ref=e21]: "0"
+        - generic [ref=e22]: Exploring
+      - generic [ref=e23]:
+        - strong [ref=e24]: "0"
+        - generic [ref=e25]: In current view
+    - region "All ideas" [ref=e26]:
+      - generic [ref=e27]:
+        - generic [ref=e28]:
+          - paragraph [ref=e29]: Collection
+          - heading "All ideas" [level=2] [ref=e30]
+        - generic [ref=e31]:
+          - generic [ref=e32]:
+            - generic [ref=e33]: Search ideas
+            - searchbox "Search ideas" [ref=e34]
+          - generic [ref=e35]:
+            - generic [ref=e36]: Filter ideas
+            - combobox "Filter ideas" [ref=e37]:
+              - option "All ideas" [selected]
+              - option "Inbox"
+              - option "Exploring"
+              - option "Validated"
+          - generic [ref=e38]:
+            - generic [ref=e39]: Sort ideas
+            - combobox "Sort ideas" [ref=e40]:
+              - option "Recently updated" [selected]
+              - option "By name"
+              - option "Oldest first"
+      - generic [ref=e41]:
+        - generic [ref=e42]: ◇
+        - heading "No ideas yet" [level=3] [ref=e43]
+        - paragraph [ref=e44]: Add your first idea to get started.
+        - button "Add idea" [ref=e45] [cursor=pointer]
+  - dialog [ref=e46]:
+    - generic [ref=e47]:
+      - generic [ref=e48]:
+        - generic [ref=e49]:
+          - paragraph [ref=e50]: New entry
+          - heading "Add idea" [level=2] [ref=e51]
+        - button "Close" [ref=e52] [cursor=pointer]: ×
+      - generic [ref=e53]:
+        - generic [ref=e54]:
+          - generic [ref=e55]: Idea *
+          - textbox "Idea" [active] [ref=e56]:
+            - /placeholder: What could exist?
+          - generic [ref=e71]: Idea is required.
+        - generic [ref=e57]:
+          - generic [ref=e58]: Category
+          - generic [ref=e59]:
+            - combobox "Category" [ref=e60]:
+              - option "Choose category"
+              - option "Product"
+              - option "Service"
+              - option "Research"
+              - option "Other…" [selected]
+            - textbox "Custom Category" [ref=e73]:
+              - /placeholder: Enter custom category
+        - generic [ref=e61]:
+          - generic [ref=e62]: Stage *
+          - combobox "Stage" [ref=e64]:
+            - option "Choose stage" [selected]
+            - option "Inbox"
+            - option "Exploring"
+            - option "Validated"
+          - generic [ref=e72]: Stage is required.
+        - generic [ref=e65]:
+          - generic [ref=e66]: Notes
+          - textbox "Notes" [ref=e67]:
+            - /placeholder: Problem, audience, or next step
+      - generic [ref=e68]:
+        - button "Cancel" [ref=e69] [cursor=pointer]
+        - button "Add idea" [ref=e70] [cursor=pointer]

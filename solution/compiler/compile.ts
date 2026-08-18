@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveDesign, type CompiledDesign } from "../design/catalog.js";
 import { genomeFor } from "../genomes/index.js";
 import type { NormalizedProductIR, ProductCalculation, ProductFilter, RouteDecision } from "../ir/types.js";
 import type { DerivedJourney } from "../qa/derive-journeys.js";
@@ -13,6 +14,7 @@ interface CompiledConfig {
   eyebrow: string;
   collectionLabel: string;
   accent: string;
+  design: CompiledDesign;
   primaryField: string;
   secondaryFields: string[];
   searchableFields: string[];
@@ -29,6 +31,7 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
   const hasGroupableField = entity.fields.some((field) => field.type === "category" || field.type === "status");
   const secondaryFields = entity.fields.filter((field) => field.id !== entity.primaryField).slice(0, 4).map((field) => field.id);
   const summaries = ir.calculations.length > 0 ? ir.calculations : [{ id: "total", label: `Total ${entity.plural}`, operation: "count" as const }];
+  const design = resolveDesign(ir.product.genome, ir.product.design);
   return {
     name: ir.product.name,
     tagline: ir.product.tagline,
@@ -37,7 +40,8 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
     genome: ir.product.genome,
     eyebrow: genome.eyebrow,
     collectionLabel: genome.collectionLabel,
-    accent: ir.product.accent ?? "#5b5bd6",
+    accent: design.colors.accent,
+    design,
     primaryField: entity.primaryField,
     secondaryFields,
     searchableFields,
@@ -61,6 +65,7 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
       ...(field.allowCustom !== undefined ? { allowCustom: field.allowCustom } : {}),
       ...(field.min !== undefined ? { min: field.min } : {}),
       ...(field.max !== undefined ? { max: field.max } : {}),
+      ...(field.visibleWhen ? { visibleWhen: field.visibleWhen } : {}),
     })),
   };
 }

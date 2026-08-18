@@ -1,6 +1,25 @@
 export const GENOMES = ["tracker", "workflow", "catalog", "planner", "dashboard"] as const;
 export type Genome = (typeof GENOMES)[number];
 
+export const DESIGN_TONES = ["calm", "playful", "professional", "bold", "warm", "technical"] as const;
+export type DesignTone = (typeof DESIGN_TONES)[number];
+
+export const DESIGN_DENSITIES = ["compact", "comfortable", "spacious"] as const;
+export type DesignDensity = (typeof DESIGN_DENSITIES)[number];
+
+export const DESIGN_CONTRASTS = ["soft", "balanced", "high"] as const;
+export type DesignContrast = (typeof DESIGN_CONTRASTS)[number];
+
+export const DESIGN_MOTIONS = ["none", "subtle", "expressive"] as const;
+export type DesignMotion = (typeof DESIGN_MOTIONS)[number];
+
+export interface DesignIntent {
+  tone: DesignTone;
+  density: DesignDensity;
+  contrast: DesignContrast;
+  motion: DesignMotion;
+}
+
 export const FIELD_TYPES = [
   "text", "longText", "number", "currency", "date", "datetime", "boolean",
   "category", "status", "email", "url",
@@ -23,6 +42,10 @@ export interface ProductField {
   allowCustom?: boolean;
   min?: number;
   max?: number;
+  visibleWhen?: {
+    field: string;
+    equals: string;
+  };
 }
 
 export interface ProductEntity {
@@ -70,6 +93,7 @@ export interface ProductIR {
     targetUser: string;
     genome: Genome;
     accent?: string;
+    design?: DesignIntent;
   };
   entities: ProductEntity[];
   capabilities: ProductCapabilities;
@@ -82,6 +106,7 @@ export interface ProductIR {
 }
 
 export interface NormalizedProductIR extends ProductIR {
+  product: ProductIR["product"] & { design: DesignIntent };
   entities: [ProductEntity, ...ProductEntity[]];
 }
 

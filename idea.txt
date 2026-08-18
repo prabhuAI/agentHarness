@@ -1,0 +1,1 @@
+family planner , we are family 4 , mom, dad, 2 kids, each kid will have seprate aciticies n weekddays and week ends , we needd to keep track of that.

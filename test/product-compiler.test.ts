@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { BENCHMARK_IDEAS } from "../benchmarks/suite.js";
 import { classifyCapabilities } from "../solution/compiler/capability-map.js";
 import { compileConfig, writeCompiledProduct } from "../solution/compiler/compile.js";
+import { resolveDesign } from "../solution/design/catalog.js";
 import { normalizeProductIR } from "../solution/ir/normalize.js";
 import { ProductIRValidationError, validateProductIR } from "../solution/ir/schema.js";
 import type { ProductIR } from "../solution/ir/types.js";
@@ -38,13 +39,29 @@ function fixture(overrides: Partial<ProductIR> = {}): ProductIR {
   };
 }
 
+function contrastRatio(foreground: string, background: string): number {
+  const luminance = (hex: string) => {
+    const channels = hex.slice(1).match(/.{2}/gu)!.map((channel) => Number.parseInt(channel, 16) / 255)
+      .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+  };
+  const lighter = Math.max(luminance(foreground), luminance(background));
+  const darker = Math.min(luminance(foreground), luminance(background));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 describe("Product IR compiler", () => {
   it("validates, normalizes, routes, and compiles supported ideas deterministically", () => {
     const ir = normalizeProductIR(validateProductIR(fixture()));
     const route = classifyCapabilities(ir);
     const config = compileConfig(ir);
     expect(route.route).toBe("compile");
-    expect(config).toMatchObject({ name: "Decision Log", genome: "workflow", primaryField: "title" });
+    expect(config).toMatchObject({
+      name: "Decision Log",
+      genome: "workflow",
+      primaryField: "title",
+      design: { layout: "stage-board", tone: "professional", density: "compact" },
+    });
     expect(config.filters).toHaveLength(1);
     expect(config.summaries).toHaveLength(2);
     expect(deriveJourneys(ir).map((journey) => journey.id)).toEqual(expect.arrayContaining(["create", "persistence", "filter", "calculate", "delete"]));
@@ -56,6 +73,49 @@ describe("Product IR compiler", () => {
     const normalized = normalizeProductIR(validateProductIR(duplicate));
     expect(new Set(normalized.entities[0].fields.map((field) => field.id)).size).toBe(normalized.entities[0].fields.length);
     expect(() => validateProductIR({ version: "1" })).toThrow(ProductIRValidationError);
+  });
+
+  it("infers a compact design intent and resolves every genome to a distinct local layout", () => {
+    const familyPlanner = fixture({
+      product: {
+        name: "Family Rhythm",
+        description: "Coordinate activities for parents and kids.",
+        tagline: "One calm family plan.",
+        targetUser: "Parents with two kids",
+        genome: "planner",
+      },
+    });
+    const normalized = normalizeProductIR(validateProductIR(familyPlanner));
+    expect(normalized.product.design).toEqual({ tone: "playful", density: "comfortable", contrast: "balanced", motion: "subtle" });
+    expect(compileConfig(normalized).design).toMatchObject({ layout: "agenda-canvas", tone: "playful" });
+
+    const layouts = (["tracker", "workflow", "catalog", "planner", "dashboard"] as const)
+      .map((genome) => resolveDesign(genome, normalized.product.design).layout);
+    expect(new Set(layouts).size).toBe(5);
+  });
+
+  it("accepts explicit design enums and rejects unbounded visual instructions", () => {
+    const designed = fixture({
+      product: {
+        ...fixture().product,
+        design: { tone: "bold", density: "spacious", contrast: "high", motion: "expressive" },
+      },
+    });
+    const normalized = normalizeProductIR(validateProductIR(designed));
+    expect(normalized.product.design).toEqual(designed.product.design);
+    expect(compileConfig(normalized).design).toMatchObject({ tone: "bold", density: "spacious", contrast: "high", motion: "expressive" });
+
+    const malformed = structuredClone(designed) as unknown as { product: { design: { tone: string } } };
+    malformed.product.design.tone = "generate-arbitrary-css";
+    expect(() => validateProductIR(malformed)).toThrow(ProductIRValidationError);
+  });
+
+  it("keeps every curated palette above WCAG AA text contrast", () => {
+    for (const tone of ["calm", "playful", "professional", "bold", "warm", "technical"] as const) {
+      const design = resolveDesign("tracker", { tone, density: "comfortable", contrast: "balanced", motion: "subtle" });
+      expect(contrastRatio(design.colors.accent, design.colors.accentText)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(design.colors.ink, design.colors.surface)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it("routes only unsupported core interactions to bounded custom work", () => {
@@ -73,6 +133,21 @@ describe("Product IR compiler", () => {
     expect(classifyCapabilities(ir).route).toBe("compile");
     expect(compileConfig(ir).capabilities.group).toBe(true);
     expect(deriveJourneys(ir)).toContainEqual(expect.objectContaining({ id: "group" }));
+  });
+
+  it("normalizes and compiles conditional field visibility", () => {
+    const conditional = fixture();
+    conditional.entities[0]!.fields[3]!.visibleWhen = { field: "status", equals: "Accepted" };
+    const ir = normalizeProductIR(validateProductIR(conditional));
+    expect(ir.entities[0].fields[3]?.visibleWhen).toEqual({ field: "status", equals: "Accepted" });
+    expect(compileConfig(ir).fields[3]).toMatchObject({
+      key: "rationale",
+      visibleWhen: { field: "status", equals: "Accepted" },
+    });
+
+    conditional.entities[0]!.fields[3]!.visibleWhen = { field: "missing", equals: "Accepted" };
+    const normalizedInvalid = normalizeProductIR(validateProductIR(conditional));
+    expect(normalizedInvalid.entities[0].fields[3]?.visibleWhen).toBeUndefined();
   });
 
   it("generates required artifacts directly from Product IR", async () => {

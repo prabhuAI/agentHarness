@@ -24,6 +24,10 @@ const fieldSchema = Type.Object({
   allowCustom: Type.Optional(Type.Boolean()),
   min: Type.Optional(Type.Number()),
   max: Type.Optional(Type.Number()),
+  visibleWhen: Type.Optional(Type.Object({
+    field: Type.String({ description: "id of another field that controls visibility" }),
+    equals: Type.String({ description: "exact controlling value that makes this field visible" }),
+  })),
 });
 const predicateSchema = {
   id: Type.String(),
@@ -40,7 +44,12 @@ const productIRSchema = Type.Object({
     tagline: Type.String(),
     targetUser: Type.String(),
     genome: Type.String({ enum: ["tracker", "workflow", "catalog", "planner", "dashboard"] }),
-    accent: Type.Optional(Type.String({ description: "accessible six-digit hex color" })),
+    design: Type.Optional(Type.Object({
+      tone: Type.String({ enum: ["calm", "playful", "professional", "bold", "warm", "technical"] }),
+      density: Type.String({ enum: ["compact", "comfortable", "spacious"] }),
+      contrast: Type.String({ enum: ["soft", "balanced", "high"] }),
+      motion: Type.String({ enum: ["none", "subtle", "expressive"] }),
+    }, { description: "Four short visual-intent enums; omit when the deterministic genome default is suitable" })),
   }),
   entities: Type.Array(Type.Object({
     name: Type.String({ description: "singular lowercase noun" }),
@@ -140,6 +149,8 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
       "Call compile_product exactly once after interpreting the idea; do not read or edit application files first.",
       "Use customRequirements only for essential interactions that cannot be represented by fields, CRUD, search, filters, state transitions, or count/sum calculations.",
       "For ambiguous categories, prefer useful suggestions with allowCustom true.",
+      "Use visibleWhen for a field that only applies when another field has one exact selected value.",
+      "Use product.design only when the idea clearly signals a tone, density, contrast, or motion preference; never generate colors, fonts, CSS, or layout instructions.",
     ],
     parameters: productIRSchema,
     async execute(_id, params, signal, onUpdate) {

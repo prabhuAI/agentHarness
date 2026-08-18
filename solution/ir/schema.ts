@@ -1,5 +1,9 @@
 import {
   CALCULATION_OPERATIONS,
+  DESIGN_CONTRASTS,
+  DESIGN_DENSITIES,
+  DESIGN_MOTIONS,
+  DESIGN_TONES,
   FIELD_TYPES,
   FILTER_OPERATORS,
   GENOMES,
@@ -27,6 +31,15 @@ export function validateProductIR(value: unknown): ProductIR {
       if (typeof product[key] !== "string" || product[key].trim() === "") issues.push(`product.${key} is required`);
     }
     if (!GENOMES.includes(product.genome as never)) issues.push("product.genome is unsupported");
+    if (product.design !== undefined) {
+      if (!isRecord(product.design)) issues.push("product.design must be an object");
+      else {
+        if (!DESIGN_TONES.includes(product.design.tone as never)) issues.push("product.design.tone is unsupported");
+        if (!DESIGN_DENSITIES.includes(product.design.density as never)) issues.push("product.design.density is unsupported");
+        if (!DESIGN_CONTRASTS.includes(product.design.contrast as never)) issues.push("product.design.contrast is unsupported");
+        if (!DESIGN_MOTIONS.includes(product.design.motion as never)) issues.push("product.design.motion is unsupported");
+      }
+    }
   }
 
   if (!Array.isArray(value.entities) || value.entities.length === 0) issues.push("at least one entity is required");
@@ -42,6 +55,13 @@ export function validateProductIR(value: unknown): ProductIR {
       if (!FIELD_TYPES.includes(field.type as never)) issues.push(`field ${fieldIndex} has unsupported type`);
       if (typeof field.required !== "boolean") issues.push(`field ${fieldIndex}.required must be boolean`);
       if (field.options !== undefined && !strings(field.options)) issues.push(`field ${fieldIndex}.options must be strings`);
+      if (field.visibleWhen !== undefined) {
+        if (!isRecord(field.visibleWhen)) issues.push(`field ${fieldIndex}.visibleWhen must be an object`);
+        else {
+          if (typeof field.visibleWhen.field !== "string" || field.visibleWhen.field.trim() === "") issues.push(`field ${fieldIndex}.visibleWhen.field is required`);
+          if (typeof field.visibleWhen.equals !== "string" || field.visibleWhen.equals.trim() === "") issues.push(`field ${fieldIndex}.visibleWhen.equals is required`);
+        }
+      }
     });
   });
 
