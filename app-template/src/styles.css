@@ -315,10 +315,13 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .app[data-layout="command-center"] .hero-art { display: none; }
 .app[data-layout="command-center"] .hero h1 { font-size: clamp(30px, 4vw, 50px); }
 .app[data-layout="command-center"] .grid { grid-template-columns: 1fr; gap: 0; padding: 0; }
-.app[data-layout="command-center"] .card { display: grid; grid-template-columns: minmax(200px, 1fr) 2fr; align-items: center; gap: 20px; padding: 15px var(--panel-space); border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+.app[data-layout="command-center"] .card { display: grid; grid-template-columns: minmax(160px, 1.3fr) 2fr auto; align-items: center; gap: 20px; padding: 15px var(--panel-space); border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+.app[data-layout="command-center"] .card-top { display: contents; }
+.app[data-layout="command-center"] .card-top h3 { grid-column: 1; }
+.app[data-layout="command-center"] .card .actions { grid-column: 3; justify-self: end; }
 .app[data-layout="command-center"] .grid > .card:last-child { border-bottom: 0; }
 .app[data-layout="command-center"] .card:hover { background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
-.app[data-layout="command-center"] .card dl { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin: 0; }
+.app[data-layout="command-center"] .card dl { grid-column: 2; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin: 0; }
 .app[data-layout="command-center"] .card dl div { grid-template-columns: 1fr; gap: 4px; }
 
 /* ── Shared UX: sticky navigation, undo toast, clear-view control ── */
@@ -370,6 +373,7 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
   .tools > label { flex: 1 1 180px; }
   .tools input { width: 100%; }
   .app[data-layout="command-center"] .card { grid-template-columns: 1fr; gap: 12px; }
+  .app[data-layout="command-center"] .card-top { display: flex; }
 }
 
 @media (max-width: 600px) {

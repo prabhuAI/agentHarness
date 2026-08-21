@@ -98,6 +98,36 @@ describe("Product IR compiler", () => {
     expect(normalized.entities[0].fields.find((field) => field.id === "owner")?.type).toBe("text");
   });
 
+  it("coerces synonym field types (select/dropdown/toggle) instead of failing the compile", () => {
+    const raw = fixture();
+    raw.entities[0]!.fields[2] = { id: "genre", label: "Genre", type: "select" as unknown as ProductIR["entities"][number]["fields"][number]["type"], required: true, options: ["Novel", "Cookbook", "Reference"] };
+    const ir = normalizeProductIR(validateProductIR(raw));
+    const genre = ir.entities[0].fields.find((field) => field.id === "genre");
+    expect(genre?.type).toBe("category");
+    // Coercion also lets the compiler derive per-option filters/counts for it.
+    expect(ir.filters).toContainEqual(expect.objectContaining({ field: "genre", operator: "equals", value: "Novel" }));
+  });
+
+  it("tolerates a sparse IR (missing genome, required, and array fields) by defaulting", () => {
+    const sparse = {
+      version: "1",
+      product: { name: "Book Shelf", targetUser: "A reader" },
+      entities: [{ name: "book", plural: "books", primaryField: "title", fields: [
+        { id: "title", label: "Title", type: "text" },
+        { id: "genre", label: "Genre", type: "select", options: ["Novel", "Cookbook", "Reference"] },
+      ] }],
+    };
+    const ir = normalizeProductIR(validateProductIR(sparse));
+    expect(ir.product.genome).toBe("tracker");
+    expect(ir.entities[0].fields[0]!.required).toBe(true); // primary is always required
+    expect(ir.entities[0].fields[1]!.required).toBe(false); // omitted required defaults to false
+    expect(ir.entities[0].fields[1]!.type).toBe("category"); // "select" coerced
+    expect(ir.entities[0].fields[1]!.allowCustom).toBe(true); // category with options accepts custom input
+    expect(ir.capabilities.create).toBe(true);
+    expect(Array.isArray(ir.customRequirements)).toBe(true);
+    expect(classifyCapabilities(ir).route).toBe("compile");
+  });
+
   it("normalizes duplicate identifiers and rejects malformed IR", () => {
     const duplicate = fixture();
     duplicate.entities[0]!.fields[1]!.id = "title";

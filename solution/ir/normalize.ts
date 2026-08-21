@@ -1,4 +1,29 @@
 import type { DesignIntent, Genome, NormalizedProductIR, ProductCalculation, ProductEntity, ProductField, ProductFilter, ProductIR } from "./types.js";
+import { FIELD_TYPES, GENOMES, type FieldType } from "./types.js";
+
+// Common field-type synonyms weaker models emit, mapped to the runtime's vocabulary.
+const FIELD_TYPE_SYNONYMS: Record<string, FieldType> = {
+  select: "category", dropdown: "category", choice: "category", enum: "category", multiselect: "category", tags: "category", tag: "category", radio: "category", picklist: "category",
+  toggle: "boolean", checkbox: "boolean", bool: "boolean",
+  textarea: "longText", multiline: "longText", paragraph: "longText", richtext: "longText",
+  string: "text", shorttext: "text", short_text: "text",
+  int: "number", integer: "number", float: "number", decimal: "number",
+  money: "currency", price: "currency",
+  time: "datetime", timestamp: "datetime", "datetime-local": "datetime",
+  link: "url", website: "url",
+  state: "status", stage: "status",
+};
+
+// A field type is coerced, never rejected: valid types pass through, known synonyms
+// map to the runtime vocabulary, and an option-bearing field always becomes a choice
+// control. This keeps a single mislabeled type (e.g. "select") from failing the whole compile.
+function coerceFieldType(raw: unknown, hasOptions: boolean): FieldType {
+  const text = String(raw ?? "").trim();
+  const known = (FIELD_TYPES as readonly string[]).includes(text)
+    ? (text as FieldType)
+    : (FIELD_TYPE_SYNONYMS[text.toLowerCase()] ?? (hasOptions ? "category" : "text"));
+  return hasOptions && known !== "category" && known !== "status" ? "category" : known;
+}
 
 const clean = (value: string): string => value.trim().replace(/\s+/gu, " ");
 const identifier = (value: string, fallback: string): string => {
@@ -9,8 +34,13 @@ const uniqueStrings = (values: string[]): string[] => [...new Set(values.map(cle
 
 const includesAny = (text: string, words: string[]): boolean => words.some((word) => text.includes(word));
 
+const DEFAULT_GENOME: Genome = "tracker";
+const resolveGenome = (value: unknown): Genome =>
+  (GENOMES as readonly string[]).includes(String(value)) ? (value as Genome) : DEFAULT_GENOME;
+
 function inferDesignIntent(input: ProductIR): DesignIntent {
-  const text = `${input.product.name} ${input.product.description} ${input.product.targetUser}`.toLowerCase();
+  const product = input.product ?? ({} as ProductIR["product"]);
+  const text = `${product.name ?? ""} ${product.description ?? ""} ${product.targetUser ?? ""}`.toLowerCase();
   const genomeDefaults: Record<Genome, DesignIntent> = {
     tracker: { tone: "calm", density: "comfortable", contrast: "balanced", motion: "subtle" },
     workflow: { tone: "professional", density: "compact", contrast: "balanced", motion: "subtle" },
@@ -18,7 +48,7 @@ function inferDesignIntent(input: ProductIR): DesignIntent {
     planner: { tone: "warm", density: "comfortable", contrast: "balanced", motion: "subtle" },
     dashboard: { tone: "technical", density: "compact", contrast: "high", motion: "subtle" },
   };
-  const inferred = { ...genomeDefaults[input.product.genome] };
+  const inferred = { ...genomeDefaults[resolveGenome(product.genome)] };
   if (includesAny(text, ["family", "parent", "home", "community", "care", "food"])) inferred.tone = "warm";
   if (includesAny(text, ["kid", "game", "party", "creative", "music", "social", "fun"])) inferred.tone = "playful";
   if (includesAny(text, ["wellness", "health", "habit", "mindful", "meditation", "journal"])) inferred.tone = "calm";
@@ -26,7 +56,7 @@ function inferDesignIntent(input: ProductIR): DesignIntent {
   if (includesAny(text, ["business", "team", "client", "project", "finance", "operations"])) inferred.tone = "professional";
   if (includesAny(text, ["campaign", "fitness", "challenge", "launch", "sales"])) inferred.tone = "bold";
   if (includesAny(text, ["senior", "elderly", "accessible", "outdoor", "emergency"])) inferred.contrast = "high";
-  return input.product.design ?? inferred;
+  return product.design ?? inferred;
 }
 
 function normalizeFields(entity: ProductEntity): ProductField[] {
@@ -41,7 +71,11 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     // `options`; coercing to `category` makes the runtime render a select and lets
     // the compiler derive per-option filters and counts.
     const hasOptions = Boolean(options && options.length > 0);
-    const type = hasOptions && field.type !== "category" && field.type !== "status" ? "category" : field.type;
+    const type = coerceFieldType(field.type, hasOptions);
+    // A category dropdown defaults to accepting custom input when the model didn't say
+    // otherwise: it matches the "prefer suggestions with custom input" guidance and keeps
+    // an open-ended category (e.g. "kind of book") usable. Status stays a fixed lifecycle.
+    const allowCustom = field.allowCustom !== undefined ? field.allowCustom : (type === "category" && hasOptions ? true : undefined);
     return {
       id,
       label: clean(field.label || id),
@@ -49,7 +83,7 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
       required: Boolean(field.required),
       ...(field.placeholder ? { placeholder: clean(field.placeholder) } : {}),
       ...(options && options.length > 0 ? { options } : {}),
-      ...(field.allowCustom !== undefined ? { allowCustom: field.allowCustom } : {}),
+      ...(allowCustom !== undefined ? { allowCustom } : {}),
       ...(Number.isFinite(field.min) ? { min: field.min } : {}),
       ...(Number.isFinite(field.max) ? { max: field.max } : {}),
     };
@@ -109,19 +143,35 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     const fields = normalizeFields(entity);
     const requestedPrimary = identifier(entity.primaryField, fields[0]?.id ?? "name");
     const primaryField = fields.some((field) => field.id === requestedPrimary) ? requestedPrimary : (fields[0]?.id ?? "name");
+    // The primary field identifies the record, so it is always required — this also
+    // guarantees at least one required field for the validation journey.
+    const requiredFields = fields.map((field) => field.id === primaryField ? { ...field, required: true } : field);
     return {
       name: clean(entity.name) || `item ${index + 1}`,
       plural: clean(entity.plural) || `${clean(entity.name)}s`,
       primaryField,
-      fields,
+      fields: requiredFields,
     };
   }) as [ProductEntity, ...ProductEntity[]];
   const primaryFieldMap = new Map(entities[0].fields.map((field) => [field.id, field]));
   const primaryFields = new Set(primaryFieldMap.keys());
-  let filters = input.filters
+  // Missing capabilities default to a sensible CRUD set rather than rejecting the IR;
+  // an explicit false is preserved (?? only fills null/undefined).
+  const capabilities = {
+    create: input.capabilities?.create ?? true,
+    edit: input.capabilities?.edit ?? true,
+    delete: input.capabilities?.delete ?? true,
+    search: input.capabilities?.search ?? true,
+    filter: input.capabilities?.filter ?? false,
+    sort: input.capabilities?.sort ?? false,
+    group: input.capabilities?.group ?? false,
+    transition: input.capabilities?.transition ?? false,
+    calculate: input.capabilities?.calculate ?? false,
+  };
+  let filters = (input.filters ?? [])
     .map((filter, index) => ({ ...filter, id: identifier(filter.id, `filter_${index + 1}`), label: clean(filter.label), field: identifier(filter.field, "") }))
     .filter((filter) => primaryFields.has(filter.field) && (filter.operator !== "equals" || filter.value !== undefined));
-  let calculations = input.calculations
+  let calculations = (input.calculations ?? [])
     .map((calculation, index) => ({ ...calculation, id: identifier(calculation.id, `metric_${index + 1}`), label: clean(calculation.label), ...(calculation.field ? { field: identifier(calculation.field, "") } : {}) }))
     .filter((calculation) => {
       if (calculation.operation === "count") return true;
@@ -130,26 +180,29 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
       const type = primaryFieldMap.get(calculation.field)?.type;
       return type === "number" || type === "currency";
     });
-  if (input.capabilities.filter) filters = deriveOptionFilters(entities[0].fields, filters);
-  if (input.capabilities.calculate) calculations = deriveOptionCalculations(entities[0].fields, calculations);
+  if (capabilities.filter) filters = deriveOptionFilters(entities[0].fields, filters);
+  if (capabilities.calculate) calculations = deriveOptionCalculations(entities[0].fields, calculations);
+  const name = clean(input.product?.name ?? "") || "Untitled";
   return {
     ...input,
     version: "1",
     product: {
       ...input.product,
-      name: clean(input.product.name),
-      description: clean(input.product.description),
-      tagline: clean(input.product.tagline ?? ""),
-      targetUser: clean(input.product.targetUser),
-      accent: /^#[0-9a-f]{6}$/iu.test(input.product.accent ?? "") ? input.product.accent! : "#5b5bd6",
+      name,
+      description: clean(input.product?.description ?? "") || name,
+      tagline: clean(input.product?.tagline ?? ""),
+      targetUser: clean(input.product?.targetUser ?? "") || "A single user",
+      genome: resolveGenome(input.product?.genome),
+      accent: /^#[0-9a-f]{6}$/iu.test(input.product?.accent ?? "") ? input.product.accent! : "#5b5bd6",
       design: inferDesignIntent(input),
     },
     entities,
+    capabilities,
     filters,
     calculations,
     persistence: { strategy: "localStorage" },
-    assumptions: uniqueStrings(input.assumptions),
-    excluded: uniqueStrings(input.excluded),
-    customRequirements: uniqueStrings(input.customRequirements),
+    assumptions: uniqueStrings(input.assumptions ?? []),
+    excluded: uniqueStrings(input.excluded ?? []),
+    customRequirements: uniqueStrings(input.customRequirements ?? []),
   };
 }

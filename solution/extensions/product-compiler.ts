@@ -17,8 +17,8 @@ import { TraceWriter } from "../telemetry/trace.js";
 const fieldSchema = Type.Object({
   id: Type.String({ description: "short snake_case semantic key" }),
   label: Type.String(),
-  type: Type.String({ enum: ["text", "longText", "number", "currency", "date", "datetime", "boolean", "category", "status", "email", "url"] }),
-  required: Type.Boolean(),
+  type: Type.String({ description: "One of: text, longText, number, currency, date, datetime, boolean, category, status, email, url. A dropdown/single-select of options is 'category' (a fixed lifecycle is 'status'); never 'select', 'dropdown', or 'enum'." }),
+  required: Type.Optional(Type.Boolean({ description: "Defaults to false when omitted" })),
   placeholder: Type.Optional(Type.String()),
   options: Type.Optional(Type.Array(Type.String(), { maxItems: 12 })),
   allowCustom: Type.Optional(Type.Boolean()),
@@ -40,10 +40,10 @@ const productIRSchema = Type.Object({
   version: Type.String({ enum: ["1"] }),
   product: Type.Object({
     name: Type.String(),
-    description: Type.String(),
+    description: Type.Optional(Type.String()),
     tagline: Type.Optional(Type.String({ description: "Omit unless a short tagline adds real clarity beyond the product name" })),
-    targetUser: Type.String(),
-    genome: Type.String({ enum: ["tracker", "workflow", "catalog", "planner", "dashboard"] }),
+    targetUser: Type.Optional(Type.String()),
+    genome: Type.Optional(Type.String({ enum: ["tracker", "workflow", "catalog", "planner", "dashboard"], description: "Defaults to tracker when omitted" })),
     design: Type.Optional(Type.Object({
       tone: Type.String({ enum: ["calm", "playful", "professional", "bold", "warm", "technical"] }),
       density: Type.String({ enum: ["compact", "comfortable", "spacious"] }),
@@ -53,26 +53,26 @@ const productIRSchema = Type.Object({
   }),
   entities: Type.Array(Type.Object({
     name: Type.String({ description: "singular lowercase noun" }),
-    plural: Type.String(),
-    primaryField: Type.String(),
+    plural: Type.Optional(Type.String()),
+    primaryField: Type.Optional(Type.String()),
     fields: Type.Array(fieldSchema, { minItems: 1, maxItems: 12 }),
   }), { minItems: 1, maxItems: 3 }),
-  capabilities: Type.Object({
-    create: Type.Boolean(), edit: Type.Boolean(), delete: Type.Boolean(), search: Type.Boolean(),
-    filter: Type.Boolean(), sort: Type.Boolean(), group: Type.Boolean(), transition: Type.Boolean(), calculate: Type.Boolean(),
-  }),
-  filters: Type.Array(Type.Object(predicateSchema), { maxItems: 6, description: "Only filters that are not a simple equals check on one category/status field option — those are derived automatically" }),
-  calculations: Type.Array(Type.Object({
+  capabilities: Type.Optional(Type.Object({
+    create: Type.Optional(Type.Boolean()), edit: Type.Optional(Type.Boolean()), delete: Type.Optional(Type.Boolean()), search: Type.Optional(Type.Boolean()),
+    filter: Type.Optional(Type.Boolean()), sort: Type.Optional(Type.Boolean()), group: Type.Optional(Type.Boolean()), transition: Type.Optional(Type.Boolean()), calculate: Type.Optional(Type.Boolean()),
+  }, { description: "Omitted capabilities default to a create/edit/delete/search CRUD set" })),
+  filters: Type.Optional(Type.Array(Type.Object(predicateSchema), { maxItems: 6, description: "Only filters that are not a simple equals check on one category/status field option — those are derived automatically" })),
+  calculations: Type.Optional(Type.Array(Type.Object({
     id: Type.String(), label: Type.String(),
     operation: Type.String({ enum: ["count", "countWhere", "sum"] }),
     field: Type.Optional(Type.String()),
     operator: Type.Optional(Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy"] })),
     value: Type.Optional(Type.String()),
-  }), { maxItems: 4, description: "Only a totals count and any sums — per-category-option counts are derived automatically" }),
-  persistence: Type.Object({ strategy: Type.String({ enum: ["localStorage"] }) }),
-  assumptions: Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 }),
-  excluded: Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 }),
-  customRequirements: Type.Array(Type.String(), { maxItems: 8, description: "Only core behavior not expressible as fields, CRUD, search, filters, states, or calculations" }),
+  }), { maxItems: 4, description: "Only a totals count and any sums — per-category-option counts are derived automatically" })),
+  persistence: Type.Optional(Type.Object({ strategy: Type.String({ enum: ["localStorage"] }) })),
+  assumptions: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
+  excluded: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
+  customRequirements: Type.Optional(Type.Array(Type.String(), { maxItems: 8, description: "Only core behavior not expressible as fields, CRUD, search, filters, states, or calculations" })),
 });
 
 interface CompilerState {
@@ -155,6 +155,7 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
       "Omit product.tagline unless a short tagline adds real clarity beyond the product name.",
       "Keep assumptions and excluded entries short phrases, not full sentences.",
       "Add a field placeholder only when the field's purpose is not already obvious from its label and type.",
+      "Every field type must be one of: text, longText, number, currency, date, datetime, boolean, category, status, email, url. Use category for a dropdown of options; never select, dropdown, or enum.",
     ],
     parameters: productIRSchema,
     async execute(_id, params, signal, onUpdate) {
