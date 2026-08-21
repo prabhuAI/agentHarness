@@ -1,10 +1,18 @@
 :root {
   color: #172033;
   background: #f4f6fa;
+  color-scheme: light dark;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
+
+/* Match the resolved theme before React mounts so there is no colour flash. */
+@media (prefers-color-scheme: dark) {
+  :root { color: #e6edf3; background: #0d1117; }
+}
+:root[data-theme="light"] { color: #172033; background: #f4f6fa; }
+:root[data-theme="dark"] { color: #e6edf3; background: #0d1117; }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -88,6 +96,23 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .brand-mark svg { width: 20px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .local-pill { display: inline-flex; align-items: center; gap: 7px; color: color-mix(in srgb, var(--topbar-text) 72%, transparent); font-size: 12px; font-weight: 650; }
 .local-pill svg { width: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.topbar-tools { display: flex; align-items: center; gap: 16px; }
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid color-mix(in srgb, var(--topbar-text) 22%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--topbar-text) 8%, transparent);
+  color: var(--topbar-text);
+  padding: 6px 14px 6px 11px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.theme-toggle:hover { border-color: color-mix(in srgb, var(--topbar-text) 40%, transparent); background: color-mix(in srgb, var(--topbar-text) 14%, transparent); }
+.theme-toggle svg { width: 16px; fill: currentColor; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.theme-toggle svg circle { fill: none; }
 
 main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: var(--page-space) 0 80px; }
 .hero { position: relative; min-height: 260px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr); gap: 40px; align-items: center; }
@@ -146,22 +171,6 @@ main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: var(--pag
 .primary:hover { filter: brightness(.94); transform: translateY(-1px); }
 .secondary { border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
 
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1px;
-  margin: 42px 0 24px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--panel-radius);
-  background: var(--border);
-  box-shadow: 0 14px 34px color-mix(in srgb, var(--ink) 6%, transparent);
-}
-.stats div { position: relative; display: flex; flex-direction: column; gap: 5px; min-height: 105px; justify-content: center; padding: var(--panel-space); background: var(--surface); }
-.stats div::after { content: ""; position: absolute; top: 18px; right: 18px; width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 30%, var(--surface)); }
-.stats strong { font: 800 29px var(--font-display); letter-spacing: -.04em; }
-.stats span { color: var(--muted); font-size: 12px; font-weight: 650; }
-
 .notice {
   display: flex;
   justify-content: space-between;
@@ -184,6 +193,9 @@ main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: var(--pag
 .collection-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; padding: var(--panel-space); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 90%, var(--surface-alt)); }
 h2 { margin: 5px 0 0; font: 800 25px var(--font-display); letter-spacing: -.035em; }
 .result-count { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+.metrics { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; }
+.metrics span { display: inline-flex; align-items: baseline; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.metrics strong { font: 800 15px var(--font-display); color: var(--accent); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .tools { display: flex; flex-wrap: wrap; gap: 10px; }
 input, select, textarea {
   width: 100%;
@@ -249,37 +261,88 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 
-/* The five product genomes change information architecture, not just color. */
-.genome-tracker .card { padding-left: calc(var(--panel-space) + 9px); }
-.genome-tracker .card::before { content: ""; position: absolute; top: 18px; bottom: 18px; left: 12px; width: 3px; border-radius: 4px; background: var(--accent); }
-.genome-tracker .stats strong::before { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 10px 3px 1px; border-top: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+/* Each genome resolves to a distinct data-layout that reshapes the whole
+   information architecture — not just color — so a tracker, a board, a gallery,
+   an agenda, and a dashboard read as five different products. Deterministic CSS,
+   no generated markup, so this costs zero model tokens. */
 
-.genome-workflow .group-list { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); align-items: start; }
-.genome-workflow .record-group .grid { grid-template-columns: 1fr; }
-.genome-workflow .record-group { border-top: 4px solid var(--accent); }
-.genome-workflow .card { box-shadow: none; }
+/* ── progress-workbench (tracker): a single-column progress timeline ── */
+.app[data-layout="progress-workbench"] .grid { grid-template-columns: 1fr; gap: 0; padding: 8px var(--panel-space) var(--panel-space); }
+.app[data-layout="progress-workbench"] .card { margin: 0; padding: 20px 6px 20px 44px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }
+.app[data-layout="progress-workbench"] .grid > .card:last-child { border-bottom: 0; }
+.app[data-layout="progress-workbench"] .card::before { content: ""; position: absolute; left: 15px; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--accent) 24%, var(--border)); }
+.app[data-layout="progress-workbench"] .card::after { content: ""; position: absolute; left: 9px; top: 24px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); border: 3px solid var(--accent); box-shadow: 0 0 0 4px var(--canvas); }
+.app[data-layout="progress-workbench"] .card dl { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 12px; }
+.app[data-layout="progress-workbench"] .card dl div { display: flex; grid-template-columns: none; gap: 7px; align-items: baseline; min-width: 0; }
+.app[data-layout="progress-workbench"] dt { text-transform: none; letter-spacing: 0; }
 
-.genome-catalog .grid { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
-.genome-catalog .card { min-height: 210px; overflow: hidden; padding-top: calc(var(--panel-space) + 48px); }
-.genome-catalog .card::before { content: ""; position: absolute; inset: 0 0 auto; height: 48px; background: linear-gradient(110deg, color-mix(in srgb, var(--accent) 76%, var(--surface)), var(--surface-alt)); }
-.genome-catalog .card::after { content: ""; position: absolute; top: 16px; right: 18px; width: 16px; height: 16px; border: 2px solid var(--accent-text); border-radius: 50%; opacity: .75; }
+/* ── stage-board (workflow): a horizontal Kanban board of status columns ── */
+.app[data-layout="stage-board"] .group-list { display: flex; gap: 14px; padding: var(--panel-space); overflow-x: auto; overflow-y: hidden; align-items: start; scroll-snap-type: x proximity; }
+.app[data-layout="stage-board"] .record-group { flex: 0 0 clamp(258px, 78vw, 300px); scroll-snap-align: start; border: 1px solid var(--border); border-top: 3px solid var(--accent); border-radius: var(--card-radius); background: color-mix(in srgb, var(--surface-alt) 65%, var(--canvas)); }
+.app[data-layout="stage-board"] .group-heading { position: sticky; top: 0; z-index: 1; padding: 13px 14px 8px; }
+.app[data-layout="stage-board"] .record-group .grid { grid-template-columns: 1fr; gap: 10px; padding: 0 12px 14px; }
+.app[data-layout="stage-board"] .grid { gap: 12px; }
+.app[data-layout="stage-board"] .card { padding: 14px; box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 5%, transparent); }
+.app[data-layout="stage-board"] .card h3 { font-size: 15px; }
+.app[data-layout="stage-board"] .card dl { margin-top: 12px; gap: 8px; }
+.app[data-layout="stage-board"] .card dl div { grid-template-columns: 1fr; gap: 2px; }
 
-.genome-planner .collection { overflow: visible; background: transparent; border: 0; box-shadow: none; }
-.genome-planner .collection-head { border: 1px solid var(--border); border-radius: var(--panel-radius) var(--panel-radius) 0 0; }
-.genome-planner .grid, .genome-planner .group-list { border: 1px solid var(--border); border-top: 0; border-radius: 0 0 var(--panel-radius) var(--panel-radius); background: var(--surface); }
-.genome-planner .card { border-left: 5px solid var(--accent); box-shadow: none; }
-.genome-planner .stats { box-shadow: none; }
+/* ── editorial-gallery (catalog): a magazine gallery with header bands ── */
+.app[data-layout="editorial-gallery"] .grid { grid-template-columns: repeat(auto-fill, minmax(clamp(220px, 30vw, 264px), 1fr)); gap: 18px; }
+.app[data-layout="editorial-gallery"] .card { overflow: hidden; padding: 0; border-radius: calc(var(--card-radius) + 6px); }
+.app[data-layout="editorial-gallery"] .card::before { content: ""; display: block; height: 88px; background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 38%, var(--surface-alt))); }
+.app[data-layout="editorial-gallery"] .card-top { padding: 16px 16px 0; }
+.app[data-layout="editorial-gallery"] .card h3 { font-size: 19px; white-space: normal; }
+.app[data-layout="editorial-gallery"] .card dl { padding: 0 16px 18px; margin-top: 14px; }
+.app[data-layout="editorial-gallery"] .hero h1 { letter-spacing: -.05em; }
 
-.genome-dashboard main { width: min(1320px, calc(100% - 40px)); }
-.genome-dashboard .hero { min-height: 210px; grid-template-columns: 1fr 230px; }
-.genome-dashboard .hero h1 { font-size: clamp(38px, 5vw, 64px); }
-.genome-dashboard .stats { border-radius: var(--panel-radius); }
-.genome-dashboard .stats div { min-height: 126px; }
-.genome-dashboard .stats strong { font-size: 36px; color: var(--accent); }
-.genome-dashboard .grid { grid-template-columns: 1fr; }
-.genome-dashboard .card { display: grid; grid-template-columns: minmax(190px, .8fr) 1.2fr; align-items: center; }
-.genome-dashboard .card dl { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin: 0; }
-.genome-dashboard .card dl div { grid-template-columns: 1fr; gap: 4px; }
+/* ── agenda-canvas (planner): a week strip of agenda columns ── */
+.app[data-layout="agenda-canvas"] .group-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 10px; padding: var(--panel-space); align-items: start; }
+.app[data-layout="agenda-canvas"] .record-group { border: 1px solid var(--border); border-radius: var(--card-radius); background: color-mix(in srgb, var(--surface-alt) 55%, var(--surface)); }
+.app[data-layout="agenda-canvas"] .group-heading { border-bottom: 1px solid var(--border); padding: 10px 12px; }
+.app[data-layout="agenda-canvas"] .group-heading h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.app[data-layout="agenda-canvas"] .record-group .grid { grid-template-columns: 1fr; gap: 8px; padding: 10px; }
+.app[data-layout="agenda-canvas"] .grid { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.app[data-layout="agenda-canvas"] .card { padding: 11px 12px; border: 0; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--surface); box-shadow: 0 1px 4px color-mix(in srgb, var(--ink) 5%, transparent); }
+.app[data-layout="agenda-canvas"] .card h3 { font-size: 14px; }
+.app[data-layout="agenda-canvas"] .card dl { margin-top: 8px; gap: 6px; }
+.app[data-layout="agenda-canvas"] .card dl div { grid-template-columns: 1fr; gap: 2px; }
+.app[data-layout="agenda-canvas"] .actions button { padding: 4px 7px; font-size: 11px; }
+
+/* ── command-center (dashboard): KPI tiles up top, dense data list below ── */
+.app[data-layout="command-center"] main { width: min(1320px, calc(100% - 40px)); }
+.app[data-layout="command-center"] .hero { min-height: auto; grid-template-columns: 1fr; gap: 0; margin-bottom: 4px; }
+.app[data-layout="command-center"] .hero-art { display: none; }
+.app[data-layout="command-center"] .hero h1 { font-size: clamp(30px, 4vw, 50px); }
+.app[data-layout="command-center"] .grid { grid-template-columns: 1fr; gap: 0; padding: 0; }
+.app[data-layout="command-center"] .card { display: grid; grid-template-columns: minmax(200px, 1fr) 2fr; align-items: center; gap: 20px; padding: 15px var(--panel-space); border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+.app[data-layout="command-center"] .grid > .card:last-child { border-bottom: 0; }
+.app[data-layout="command-center"] .card:hover { background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+.app[data-layout="command-center"] .card dl { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin: 0; }
+.app[data-layout="command-center"] .card dl div { grid-template-columns: 1fr; gap: 4px; }
+
+/* ── Shared UX: sticky navigation, undo toast, clear-view control ── */
+.topbar { position: sticky; top: 0; z-index: 20; }
+.notice-actions { display: flex; align-items: center; gap: 8px; }
+.notice-undo { min-height: 32px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 999px; background: var(--surface); color: var(--accent); padding: 5px 15px; font-size: 12px; font-weight: 800; }
+.notice-undo:hover { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.notice-dismiss { width: 34px; height: 34px; font-size: 18px; }
+.clear-view { min-height: 44px; border: 1px solid var(--border); border-radius: calc(var(--card-radius) * .65); background: var(--surface); color: var(--muted); padding: 8px 14px; font-size: 13px; font-weight: 700; }
+.clear-view:hover { color: var(--ink); border-color: var(--accent); }
+
+/* ── Full-page recomposition: each layout also reshapes the page frame ── */
+/* workflow → board app: slim header so the board leads. */
+.app[data-layout="stage-board"] .hero { min-height: auto; grid-template-columns: 1fr; }
+.app[data-layout="stage-board"] .hero-art { display: none; }
+.app[data-layout="stage-board"] .hero h1 { font-size: clamp(26px, 3.6vw, 40px); }
+/* catalog → storefront: compact banner, gallery leads. */
+.app[data-layout="editorial-gallery"] .hero { min-height: auto; }
+.app[data-layout="editorial-gallery"] .hero-art { width: 150px; opacity: .7; }
+/* planner → calendar: slim week-header hero. */
+.app[data-layout="agenda-canvas"] .hero { min-height: auto; }
+.app[data-layout="agenda-canvas"] .hero-art { display: none; }
+/* dashboard → control panel: slim hero over a full-width dense data list. */
+.app[data-layout="command-center"] .hero { min-height: auto; }
 
 .app[data-tone="playful"] .hero-art::before { border-radius: 42% 58% 34% 66% / 60% 35% 65% 40%; }
 .app[data-tone="playful"] .brand-mark, .app[data-tone="playful"] .hero-glyph { rotate: -3deg; }
@@ -287,27 +350,39 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .app[data-tone="technical"] .eyebrow { letter-spacing: .08em; }
 .app[data-tone="warm"] .hero h1 { letter-spacing: -.04em; font-weight: 700; }
 
+/* Structural variants: distinct information architecture on top of genome + palette,
+   so two products of the same genome/tone still read as different products. */
+/* Variant B — accent-led: filled stat band and left rails on cards. */
+.app[data-variant="b"] .card { border-left: 4px solid var(--accent); }
+.app[data-variant="b"] .collection-head { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+
+/* Variant C — flat editorial: no shadows, hairline dashed cards, uppercase headings. */
+.app[data-variant="c"] .collection, .app[data-variant="c"] .card { box-shadow: none; }
+.app[data-variant="c"] .card { background: transparent; border-style: dashed; }
+.app[data-variant="c"] h2, .app[data-variant="c"] .card h3 { text-transform: uppercase; letter-spacing: .01em; }
+.app[data-variant="c"] .hero-art { opacity: .5; }
+
 @media (max-width: 800px) {
   .hero { min-height: auto; grid-template-columns: 1fr 180px; gap: 18px; }
   .hero-art { width: 180px; }
-  .genome-dashboard .hero { grid-template-columns: 1fr 180px; }
   .collection-head { align-items: stretch; flex-direction: column; }
   .tools { width: 100%; }
   .tools > label { flex: 1 1 180px; }
   .tools input { width: 100%; }
-  .genome-dashboard .card { grid-template-columns: 1fr; gap: 12px; }
+  .app[data-layout="command-center"] .card { grid-template-columns: 1fr; gap: 12px; }
 }
 
 @media (max-width: 600px) {
   .local-pill { display: none; }
+  .theme-toggle { padding: 8px; }
+  .theme-toggle-text { display: none; }
   .topbar { height: 64px; padding-inline: 16px; }
-  main, .genome-dashboard main { width: min(100% - 24px, 1180px); padding-top: 32px; }
-  .hero, .genome-dashboard .hero { display: block; }
+  main, .app[data-layout="command-center"] main { width: min(100% - 24px, 1180px); padding-top: 32px; }
+  .hero, .app[data-layout="command-center"] .hero { display: block; }
+  .app[data-layout="stage-board"] .record-group { flex-basis: 82vw; }
   .hero-art { position: absolute; top: -18px; right: -48px; width: 150px; opacity: .38; pointer-events: none; }
   .hero-copy { padding-right: 28px; }
   .hero h1 { font-size: clamp(40px, 14vw, 62px); }
-  .stats { grid-template-columns: 1fr; }
-  .stats div { min-height: 86px; }
   .tools { flex-direction: column; }
   .tools > label { flex-basis: auto; }
   .grid { grid-template-columns: 1fr; padding: 14px; }

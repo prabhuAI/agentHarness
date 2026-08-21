@@ -12,6 +12,7 @@ export interface Repository {
   create(values: EntityRecord["values"]): EntityRecord;
   update(id: string, values: EntityRecord["values"]): EntityRecord;
   remove(id: string): void;
+  restore(record: EntityRecord): void;
   clear(): void;
 }
 
@@ -19,6 +20,35 @@ export interface LoadResult {
   records: EntityRecord[];
   recoveredFromInvalidData: boolean;
   storageAvailable: boolean;
+}
+
+export interface RepositoryBundle {
+  repository: Repository;
+  recoveredFromInvalidData: boolean;
+  storageAvailable: boolean;
+}
+
+/** Derives the versioned storage namespace for a product from its name. */
+export const storageKeyFor = (name: string): string =>
+  `agent-cofounder:${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}:v1`;
+
+/**
+ * Single seam between the UI and its persistence backend. The UI depends only on
+ * the {@link Repository} interface, so swapping browser storage for a REST API or
+ * database means implementing that interface and returning it here — no component
+ * changes required.
+ */
+export function createRepository(
+  name: string,
+  storage: Storage | undefined = typeof window === "undefined" ? undefined : window.localStorage,
+): RepositoryBundle {
+  const key = storageKeyFor(name);
+  const loaded = LocalStorageRepository.load(key, storage);
+  return {
+    repository: new LocalStorageRepository(key, loaded.records, storage),
+    recoveredFromInvalidData: loaded.recoveredFromInvalidData,
+    storageAvailable: loaded.storageAvailable,
+  };
 }
 
 const validRecord = (value: unknown): value is EntityRecord => {
@@ -71,6 +101,13 @@ export class LocalStorageRepository implements Repository {
 
   remove(id: string) {
     this.records = this.records.filter((record) => record.id !== id);
+    this.persist();
+  }
+
+  /** Re-insert a previously removed record with its original id and timestamps, powering undo. */
+  restore(record: EntityRecord) {
+    if (this.records.some((existing) => existing.id === record.id)) return;
+    this.records = [record, ...this.records];
     this.persist();
   }
 

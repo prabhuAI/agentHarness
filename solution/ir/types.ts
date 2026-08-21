@@ -89,7 +89,7 @@ export interface ProductIR {
   product: {
     name: string;
     description: string;
-    tagline: string;
+    tagline?: string;
     targetUser: string;
     genome: Genome;
     accent?: string;
@@ -106,7 +106,7 @@ export interface ProductIR {
 }
 
 export interface NormalizedProductIR extends ProductIR {
-  product: ProductIR["product"] & { design: DesignIntent };
+  product: ProductIR["product"] & { design: DesignIntent; tagline: string };
   entities: [ProductEntity, ...ProductEntity[]];
 }
 

@@ -1,10 +1,19 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FieldConfig, type PredicateOperator, productConfig } from "./product-config.js";
-import { EntityRecord, LocalStorageRepository, RecordValue } from "./repository.js";
+import { createRepository, EntityRecord, RecordValue } from "./repository.js";
+import {
+  loadThemePreference,
+  nextPreference,
+  paletteFor,
+  resolveTheme,
+  saveThemePreference,
+  systemPrefersDark,
+  themeLabel,
+  type ResolvedTheme,
+  watchSystemTheme,
+} from "./theme.js";
 
-const storageKey = `agent-cofounder:${productConfig.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}:v1`;
-const loaded = LocalStorageRepository.load(storageKey);
-const repository = new LocalStorageRepository(storageKey, loaded.records, typeof window === "undefined" ? undefined : window.localStorage);
+const { repository, recoveredFromInvalidData } = createRepository(productConfig.name);
 
 type Values = Record<string, RecordValue>;
 type Errors = Record<string, string>;
@@ -109,6 +118,11 @@ function matchesPredicate(value: RecordValue | undefined, operator: PredicateOpe
   return value === false || text === "false" || text === "";
 }
 
+function ThemeIcon({ resolved }: { resolved: ResolvedTheme }) {
+  if (resolved === "dark") return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 11.8A6.5 6.5 0 0 1 8.2 3.5a6.5 6.5 0 1 0 8.3 8.3z"/></svg>;
+  return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.6"/><path d="M10 1.5v2.2M10 16.3v2.2M1.5 10h2.2M16.3 10h2.2M4 4l1.6 1.6M14.4 14.4 16 16M16 4l-1.6 1.6M5.6 14.4 4 16"/></svg>;
+}
+
 function GenomeGlyph({ genome }: { genome: typeof productConfig.genome }) {
   if (genome === "workflow") return <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="10" width="18" height="16" rx="4"/><rect x="38" y="38" width="18" height="16" rx="4"/><path d="M26 18h12a8 8 0 0 1 8 8v12M38 46H26a8 8 0 0 1-8-8V26"/></svg>;
   if (genome === "catalog") return <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="8" y="9" width="20" height="20" rx="5"/><rect x="36" y="9" width="20" height="20" rx="5"/><rect x="8" y="37" width="20" height="18" rx="5"/><rect x="36" y="37" width="20" height="18" rx="5"/></svg>;
@@ -125,10 +139,22 @@ export function App() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("updated");
-  const [notice, setNotice] = useState(loaded.recoveredFromInvalidData ? "Saved data was damaged, so a clean workspace was restored." : "");
+  const [notice, setNotice] = useState(recoveredFromInvalidData ? "Saved data was damaged, so a clean workspace was restored." : "");
+  const [undo, setUndo] = useState<EntityRecord | null>(null);
+  const entityLabel = productConfig.entityName.charAt(0).toUpperCase() + productConfig.entityName.slice(1);
+  const [themePreference, setThemePreference] = useState(loadThemePreference);
+  const [systemDark, setSystemDark] = useState(systemPrefersDark);
   const dialog = useRef<HTMLDialogElement>(null);
+  const resolvedTheme = resolveTheme(themePreference, systemDark);
 
   useEffect(() => { document.title = productConfig.name; }, []);
+  useEffect(() => watchSystemTheme(setSystemDark), []);
+  useEffect(() => { saveThemePreference(themePreference); }, [themePreference]);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.colorScheme = resolvedTheme;
+    root.dataset.theme = resolvedTheme;
+  }, [resolvedTheme]);
   useEffect(() => {
     const firstInvalid = productConfig.fields.find((field) => errors[field.key] && isFieldVisible(field, values));
     if (firstInvalid) document.getElementById(`field-${firstInvalid.key}`)?.focus();
@@ -194,31 +220,48 @@ export function App() {
     try {
       if (editingId) repository.update(editingId, values); else repository.create(values);
       setRecords(repository.list());
-      setNotice(`${productConfig.entityName[0].toUpperCase()}${productConfig.entityName.slice(1)} ${editingId ? "updated" : "added"}.`);
+      setUndo(null);
+      setNotice(`${entityLabel} ${editingId ? "updated" : "added"}.`);
       close();
     } catch (error) { setNotice(error instanceof Error ? error.message : "The change could not be saved."); }
   };
 
   const remove = (record: EntityRecord) => {
-    const label = String(record.values[productConfig.primaryField] ?? productConfig.entityName);
-    if (!globalThis.confirm(`Delete “${label}”? This cannot be undone.`)) return;
-    try { repository.remove(record.id); setRecords(repository.list()); setNotice(`${productConfig.entityName[0].toUpperCase()}${productConfig.entityName.slice(1)} deleted.`); }
-    catch (error) { setNotice(error instanceof Error ? error.message : "The item could not be deleted."); }
+    try {
+      repository.remove(record.id);
+      setRecords(repository.list());
+      setUndo(record);
+      setNotice(`${entityLabel} deleted.`);
+    } catch (error) {
+      setUndo(null);
+      setNotice(error instanceof Error ? error.message : "The item could not be deleted.");
+    }
   };
 
+  const undoDelete = () => {
+    if (!undo) return;
+    try { repository.restore(undo); setRecords(repository.list()); setNotice(`${entityLabel} restored.`); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "The item could not be restored."); }
+    setUndo(null);
+  };
+
+  const dismissNotice = () => { setNotice(""); setUndo(null); };
+
   const design = productConfig.design;
+  const palette = paletteFor(design, resolvedTheme);
+  const cycleTheme = () => setThemePreference(nextPreference);
   const designStyle = {
-    "--canvas": design.colors.canvas,
-    "--surface": design.colors.surface,
-    "--surface-alt": design.colors.surfaceAlt,
-    "--ink": design.colors.ink,
-    "--muted": design.colors.muted,
-    "--border": design.colors.border,
-    "--accent": design.colors.accent,
-    "--accent-text": design.colors.accentText,
-    "--topbar": design.colors.topbar,
-    "--topbar-text": design.colors.topbarText,
-    "--danger": design.colors.danger,
+    "--canvas": palette.canvas,
+    "--surface": palette.surface,
+    "--surface-alt": palette.surfaceAlt,
+    "--ink": palette.ink,
+    "--muted": palette.muted,
+    "--border": palette.border,
+    "--accent": palette.accent,
+    "--accent-text": palette.accentText,
+    "--topbar": palette.topbar,
+    "--topbar-text": palette.topbarText,
+    "--danger": palette.danger,
     "--font-body": design.typography.body,
     "--font-display": design.typography.display,
     "--card-radius": `${design.shape.cardRadius}px`,
@@ -240,24 +283,27 @@ export function App() {
     data-tone={design.tone}
     data-density={design.density}
     data-motion={design.motion}
+    data-variant={design.variant}
     style={designStyle}
   >
     <a className="skip-link" href="#main">Skip to content</a>
-    <header className="topbar"><a className="brand" href="#main"><span className="brand-mark"><GenomeGlyph genome={productConfig.genome} /></span><span>{productConfig.name}</span></a><span className="local-pill"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 9V6.8a3.5 3.5 0 0 1 7 0V9M5 9h10v8H5z"/></svg>Private · saved locally</span></header>
+    <header className="topbar"><a className="brand" href="#main"><span className="brand-mark"><GenomeGlyph genome={productConfig.genome} /></span><span>{productConfig.name}</span></a>
+      <div className="topbar-tools">
+        <span className="local-pill"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 9V6.8a3.5 3.5 0 0 1 7 0V9M5 9h10v8H5z"/></svg>Private · saved locally</span>
+        <button type="button" className="theme-toggle" onClick={cycleTheme} aria-label={`Theme: ${themeLabel(themePreference, resolvedTheme)}. Activate to change.`} title={`Theme: ${themeLabel(themePreference, resolvedTheme)}`}>
+          <ThemeIcon resolved={resolvedTheme} /><span className="theme-toggle-text">{themeLabel(themePreference, resolvedTheme)}</span>
+        </button>
+      </div></header>
     <main id="main">
       <section className="hero">
-        <div className="hero-copy"><p className="eyebrow">{productConfig.eyebrow} workspace</p><h1>{productConfig.name}</h1><p>{productConfig.tagline}</p>{productConfig.capabilities.create && <button className="primary hero-action" onClick={openCreate}><span aria-hidden="true">+</span> Add {productConfig.entityName}</button>}</div>
+        <div className="hero-copy"><p className="eyebrow">{productConfig.eyebrow} workspace</p><h1>{productConfig.name}</h1>{productConfig.tagline && <p>{productConfig.tagline}</p>}{productConfig.capabilities.create && <button className="primary hero-action" onClick={openCreate}><span aria-hidden="true">+</span> Add {productConfig.entityName}</button>}</div>
         <div className="hero-art" aria-hidden="true"><span className="orbit orbit-one"/><span className="orbit orbit-two"/><span className="hero-glyph"><GenomeGlyph genome={productConfig.genome} /></span></div>
       </section>
-      <section className="stats" aria-label="Overview">
-        {summaries.map((summary) => <div key={summary.id}><strong>{summary.value}</strong><span>{summary.label}</span></div>)}
-        {summaries.length < 3 && <div><strong>{visible.length}</strong><span>In current view</span></div>}
-        {summaries.length < 2 && <div><strong>{records.length ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(records[0].updatedAt)) : "—"}</strong><span>Last updated</span></div>}
-      </section>
-      {notice && <div className="notice" role="status"><span>{notice}</span><button aria-label="Dismiss message" onClick={() => setNotice("")}>×</button></div>}
+      {notice && <div className="notice" role="status"><span>{notice}</span><div className="notice-actions">{undo && <button type="button" className="notice-undo" onClick={undoDelete}>Undo</button>}<button className="icon-button notice-dismiss" aria-label="Dismiss message" onClick={dismissNotice}>×</button></div></div>}
       <section className="collection" aria-labelledby="collection-title">
-        <div className="collection-head"><div><p className="eyebrow">{productConfig.collectionLabel}</p><h2 id="collection-title">All {productConfig.entityNamePlural}</h2><span className="result-count">{visible.length} in view</span></div>
+        <div className="collection-head"><div><p className="eyebrow">{productConfig.collectionLabel}</p><h2 id="collection-title">All {productConfig.entityNamePlural}</h2><span className="result-count">{visible.length === records.length ? `${records.length} ${records.length === 1 ? productConfig.entityName : productConfig.entityNamePlural}` : `${visible.length} of ${records.length} shown`}</span>{summaries.length > 0 && <div className="metrics" aria-label="Summary">{summaries.map((summary) => <span key={summary.id}><strong>{summary.value}</strong> {summary.label}</span>)}</div>}</div>
           <div className="tools">
+            {(query || filter !== "all") && <button type="button" className="clear-view" onClick={() => { setQuery(""); setFilter("all"); }}>Clear</button>}
             {productConfig.capabilities.search && <label className="search"><span className="sr-only">Search {productConfig.entityNamePlural}</span><input type="search" placeholder={`Search ${productConfig.entityNamePlural}…`} value={query} onChange={(event) => setQuery(event.target.value)} /></label>}
             {productConfig.filters.length > 0 && <label><span className="sr-only">Filter {productConfig.entityNamePlural}</span><select aria-label={`Filter ${productConfig.entityNamePlural}`} value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All {productConfig.entityNamePlural}</option>{productConfig.filters.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}</select></label>}
             {productConfig.capabilities.sort && <label><span className="sr-only">Sort {productConfig.entityNamePlural}</span><select aria-label={`Sort ${productConfig.entityNamePlural}`} value={sort} onChange={(event) => setSort(event.target.value)}><option value="updated">Recently updated</option><option value="title">By name</option><option value="created">Oldest first</option></select></label>}

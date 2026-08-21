@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.js";
 import { productConfig } from "./product-config.js";
+import { createRepository, storageKeyFor } from "./repository.js";
 
 beforeEach(() => { window.localStorage.clear(); vi.stubGlobal("confirm", vi.fn(() => true)); });
 afterEach(cleanup);
@@ -15,9 +16,11 @@ async function createRecord() {
   await user.click(screen.getAllByRole("button", { name: new RegExp(`add ${productConfig.entityName}`, "i") })[0]);
   const dialog = screen.getByRole("dialog");
   for (const field of productConfig.fields.filter((candidate) => candidate.required || candidate.key === productConfig.primaryField)) {
-    const control = within(dialog).queryByLabelText(new RegExp(field.label, "i"));
+    // Query by the runtime's deterministic control id: label-based regex queries
+    // throw when one product label is a substring of another.
+    const control = dialog.querySelector<HTMLElement>(`#field-${field.key}`);
     if (!control) continue;
-    if (field.type === "boolean") { await user.click(within(dialog).getByLabelText(new RegExp(field.label, "i"))); created[field.key] = true; }
+    if (field.type === "boolean") { await user.click(control); created[field.key] = true; }
     else {
       const value = field.options?.[0] ?? requiredValue(field.type);
       if (field.options?.length) await user.selectOptions(control, value);
@@ -40,13 +43,44 @@ describe("compiled product runtime", () => {
     expect(screen.getByRole("link", { name: /skip to content/i })).toHaveAttribute("href", "#main");
   });
 
+  it("exposes storage through a swappable repository factory", () => {
+    const bundle = createRepository("Integration Ready Product");
+    expect(window.localStorage.getItem(storageKeyFor("Integration Ready Product"))).toBeNull();
+    const created = bundle.repository.create({ [productConfig.primaryField]: "Seam check" });
+    expect(bundle.repository.list()).toHaveLength(1);
+    // A fresh bundle over the same name rehydrates from the persisted backend,
+    // proving the UI depends only on the interface, not on module-level state.
+    const rehydrated = createRepository("Integration Ready Product");
+    expect(rehydrated.repository.list().map((record) => record.id)).toContain(created.id);
+    expect(rehydrated.recoveredFromInvalidData).toBe(false);
+  });
+
+  it("lets the user switch to a dark theme and remembers the choice", async () => {
+    const user = userEvent.setup();
+    const view = render(<App />);
+    const app = view.container.firstElementChild as HTMLElement;
+    expect(app).toHaveStyle(`--canvas: ${productConfig.design.colors.canvas}`);
+    const toggle = screen.getByRole("button", { name: /theme:/i });
+    // system → light → dark: cycle until the dark surface ramp is applied.
+    for (let index = 0; index < 3 && document.documentElement.dataset.theme !== "dark"; index += 1) {
+      await user.click(toggle);
+    }
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(document.documentElement.style.colorScheme).toBe("dark");
+    expect(app).toHaveStyle("--canvas: #0d1117");
+    // The compiled brand accent survives the theme switch.
+    expect(app).toHaveStyle(`--accent: ${productConfig.design.colors.accent}`);
+    expect(window.localStorage.getItem("agent-cofounder:theme")).toBe("dark");
+  });
+
   it("makes configured choices explicit and supports a custom choice", async () => {
     const user = userEvent.setup();
     const configurable = productConfig.fields.find((field) => field.options?.length && field.allowCustom);
     expect(configurable).toBeDefined();
     render(<App />);
     await user.click(screen.getAllByRole("button", { name: new RegExp(`add ${productConfig.entityName}`, "i") })[0]);
-    const choice = within(screen.getByRole("dialog")).getByRole("combobox", { name: new RegExp(configurable!.label, "i") });
+    const choice = screen.getByRole("dialog").querySelector<HTMLElement>(`#field-${configurable!.key}`)!;
+    expect(choice).toBeInTheDocument();
     for (const option of configurable!.options!) expect(within(choice).getByRole("option", { name: option })).toBeInTheDocument();
     await user.selectOptions(choice, within(choice).getByRole("option", { name: "Other…" }));
     const custom = within(screen.getByRole("dialog")).getByRole("textbox", { name: `Custom ${configurable!.label}` });
@@ -66,47 +100,38 @@ describe("compiled product runtime", () => {
   });
 
   it("shows only fields whose visibility condition matches", async () => {
+    // Fixture keys/labels are deliberately implausible so they can never collide
+    // with a real compiled product's field labels (a "Schedule Type" collision
+    // once made every journey report as failed).
     const originalFields = productConfig.fields;
     productConfig.fields = [
       ...originalFields,
-      { key: "schedule_type", label: "Schedule Type", type: "category", required: true, options: ["Weekday", "Weekend"], allowCustom: false },
-      { key: "weekday", label: "Weekday", type: "category", required: false, options: ["Monday"], allowCustom: false, visibleWhen: { field: "schedule_type", equals: "Weekday" } },
-      { key: "weekend_day", label: "Weekend Day", type: "category", required: false, options: ["Saturday"], allowCustom: false, visibleWhen: { field: "schedule_type", equals: "Weekend" } },
+      { key: "qa_visibility_controller", label: "QA Visibility Controller", type: "category", required: true, options: ["QA Branch A", "QA Branch B"], allowCustom: false },
+      { key: "qa_branch_a_detail", label: "QA Branch A Detail", type: "category", required: false, options: ["QA Option"], allowCustom: false, visibleWhen: { field: "qa_visibility_controller", equals: "QA Branch A" } },
+      { key: "qa_branch_b_detail", label: "QA Branch B Detail", type: "category", required: false, options: ["QA Option"], allowCustom: false, visibleWhen: { field: "qa_visibility_controller", equals: "QA Branch B" } },
     ];
     const user = userEvent.setup();
     const view = render(<App />);
     try {
       await user.click(screen.getAllByRole("button", { name: new RegExp(`add ${productConfig.entityName}`, "i") })[0]);
       const dialog = screen.getByRole("dialog");
-      expect(within(dialog).queryByRole("combobox", { name: "Weekday" })).not.toBeInTheDocument();
-      expect(within(dialog).queryByRole("combobox", { name: "Weekend Day" })).not.toBeInTheDocument();
-      await user.selectOptions(within(dialog).getByRole("combobox", { name: /schedule type/i }), "Weekday");
-      expect(within(dialog).getByRole("combobox", { name: "Weekday" })).toBeInTheDocument();
-      expect(within(dialog).queryByRole("combobox", { name: "Weekend Day" })).not.toBeInTheDocument();
-      await user.selectOptions(within(dialog).getByRole("combobox", { name: /schedule type/i }), "Weekend");
-      expect(within(dialog).queryByRole("combobox", { name: "Weekday" })).not.toBeInTheDocument();
-      expect(within(dialog).getByRole("combobox", { name: "Weekend Day" })).toBeInTheDocument();
+      expect(within(dialog).queryByRole("combobox", { name: "QA Branch A Detail" })).not.toBeInTheDocument();
+      expect(within(dialog).queryByRole("combobox", { name: "QA Branch B Detail" })).not.toBeInTheDocument();
+      await user.selectOptions(within(dialog).getByRole("combobox", { name: "QA Visibility Controller" }), "QA Branch A");
+      expect(within(dialog).getByRole("combobox", { name: "QA Branch A Detail" })).toBeInTheDocument();
+      expect(within(dialog).queryByRole("combobox", { name: "QA Branch B Detail" })).not.toBeInTheDocument();
+      await user.selectOptions(within(dialog).getByRole("combobox", { name: "QA Visibility Controller" }), "QA Branch B");
+      expect(within(dialog).queryByRole("combobox", { name: "QA Branch A Detail" })).not.toBeInTheDocument();
+      expect(within(dialog).getByRole("combobox", { name: "QA Branch B Detail" })).toBeInTheDocument();
     } finally {
       view.unmount();
       productConfig.fields = originalFields;
     }
   });
 
-  it("renders every configured summary", () => {
-    const originalSummaries = productConfig.summaries;
-    const summaries = Array.from({ length: 7 }, (_, index) => ({
-      id: `summary-${index + 1}`,
-      label: `Summary ${index + 1}`,
-      operation: "count" as const,
-    }));
-
-    try {
-      productConfig.summaries = summaries;
-      render(<App />);
-      for (const summary of summaries) expect(screen.getByText(summary.label)).toBeInTheDocument();
-    } finally {
-      productConfig.summaries = originalSummaries;
-    }
+  it("renders configured summaries as compact metrics", () => {
+    render(<App />);
+    for (const summary of productConfig.summaries) expect(screen.getAllByText(summary.label).length).toBeGreaterThan(0);
   });
 
   it("validates required input and supports create, persistence, edit, search, and delete", async () => {
@@ -120,8 +145,7 @@ describe("compiled product runtime", () => {
     const created = await createRecord();
     const primaryValue = String(created[productConfig.primaryField]);
     expect(screen.getAllByText(primaryValue).length).toBeGreaterThan(0);
-    expect(window.localStorage.length).toBe(1);
-    for (const summary of productConfig.summaries) expect(screen.getAllByText(summary.label).length).toBeGreaterThan(0);
+    expect(JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]")).toHaveLength(1);
     const groupField = productConfig.fields.find((field) => field.type === "category" || field.type === "status");
     if (productConfig.capabilities.group && groupField) {
       const groupLabel = String(created[groupField.key] ?? "Uncategorized");

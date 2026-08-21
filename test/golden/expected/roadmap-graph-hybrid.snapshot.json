@@ -1,0 +1,358 @@
+{
+  "artifacts": {
+    "idea_spec.json": {
+      "assumptions": [
+        "Single workspace"
+      ],
+      "core_utility": "Track initiatives and their dependencies.",
+      "excluded_features": [
+        "Authentication"
+      ],
+      "included_features": [
+        "create",
+        "edit",
+        "delete",
+        "search",
+        "filter",
+        "sort",
+        "group",
+        "transition",
+        "calculate"
+      ],
+      "target_user": "Product teams"
+    },
+    "product-ir.json": {
+      "assumptions": [
+        "Single workspace"
+      ],
+      "calculations": [
+        {
+          "id": "total",
+          "label": "Total initiatives",
+          "operation": "count"
+        },
+        {
+          "field": "stage",
+          "id": "stage_idea_count",
+          "label": "Idea",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Idea"
+        },
+        {
+          "field": "stage",
+          "id": "stage_committed_count",
+          "label": "Committed",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Committed"
+        },
+        {
+          "field": "stage",
+          "id": "stage_shipped_count",
+          "label": "Shipped",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Shipped"
+        }
+      ],
+      "capabilities": {
+        "calculate": true,
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "filter": true,
+        "group": true,
+        "search": true,
+        "sort": true,
+        "transition": true
+      },
+      "customRequirements": [
+        "Render an interactive dependency graph between initiatives"
+      ],
+      "entities": [
+        {
+          "fields": [
+            {
+              "id": "title",
+              "label": "Title",
+              "required": true,
+              "type": "text"
+            },
+            {
+              "allowCustom": false,
+              "id": "stage",
+              "label": "Stage",
+              "options": [
+                "Idea",
+                "Committed",
+                "Shipped"
+              ],
+              "required": true,
+              "type": "status"
+            },
+            {
+              "id": "owner",
+              "label": "Owner",
+              "required": false,
+              "type": "text"
+            }
+          ],
+          "name": "initiative",
+          "plural": "initiatives",
+          "primaryField": "title"
+        }
+      ],
+      "excluded": [
+        "Authentication"
+      ],
+      "filters": [
+        {
+          "field": "stage",
+          "id": "stage_idea",
+          "label": "Idea",
+          "operator": "equals",
+          "value": "Idea"
+        },
+        {
+          "field": "stage",
+          "id": "stage_committed",
+          "label": "Committed",
+          "operator": "equals",
+          "value": "Committed"
+        },
+        {
+          "field": "stage",
+          "id": "stage_shipped",
+          "label": "Shipped",
+          "operator": "equals",
+          "value": "Shipped"
+        }
+      ],
+      "persistence": {
+        "strategy": "localStorage"
+      },
+      "product": {
+        "accent": "#5b5bd6",
+        "description": "Track initiatives and their dependencies.",
+        "design": {
+          "contrast": "balanced",
+          "density": "compact",
+          "motion": "subtle",
+          "tone": "professional"
+        },
+        "genome": "workflow",
+        "name": "Roadmap",
+        "tagline": "",
+        "targetUser": "Product teams"
+      },
+      "version": "1"
+    },
+    "product.config.json": {
+      "accent": "#334155",
+      "capabilities": {
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "group": true,
+        "search": true,
+        "sort": true
+      },
+      "collectionLabel": "Pipeline",
+      "design": {
+        "colors": {
+          "accent": "#334155",
+          "accentText": "#ffffff",
+          "border": "#d7dbe1",
+          "canvas": "#f5f6f8",
+          "danger": "#b42318",
+          "ink": "#1b2430",
+          "muted": "#64707f",
+          "surface": "#ffffff",
+          "surfaceAlt": "#eaecf0",
+          "topbar": "#0f1720",
+          "topbarText": "#f7f9fb"
+        },
+        "contrast": "balanced",
+        "density": "compact",
+        "id": "stage-board-professional-c",
+        "layout": "stage-board",
+        "layoutLabel": "Stage board",
+        "motion": "subtle",
+        "shape": {
+          "cardRadius": 18,
+          "panelRadius": 24
+        },
+        "spacing": {
+          "gap": 10,
+          "page": 36,
+          "panel": 16
+        },
+        "tone": "professional",
+        "typography": {
+          "body": "'Helvetica Neue', Helvetica, Arial, sans-serif",
+          "display": "'Helvetica Neue', Helvetica, Arial, sans-serif"
+        },
+        "variant": "c"
+      },
+      "entityName": "initiative",
+      "entityNamePlural": "initiatives",
+      "eyebrow": "Workflow",
+      "fields": [
+        {
+          "key": "title",
+          "label": "Title",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "allowCustom": false,
+          "key": "stage",
+          "label": "Stage",
+          "options": [
+            "Idea",
+            "Committed",
+            "Shipped"
+          ],
+          "required": true,
+          "type": "status"
+        },
+        {
+          "key": "owner",
+          "label": "Owner",
+          "required": false,
+          "type": "text"
+        }
+      ],
+      "filters": [
+        {
+          "field": "stage",
+          "id": "stage_idea",
+          "label": "Idea",
+          "operator": "equals",
+          "value": "Idea"
+        },
+        {
+          "field": "stage",
+          "id": "stage_committed",
+          "label": "Committed",
+          "operator": "equals",
+          "value": "Committed"
+        },
+        {
+          "field": "stage",
+          "id": "stage_shipped",
+          "label": "Shipped",
+          "operator": "equals",
+          "value": "Shipped"
+        }
+      ],
+      "genome": "workflow",
+      "name": "Roadmap",
+      "primaryField": "title",
+      "searchableFields": [
+        "title",
+        "stage",
+        "owner"
+      ],
+      "secondaryFields": [
+        "stage",
+        "owner"
+      ],
+      "summaries": [
+        {
+          "id": "total",
+          "label": "Total initiatives",
+          "operation": "count"
+        },
+        {
+          "field": "stage",
+          "id": "stage_idea_count",
+          "label": "Idea",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Idea"
+        },
+        {
+          "field": "stage",
+          "id": "stage_committed_count",
+          "label": "Committed",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Committed"
+        },
+        {
+          "field": "stage",
+          "id": "stage_shipped_count",
+          "label": "Shipped",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Shipped"
+        }
+      ],
+      "tagline": ""
+    },
+    "summary.md": "# Roadmap\n\nTrack initiatives and their dependencies.\n\n- **Target user:** Product teams\n- **Build route:** hybrid\n- **Genome:** workflow\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Verified journeys\n\n- Application loads and shows a useful empty state\n- Invalid initiative input shows validation without crashing\n- User can add a complete initiative and see it in initiatives\n- initiatives survive a page refresh\n- User can edit an existing initiative\n- User can search initiatives\n- User can narrow initiatives with a meaningful filter\n- initiatives are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing initiative\n"
+  },
+  "journeys": [
+    {
+      "description": "Application loads and shows a useful empty state",
+      "id": "load"
+    },
+    {
+      "description": "Invalid initiative input shows validation without crashing",
+      "id": "validation"
+    },
+    {
+      "description": "User can add a complete initiative and see it in initiatives",
+      "id": "create"
+    },
+    {
+      "description": "initiatives survive a page refresh",
+      "id": "persistence"
+    },
+    {
+      "description": "User can edit an existing initiative",
+      "id": "edit"
+    },
+    {
+      "description": "User can search initiatives",
+      "id": "search"
+    },
+    {
+      "description": "User can narrow initiatives with a meaningful filter",
+      "id": "filter"
+    },
+    {
+      "description": "initiatives are grouped by a meaningful category or status",
+      "id": "group"
+    },
+    {
+      "description": "Requested derived values update from persisted records",
+      "id": "calculate"
+    },
+    {
+      "description": "User can delete an existing initiative",
+      "id": "delete"
+    }
+  ],
+  "route": {
+    "genome": "workflow",
+    "reason": "The runtime covers the product shell; only listed requirements need custom code.",
+    "route": "hybrid",
+    "supported": [
+      "create",
+      "edit",
+      "delete",
+      "search",
+      "filter",
+      "sort",
+      "group",
+      "transition",
+      "calculate"
+    ],
+    "unsupported": [
+      "Render an interactive dependency graph between initiatives"
+    ]
+  }
+}

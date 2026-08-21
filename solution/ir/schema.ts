@@ -27,9 +27,10 @@ export function validateProductIR(value: unknown): ProductIR {
   const product = value.product;
   if (!isRecord(product)) issues.push("product must be an object");
   else {
-    for (const key of ["name", "description", "tagline", "targetUser"] as const) {
+    for (const key of ["name", "description", "targetUser"] as const) {
       if (typeof product[key] !== "string" || product[key].trim() === "") issues.push(`product.${key} is required`);
     }
+    if (product.tagline !== undefined && typeof product.tagline !== "string") issues.push("product.tagline must be a string");
     if (!GENOMES.includes(product.genome as never)) issues.push("product.genome is unsupported");
     if (product.design !== undefined) {
       if (!isRecord(product.design)) issues.push("product.design must be an object");

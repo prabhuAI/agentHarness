@@ -1,0 +1,328 @@
+{
+  "artifacts": {
+    "idea_spec.json": {
+      "assumptions": [
+        "Single workspace"
+      ],
+      "core_utility": "Keep lightweight decisions retrievable.",
+      "excluded_features": [
+        "Authentication"
+      ],
+      "included_features": [
+        "create",
+        "edit",
+        "delete",
+        "search",
+        "filter",
+        "transition",
+        "calculate"
+      ],
+      "target_user": "Small project teams"
+    },
+    "product-ir.json": {
+      "assumptions": [
+        "Single workspace"
+      ],
+      "calculations": [
+        {
+          "id": "total",
+          "label": "Total decisions",
+          "operation": "count"
+        },
+        {
+          "field": "status",
+          "id": "accepted",
+          "label": "Accepted",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Accepted"
+        },
+        {
+          "field": "status",
+          "id": "status_proposed_count",
+          "label": "Proposed",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Proposed"
+        }
+      ],
+      "capabilities": {
+        "calculate": true,
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "filter": true,
+        "group": false,
+        "search": true,
+        "sort": false,
+        "transition": true
+      },
+      "customRequirements": [],
+      "entities": [
+        {
+          "fields": [
+            {
+              "id": "title",
+              "label": "Title",
+              "required": true,
+              "type": "text"
+            },
+            {
+              "id": "owner",
+              "label": "Owner",
+              "required": true,
+              "type": "text"
+            },
+            {
+              "allowCustom": false,
+              "id": "status",
+              "label": "Status",
+              "options": [
+                "Proposed",
+                "Accepted"
+              ],
+              "required": true,
+              "type": "status"
+            },
+            {
+              "id": "rationale",
+              "label": "Rationale",
+              "required": false,
+              "type": "longText"
+            }
+          ],
+          "name": "decision",
+          "plural": "decisions",
+          "primaryField": "title"
+        }
+      ],
+      "excluded": [
+        "Authentication"
+      ],
+      "filters": [
+        {
+          "field": "status",
+          "id": "accepted",
+          "label": "Accepted",
+          "operator": "equals",
+          "value": "Accepted"
+        },
+        {
+          "field": "status",
+          "id": "status_proposed",
+          "label": "Proposed",
+          "operator": "equals",
+          "value": "Proposed"
+        }
+      ],
+      "persistence": {
+        "strategy": "localStorage"
+      },
+      "product": {
+        "accent": "#5b5bd6",
+        "description": "Keep lightweight decisions retrievable.",
+        "design": {
+          "contrast": "balanced",
+          "density": "compact",
+          "motion": "subtle",
+          "tone": "professional"
+        },
+        "genome": "workflow",
+        "name": "Decision Log",
+        "tagline": "Decide, record, revisit.",
+        "targetUser": "Small project teams"
+      },
+      "version": "1"
+    },
+    "product.config.json": {
+      "accent": "#1e3a8a",
+      "capabilities": {
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "group": false,
+        "search": true,
+        "sort": false
+      },
+      "collectionLabel": "Pipeline",
+      "design": {
+        "colors": {
+          "accent": "#1e3a8a",
+          "accentText": "#ffffff",
+          "border": "#d2d9e6",
+          "canvas": "#f3f5f9",
+          "danger": "#b42318",
+          "ink": "#14203a",
+          "muted": "#5f6b83",
+          "surface": "#ffffff",
+          "surfaceAlt": "#e6ebf3",
+          "topbar": "#0d1730",
+          "topbarText": "#f6f8fc"
+        },
+        "contrast": "balanced",
+        "density": "compact",
+        "id": "stage-board-professional-a",
+        "layout": "stage-board",
+        "layoutLabel": "Stage board",
+        "motion": "subtle",
+        "shape": {
+          "cardRadius": 18,
+          "panelRadius": 24
+        },
+        "spacing": {
+          "gap": 10,
+          "page": 36,
+          "panel": 16
+        },
+        "tone": "professional",
+        "typography": {
+          "body": "Inter, ui-sans-serif, system-ui, sans-serif",
+          "display": "Arial, ui-sans-serif, system-ui, sans-serif"
+        },
+        "variant": "a"
+      },
+      "entityName": "decision",
+      "entityNamePlural": "decisions",
+      "eyebrow": "Workflow",
+      "fields": [
+        {
+          "key": "title",
+          "label": "Title",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "key": "owner",
+          "label": "Owner",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "allowCustom": false,
+          "key": "status",
+          "label": "Status",
+          "options": [
+            "Proposed",
+            "Accepted"
+          ],
+          "required": true,
+          "type": "status"
+        },
+        {
+          "key": "rationale",
+          "label": "Rationale",
+          "required": false,
+          "type": "longText"
+        }
+      ],
+      "filters": [
+        {
+          "field": "status",
+          "id": "accepted",
+          "label": "Accepted",
+          "operator": "equals",
+          "value": "Accepted"
+        },
+        {
+          "field": "status",
+          "id": "status_proposed",
+          "label": "Proposed",
+          "operator": "equals",
+          "value": "Proposed"
+        }
+      ],
+      "genome": "workflow",
+      "name": "Decision Log",
+      "primaryField": "title",
+      "searchableFields": [
+        "title",
+        "owner",
+        "status",
+        "rationale"
+      ],
+      "secondaryFields": [
+        "owner",
+        "status",
+        "rationale"
+      ],
+      "summaries": [
+        {
+          "id": "total",
+          "label": "Total decisions",
+          "operation": "count"
+        },
+        {
+          "field": "status",
+          "id": "accepted",
+          "label": "Accepted",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Accepted"
+        },
+        {
+          "field": "status",
+          "id": "status_proposed_count",
+          "label": "Proposed",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Proposed"
+        }
+      ],
+      "tagline": "Decide, record, revisit."
+    },
+    "summary.md": "# Decision Log\n\nKeep lightweight decisions retrievable.\n\n- **Target user:** Small project teams\n- **Build route:** compile\n- **Genome:** workflow\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Verified journeys\n\n- Application loads and shows a useful empty state\n- Invalid decision input shows validation without crashing\n- User can add a complete decision and see it in decisions\n- decisions survive a page refresh\n- User can edit an existing decision\n- User can search decisions\n- User can narrow decisions with a meaningful filter\n- Requested derived values update from persisted records\n- User can delete an existing decision\n"
+  },
+  "journeys": [
+    {
+      "description": "Application loads and shows a useful empty state",
+      "id": "load"
+    },
+    {
+      "description": "Invalid decision input shows validation without crashing",
+      "id": "validation"
+    },
+    {
+      "description": "User can add a complete decision and see it in decisions",
+      "id": "create"
+    },
+    {
+      "description": "decisions survive a page refresh",
+      "id": "persistence"
+    },
+    {
+      "description": "User can edit an existing decision",
+      "id": "edit"
+    },
+    {
+      "description": "User can search decisions",
+      "id": "search"
+    },
+    {
+      "description": "User can narrow decisions with a meaningful filter",
+      "id": "filter"
+    },
+    {
+      "description": "Requested derived values update from persisted records",
+      "id": "calculate"
+    },
+    {
+      "description": "User can delete an existing decision",
+      "id": "delete"
+    }
+  ],
+  "route": {
+    "genome": "workflow",
+    "reason": "Every required behavior maps to the deterministic runtime.",
+    "route": "compile",
+    "supported": [
+      "create",
+      "edit",
+      "delete",
+      "search",
+      "filter",
+      "transition",
+      "calculate"
+    ],
+    "unsupported": []
+  }
+}

@@ -29,11 +29,11 @@ The public development prompt was executed on 2026-08-18 through Berget `zai-org
 | Final status | success |
 | Build route | compile |
 | Model calls | 1 |
-| Input tokens | 185 |
-| Output tokens | 679 |
-| Cache-read tokens | 2,944 |
+| Input tokens | 8 |
+| Output tokens | 705 |
+| Cache-read tokens | 3,456 |
 | Reasoning tokens | 0 |
-| Weighted token expenditure | 2,516.4 |
+| Weighted token expenditure | 2,468.6 |
 | Derived journeys | 10/10 passed |
 | Outer harness checks | 4/4 passed |
 

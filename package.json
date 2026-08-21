@@ -12,6 +12,8 @@
     "validate:result": "node --import tsx src/validate-result.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:golden": "vitest run test/golden.test.ts",
+    "test:golden:record": "UPDATE_GOLDEN=1 vitest run test/golden.test.ts",
     "app:test": "npm --prefix app-template test -- --passWithNoTests",
     "app:build": "npm --prefix app-template run build",
     "benchmark": "node --import tsx benchmarks/run-benchmark.ts",

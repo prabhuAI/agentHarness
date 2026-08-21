@@ -1,0 +1,42 @@
+{
+  "idea": "A roadmap tool that tracks initiatives and also draws an interactive dependency graph between them.",
+  "note": "Exercises the hybrid route: ordinary tracking is compiled, but the dependency-graph interaction is unsupported custom work. Locks the routing decision, not a compile pass.",
+  "ir": {
+    "version": "1",
+    "product": {
+      "name": "Roadmap",
+      "description": "Track initiatives and their dependencies.",
+      "targetUser": "Product teams",
+      "genome": "workflow"
+    },
+    "entities": [
+      {
+        "name": "initiative",
+        "plural": "initiatives",
+        "primaryField": "title",
+        "fields": [
+          { "id": "title", "label": "Title", "type": "text", "required": true },
+          { "id": "stage", "label": "Stage", "type": "status", "required": true, "options": ["Idea", "Committed", "Shipped"], "allowCustom": false },
+          { "id": "owner", "label": "Owner", "type": "text", "required": false }
+        ]
+      }
+    ],
+    "capabilities": {
+      "create": true,
+      "edit": true,
+      "delete": true,
+      "search": true,
+      "filter": true,
+      "sort": true,
+      "group": true,
+      "transition": true,
+      "calculate": true
+    },
+    "filters": [],
+    "calculations": [{ "id": "total", "label": "Total initiatives", "operation": "count" }],
+    "persistence": { "strategy": "localStorage" },
+    "assumptions": ["Single workspace"],
+    "excluded": ["Authentication"],
+    "customRequirements": ["Render an interactive dependency graph between initiatives"]
+  }
+}

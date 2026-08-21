@@ -41,7 +41,7 @@ const productIRSchema = Type.Object({
   product: Type.Object({
     name: Type.String(),
     description: Type.String(),
-    tagline: Type.String(),
+    tagline: Type.Optional(Type.String({ description: "Omit unless a short tagline adds real clarity beyond the product name" })),
     targetUser: Type.String(),
     genome: Type.String({ enum: ["tracker", "workflow", "catalog", "planner", "dashboard"] }),
     design: Type.Optional(Type.Object({
@@ -61,17 +61,17 @@ const productIRSchema = Type.Object({
     create: Type.Boolean(), edit: Type.Boolean(), delete: Type.Boolean(), search: Type.Boolean(),
     filter: Type.Boolean(), sort: Type.Boolean(), group: Type.Boolean(), transition: Type.Boolean(), calculate: Type.Boolean(),
   }),
-  filters: Type.Array(Type.Object(predicateSchema), { maxItems: 12 }),
+  filters: Type.Array(Type.Object(predicateSchema), { maxItems: 6, description: "Only filters that are not a simple equals check on one category/status field option — those are derived automatically" }),
   calculations: Type.Array(Type.Object({
     id: Type.String(), label: Type.String(),
     operation: Type.String({ enum: ["count", "countWhere", "sum"] }),
     field: Type.Optional(Type.String()),
     operator: Type.Optional(Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy"] })),
     value: Type.Optional(Type.String()),
-  }), { maxItems: 8 }),
+  }), { maxItems: 4, description: "Only a totals count and any sums — per-category-option counts are derived automatically" }),
   persistence: Type.Object({ strategy: Type.String({ enum: ["localStorage"] }) }),
-  assumptions: Type.Array(Type.String(), { maxItems: 12 }),
-  excluded: Type.Array(Type.String(), { maxItems: 12 }),
+  assumptions: Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 }),
+  excluded: Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 }),
   customRequirements: Type.Array(Type.String(), { maxItems: 8, description: "Only core behavior not expressible as fields, CRUD, search, filters, states, or calculations" }),
 });
 
@@ -151,6 +151,10 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
       "For ambiguous categories, prefer useful suggestions with allowCustom true.",
       "Use visibleWhen for a field that only applies when another field has one exact selected value.",
       "Use product.design only when the idea clearly signals a tone, density, contrast, or motion preference; never generate colors, fonts, CSS, or layout instructions.",
+      "Do not list one filter or one count per category/status field option — the compiler derives an equals filter and a countWhere count for every option automatically. Only add filters/calculations here for logic beyond that: sums, cross-field conditions, or a totals count.",
+      "Omit product.tagline unless a short tagline adds real clarity beyond the product name.",
+      "Keep assumptions and excluded entries short phrases, not full sentences.",
+      "Add a field placeholder only when the field's purpose is not already obvious from its label and type.",
     ],
     parameters: productIRSchema,
     async execute(_id, params, signal, onUpdate) {

@@ -1,0 +1,44 @@
+{
+  "idea": "A recipe box where a home cook can save recipes with cuisine, prep time and ingredients, and browse them by cuisine.",
+  "ir": {
+    "version": "1",
+    "product": {
+      "name": "Recipe Box",
+      "description": "Save and browse home recipes by cuisine and effort.",
+      "targetUser": "Home cooks",
+      "genome": "catalog",
+      "design": { "tone": "warm", "density": "comfortable", "contrast": "balanced", "motion": "subtle" }
+    },
+    "entities": [
+      {
+        "name": "recipe",
+        "plural": "recipes",
+        "primaryField": "name",
+        "fields": [
+          { "id": "name", "label": "Name", "type": "text", "required": true },
+          { "id": "cuisine", "label": "Cuisine", "type": "category", "required": true, "options": ["Italian", "Indian", "Mexican", "Japanese", "Other"], "allowCustom": true },
+          { "id": "prep_minutes", "label": "Prep (min)", "type": "number", "required": false, "min": 0 },
+          { "id": "ingredients", "label": "Ingredients", "type": "longText", "required": true },
+          { "id": "favorite", "label": "Favorite", "type": "boolean", "required": false }
+        ]
+      }
+    ],
+    "capabilities": {
+      "create": true,
+      "edit": true,
+      "delete": true,
+      "search": true,
+      "filter": true,
+      "sort": true,
+      "group": true,
+      "transition": false,
+      "calculate": true
+    },
+    "filters": [{ "id": "favorites", "label": "Favorites only", "field": "favorite", "operator": "truthy" }],
+    "calculations": [{ "id": "total", "label": "Total recipes", "operation": "count" }],
+    "persistence": { "strategy": "localStorage" },
+    "assumptions": ["Single local cook"],
+    "excluded": ["Grocery ordering", "Nutrition analysis"],
+    "customRequirements": []
+  }
+}

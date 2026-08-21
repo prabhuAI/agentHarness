@@ -46,6 +46,7 @@ export interface DesignConfig {
   motion: "none" | "subtle" | "expressive";
   layout: string;
   layoutLabel: string;
+  variant: "a" | "b" | "c";
   colors: {
     canvas: string; surface: string; surfaceAlt: string; ink: string; muted: string;
     border: string; accent: string; accentText: string; topbar: string; topbarText: string; danger: string;
@@ -83,6 +84,7 @@ const fallbackDesign: DesignConfig = {
   motion: "subtle",
   layout: "progress-workbench",
   layoutLabel: "Progress workbench",
+  variant: "a",
   colors: {
     canvas: "#f4f6fa", surface: "#ffffff", surfaceAlt: "#e9eef8", ink: "#172033",
     muted: "#667085", border: "#d5dae4", accent: parsedConfig.accent, accentText: "#ffffff",

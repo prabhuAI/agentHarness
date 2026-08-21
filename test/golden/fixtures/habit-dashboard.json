@@ -1,0 +1,46 @@
+{
+  "idea": "A habits dashboard that shows how many habits I completed and lets me mark daily habits done.",
+  "ir": {
+    "version": "1",
+    "product": {
+      "name": "Habit Board",
+      "description": "See daily habits and how many are done at a glance.",
+      "targetUser": "People building daily habits",
+      "genome": "dashboard",
+      "design": { "tone": "calm", "density": "comfortable", "contrast": "balanced", "motion": "subtle" }
+    },
+    "entities": [
+      {
+        "name": "habit",
+        "plural": "habits",
+        "primaryField": "name",
+        "fields": [
+          { "id": "name", "label": "Habit", "type": "text", "required": true },
+          { "id": "cadence", "label": "Cadence", "type": "status", "required": true, "options": ["Daily", "Weekly"], "allowCustom": false },
+          { "id": "streak", "label": "Streak", "type": "number", "required": false, "min": 0 },
+          { "id": "done_today", "label": "Done today", "type": "boolean", "required": false }
+        ]
+      }
+    ],
+    "capabilities": {
+      "create": true,
+      "edit": true,
+      "delete": true,
+      "search": false,
+      "filter": true,
+      "sort": true,
+      "group": true,
+      "transition": false,
+      "calculate": true
+    },
+    "filters": [{ "id": "done", "label": "Done today", "field": "done_today", "operator": "truthy" }],
+    "calculations": [
+      { "id": "total", "label": "Total habits", "operation": "count" },
+      { "id": "done", "label": "Done today", "operation": "countWhere", "field": "done_today", "operator": "truthy" }
+    ],
+    "persistence": { "strategy": "localStorage" },
+    "assumptions": ["Single local user"],
+    "excluded": ["Reminders", "Cross-device sync"],
+    "customRequirements": []
+  }
+}

@@ -62,9 +62,40 @@ describe("Product IR compiler", () => {
       primaryField: "title",
       design: { layout: "stage-board", tone: "professional", density: "compact" },
     });
-    expect(config.filters).toHaveLength(1);
-    expect(config.summaries).toHaveLength(2);
+    expect(config.filters).toHaveLength(2);
+    expect(config.summaries).toHaveLength(3);
     expect(deriveJourneys(ir).map((journey) => journey.id)).toEqual(expect.arrayContaining(["create", "persistence", "filter", "calculate", "delete"]));
+  });
+
+  it("derives one filter and one count per category/status option instead of requiring the model to enumerate them", () => {
+    const ir = normalizeProductIR(validateProductIR(fixture()));
+    // status has options ["Proposed", "Accepted"]; the model only wrote an "Accepted" filter and count.
+    expect(ir.filters).toContainEqual(expect.objectContaining({ field: "status", operator: "equals", value: "Proposed" }));
+    expect(ir.filters).toContainEqual(expect.objectContaining({ field: "status", operator: "equals", value: "Accepted" }));
+    expect(ir.calculations).toContainEqual(expect.objectContaining({ field: "status", operation: "countWhere", value: "Proposed" }));
+    expect(ir.filters).toHaveLength(2);
+    expect(ir.calculations).toHaveLength(3);
+
+    const noFilterCapability = fixture({ capabilities: { ...fixture().capabilities, filter: false, calculate: false } });
+    const withoutDerivation = normalizeProductIR(validateProductIR(noFilterCapability));
+    expect(withoutDerivation.filters).toHaveLength(1);
+    expect(withoutDerivation.calculations).toHaveLength(2);
+  });
+
+  it("coerces option-bearing fields to a choice type so weaker models render a select", () => {
+    // Weaker models (e.g. a small local model) often tag an enumerated field as
+    // "text" while still supplying options; the runtime only renders a select for
+    // category/status, so normalization must reclassify it.
+    const mislabeled = fixture();
+    mislabeled.entities[0]!.fields.push({ id: "category", label: "Category", type: "text", required: true, options: ["Groceries", "Pharmacy", "Other"], allowCustom: true });
+    const normalized = normalizeProductIR(validateProductIR(mislabeled));
+    const category = normalized.entities[0].fields.find((field) => field.id === "category");
+    expect(category?.type).toBe("category");
+    expect(category?.options).toEqual(["Groceries", "Pharmacy", "Other"]);
+    // Coercion also lets the compiler derive per-option filters/counts for it.
+    expect(normalized.filters).toContainEqual(expect.objectContaining({ field: "category", operator: "equals", value: "Groceries" }));
+    // A field with no options keeps whatever type the model chose.
+    expect(normalized.entities[0].fields.find((field) => field.id === "owner")?.type).toBe("text");
   });
 
   it("normalizes duplicate identifiers and rejects malformed IR", () => {
@@ -110,12 +141,30 @@ describe("Product IR compiler", () => {
     expect(() => validateProductIR(malformed)).toThrow(ProductIRValidationError);
   });
 
-  it("keeps every curated palette above WCAG AA text contrast", () => {
+  it("keeps every curated palette variant above WCAG AA text contrast", () => {
+    // Sweep many seeds per tone so every palette variant the hash can select is exercised.
     for (const tone of ["calm", "playful", "professional", "bold", "warm", "technical"] as const) {
-      const design = resolveDesign("tracker", { tone, density: "comfortable", contrast: "balanced", motion: "subtle" });
-      expect(contrastRatio(design.colors.accent, design.colors.accentText)).toBeGreaterThanOrEqual(4.5);
-      expect(contrastRatio(design.colors.ink, design.colors.surface)).toBeGreaterThanOrEqual(4.5);
+      for (let seed = 0; seed < 40; seed += 1) {
+        const design = resolveDesign("tracker", { tone, density: "comfortable", contrast: "balanced", motion: "subtle" }, `seed-${seed}`);
+        expect(contrastRatio(design.colors.accent, design.colors.accentText)).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(design.colors.ink, design.colors.surface)).toBeGreaterThanOrEqual(4.5);
+      }
     }
+  });
+
+  it("diversifies design deterministically by product name without changing genome layout", () => {
+    const intent = { tone: "calm", density: "comfortable", contrast: "balanced", motion: "subtle" } as const;
+    // Same name → identical design (reproducible runs, no randomness).
+    expect(resolveDesign("tracker", intent, "Reading List")).toEqual(resolveDesign("tracker", intent, "Reading List"));
+    // Different names of the same genome+tone → visibly different looks.
+    const names = ["Reading List", "Habit Log", "Plant Care", "Recipe Box", "Expense Notes", "Trip Planner", "Gear Locker", "Study Queue"];
+    const looks = names.map((name) => {
+      const d = resolveDesign("tracker", intent, name);
+      return JSON.stringify([d.colors.accent, d.typography.display, d.shape.cardRadius, d.variant]);
+    });
+    expect(new Set(looks).size).toBeGreaterThan(1);
+    // Layout stays genome-driven regardless of name.
+    for (const name of names) expect(resolveDesign("tracker", intent, name).layout).toBe("progress-workbench");
   });
 
   it("routes only unsupported core interactions to bounded custom work", () => {

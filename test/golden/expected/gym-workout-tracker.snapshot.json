@@ -1,0 +1,474 @@
+{
+  "artifacts": {
+    "idea_spec.json": {
+      "assumptions": [
+        "Single local user",
+        "AI workout suggestions mocked as saved presets"
+      ],
+      "core_utility": "Track gym workouts and weekly bodyweight so progress stays visible.",
+      "excluded_features": [
+        "Authentication",
+        "Live coaching integrations"
+      ],
+      "included_features": [
+        "create",
+        "edit",
+        "delete",
+        "search",
+        "filter",
+        "sort",
+        "group",
+        "calculate"
+      ],
+      "target_user": "Individuals training at the gym"
+    },
+    "product-ir.json": {
+      "assumptions": [
+        "Single local user",
+        "AI workout suggestions mocked as saved presets"
+      ],
+      "calculations": [
+        {
+          "id": "total",
+          "label": "Total workouts",
+          "operation": "count"
+        },
+        {
+          "field": "duration",
+          "id": "minutes",
+          "label": "Total minutes",
+          "operation": "sum"
+        },
+        {
+          "field": "focus",
+          "id": "focus_push_count",
+          "label": "Push",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Push"
+        },
+        {
+          "field": "focus",
+          "id": "focus_pull_count",
+          "label": "Pull",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Pull"
+        },
+        {
+          "field": "focus",
+          "id": "focus_legs_count",
+          "label": "Legs",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Legs"
+        },
+        {
+          "field": "focus",
+          "id": "focus_cardio_count",
+          "label": "Cardio",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Cardio"
+        },
+        {
+          "field": "focus",
+          "id": "focus_full_body_count",
+          "label": "Full body",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Full body"
+        }
+      ],
+      "capabilities": {
+        "calculate": true,
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "filter": true,
+        "group": true,
+        "search": true,
+        "sort": true,
+        "transition": false
+      },
+      "customRequirements": [],
+      "entities": [
+        {
+          "fields": [
+            {
+              "id": "title",
+              "label": "Workout",
+              "required": true,
+              "type": "text"
+            },
+            {
+              "id": "day",
+              "label": "Date",
+              "required": true,
+              "type": "date"
+            },
+            {
+              "allowCustom": true,
+              "id": "focus",
+              "label": "Focus",
+              "options": [
+                "Push",
+                "Pull",
+                "Legs",
+                "Cardio",
+                "Full body"
+              ],
+              "required": true,
+              "type": "category"
+            },
+            {
+              "id": "duration",
+              "label": "Duration (min)",
+              "min": 0,
+              "required": false,
+              "type": "number"
+            },
+            {
+              "id": "bodyweight",
+              "label": "Bodyweight (kg)",
+              "min": 0,
+              "required": false,
+              "type": "number"
+            },
+            {
+              "id": "notes",
+              "label": "Notes",
+              "required": false,
+              "type": "longText"
+            }
+          ],
+          "name": "workout",
+          "plural": "workouts",
+          "primaryField": "title"
+        }
+      ],
+      "excluded": [
+        "Authentication",
+        "Live coaching integrations"
+      ],
+      "filters": [
+        {
+          "field": "focus",
+          "id": "focus_push",
+          "label": "Push",
+          "operator": "equals",
+          "value": "Push"
+        },
+        {
+          "field": "focus",
+          "id": "focus_pull",
+          "label": "Pull",
+          "operator": "equals",
+          "value": "Pull"
+        },
+        {
+          "field": "focus",
+          "id": "focus_legs",
+          "label": "Legs",
+          "operator": "equals",
+          "value": "Legs"
+        },
+        {
+          "field": "focus",
+          "id": "focus_cardio",
+          "label": "Cardio",
+          "operator": "equals",
+          "value": "Cardio"
+        },
+        {
+          "field": "focus",
+          "id": "focus_full_body",
+          "label": "Full body",
+          "operator": "equals",
+          "value": "Full body"
+        }
+      ],
+      "persistence": {
+        "strategy": "localStorage"
+      },
+      "product": {
+        "accent": "#5b5bd6",
+        "description": "Track gym workouts and weekly bodyweight so progress stays visible.",
+        "design": {
+          "contrast": "balanced",
+          "density": "comfortable",
+          "motion": "subtle",
+          "tone": "calm"
+        },
+        "genome": "tracker",
+        "name": "Gym Log",
+        "tagline": "Log it, lift it, track it.",
+        "targetUser": "Individuals training at the gym"
+      },
+      "version": "1"
+    },
+    "product.config.json": {
+      "accent": "#166534",
+      "capabilities": {
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "group": true,
+        "search": true,
+        "sort": true
+      },
+      "collectionLabel": "Collection",
+      "design": {
+        "colors": {
+          "accent": "#166534",
+          "accentText": "#ffffff",
+          "border": "#cde0d2",
+          "canvas": "#f1f7f2",
+          "danger": "#a52a2a",
+          "ink": "#14311f",
+          "muted": "#5b7263",
+          "surface": "#ffffff",
+          "surfaceAlt": "#e4f0e6",
+          "topbar": "#0f2a1a",
+          "topbarText": "#f3faf4"
+        },
+        "contrast": "balanced",
+        "density": "comfortable",
+        "id": "progress-workbench-calm-b",
+        "layout": "progress-workbench",
+        "layoutLabel": "Progress workbench",
+        "motion": "subtle",
+        "shape": {
+          "cardRadius": 22,
+          "panelRadius": 28
+        },
+        "spacing": {
+          "gap": 14,
+          "page": 52,
+          "panel": 22
+        },
+        "tone": "calm",
+        "typography": {
+          "body": "Inter, ui-sans-serif, system-ui, sans-serif",
+          "display": "Inter, ui-sans-serif, system-ui, sans-serif"
+        },
+        "variant": "b"
+      },
+      "entityName": "workout",
+      "entityNamePlural": "workouts",
+      "eyebrow": "Tracker",
+      "fields": [
+        {
+          "key": "title",
+          "label": "Workout",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "key": "day",
+          "label": "Date",
+          "required": true,
+          "type": "date"
+        },
+        {
+          "allowCustom": true,
+          "key": "focus",
+          "label": "Focus",
+          "options": [
+            "Push",
+            "Pull",
+            "Legs",
+            "Cardio",
+            "Full body"
+          ],
+          "required": true,
+          "type": "category"
+        },
+        {
+          "key": "duration",
+          "label": "Duration (min)",
+          "min": 0,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "key": "bodyweight",
+          "label": "Bodyweight (kg)",
+          "min": 0,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "key": "notes",
+          "label": "Notes",
+          "required": false,
+          "type": "longText"
+        }
+      ],
+      "filters": [
+        {
+          "field": "focus",
+          "id": "focus_push",
+          "label": "Push",
+          "operator": "equals",
+          "value": "Push"
+        },
+        {
+          "field": "focus",
+          "id": "focus_pull",
+          "label": "Pull",
+          "operator": "equals",
+          "value": "Pull"
+        },
+        {
+          "field": "focus",
+          "id": "focus_legs",
+          "label": "Legs",
+          "operator": "equals",
+          "value": "Legs"
+        },
+        {
+          "field": "focus",
+          "id": "focus_cardio",
+          "label": "Cardio",
+          "operator": "equals",
+          "value": "Cardio"
+        },
+        {
+          "field": "focus",
+          "id": "focus_full_body",
+          "label": "Full body",
+          "operator": "equals",
+          "value": "Full body"
+        }
+      ],
+      "genome": "tracker",
+      "name": "Gym Log",
+      "primaryField": "title",
+      "searchableFields": [
+        "title",
+        "focus",
+        "notes"
+      ],
+      "secondaryFields": [
+        "day",
+        "focus",
+        "duration",
+        "bodyweight"
+      ],
+      "summaries": [
+        {
+          "id": "total",
+          "label": "Total workouts",
+          "operation": "count"
+        },
+        {
+          "field": "duration",
+          "id": "minutes",
+          "label": "Total minutes",
+          "operation": "sum"
+        },
+        {
+          "field": "focus",
+          "id": "focus_push_count",
+          "label": "Push",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Push"
+        },
+        {
+          "field": "focus",
+          "id": "focus_pull_count",
+          "label": "Pull",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Pull"
+        },
+        {
+          "field": "focus",
+          "id": "focus_legs_count",
+          "label": "Legs",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Legs"
+        },
+        {
+          "field": "focus",
+          "id": "focus_cardio_count",
+          "label": "Cardio",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Cardio"
+        },
+        {
+          "field": "focus",
+          "id": "focus_full_body_count",
+          "label": "Full body",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Full body"
+        }
+      ],
+      "tagline": "Log it, lift it, track it."
+    },
+    "summary.md": "# Gym Log\n\nTrack gym workouts and weekly bodyweight so progress stays visible.\n\n- **Target user:** Individuals training at the gym\n- **Build route:** compile\n- **Genome:** tracker\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Verified journeys\n\n- Application loads and shows a useful empty state\n- Invalid workout input shows validation without crashing\n- User can add a complete workout and see it in workouts\n- workouts survive a page refresh\n- User can edit an existing workout\n- User can search workouts\n- User can narrow workouts with a meaningful filter\n- workouts are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing workout\n"
+  },
+  "journeys": [
+    {
+      "description": "Application loads and shows a useful empty state",
+      "id": "load"
+    },
+    {
+      "description": "Invalid workout input shows validation without crashing",
+      "id": "validation"
+    },
+    {
+      "description": "User can add a complete workout and see it in workouts",
+      "id": "create"
+    },
+    {
+      "description": "workouts survive a page refresh",
+      "id": "persistence"
+    },
+    {
+      "description": "User can edit an existing workout",
+      "id": "edit"
+    },
+    {
+      "description": "User can search workouts",
+      "id": "search"
+    },
+    {
+      "description": "User can narrow workouts with a meaningful filter",
+      "id": "filter"
+    },
+    {
+      "description": "workouts are grouped by a meaningful category or status",
+      "id": "group"
+    },
+    {
+      "description": "Requested derived values update from persisted records",
+      "id": "calculate"
+    },
+    {
+      "description": "User can delete an existing workout",
+      "id": "delete"
+    }
+  ],
+  "route": {
+    "genome": "tracker",
+    "reason": "Every required behavior maps to the deterministic runtime.",
+    "route": "compile",
+    "supported": [
+      "create",
+      "edit",
+      "delete",
+      "search",
+      "filter",
+      "sort",
+      "group",
+      "calculate"
+    ],
+    "unsupported": []
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "idea": "A lightweight decision log so a small team can record decisions, who owns them, and whether they were accepted.",
+  "ir": {
+    "version": "1",
+    "product": {
+      "name": "Decision Log",
+      "description": "Keep lightweight decisions retrievable.",
+      "tagline": "Decide, record, revisit.",
+      "targetUser": "Small project teams",
+      "genome": "workflow"
+    },
+    "entities": [
+      {
+        "name": "decision",
+        "plural": "decisions",
+        "primaryField": "title",
+        "fields": [
+          { "id": "title", "label": "Title", "type": "text", "required": true },
+          { "id": "owner", "label": "Owner", "type": "text", "required": true },
+          { "id": "status", "label": "Status", "type": "status", "required": true, "options": ["Proposed", "Accepted"], "allowCustom": false },
+          { "id": "rationale", "label": "Rationale", "type": "longText", "required": false }
+        ]
+      }
+    ],
+    "capabilities": {
+      "create": true,
+      "edit": true,
+      "delete": true,
+      "search": true,
+      "filter": true,
+      "sort": false,
+      "group": false,
+      "transition": true,
+      "calculate": true
+    },
+    "filters": [{ "id": "accepted", "label": "Accepted", "field": "status", "operator": "equals", "value": "Accepted" }],
+    "calculations": [
+      { "id": "total", "label": "Total decisions", "operation": "count" },
+      { "id": "accepted", "label": "Accepted", "operation": "countWhere", "field": "status", "operator": "equals", "value": "Accepted" }
+    ],
+    "persistence": { "strategy": "localStorage" },
+    "assumptions": ["Single workspace"],
+    "excluded": ["Authentication"],
+    "customRequirements": []
+  }
+}

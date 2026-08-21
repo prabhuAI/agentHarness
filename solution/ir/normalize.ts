@@ -1,4 +1,4 @@
-import type { DesignIntent, Genome, NormalizedProductIR, ProductEntity, ProductField, ProductIR } from "./types.js";
+import type { DesignIntent, Genome, NormalizedProductIR, ProductCalculation, ProductEntity, ProductField, ProductFilter, ProductIR } from "./types.js";
 
 const clean = (value: string): string => value.trim().replace(/\s+/gu, " ");
 const identifier = (value: string, fallback: string): string => {
@@ -36,10 +36,16 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     while (seen.has(id)) id = `${id}_${index + 1}`;
     seen.add(id);
     const options = field.options ? uniqueStrings(field.options) : undefined;
+    // A field carrying an enumerated option list is a choice control regardless of
+    // the type the model tagged it with. Weaker models often emit `text` with
+    // `options`; coercing to `category` makes the runtime render a select and lets
+    // the compiler derive per-option filters and counts.
+    const hasOptions = Boolean(options && options.length > 0);
+    const type = hasOptions && field.type !== "category" && field.type !== "status" ? "category" : field.type;
     return {
       id,
       label: clean(field.label || id),
-      type: field.type,
+      type,
       required: Boolean(field.required),
       ...(field.placeholder ? { placeholder: clean(field.placeholder) } : {}),
       ...(options && options.length > 0 ? { options } : {}),
@@ -59,6 +65,45 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
   });
 }
 
+const OPTION_DERIVATION_RANGE = { min: 2, max: 8 };
+
+// Category/status options are mechanically enumerable from the field itself, so the
+// compiler derives one filter/count per option here instead of requiring the model to
+// spell each one out — cutting output tokens without losing behavior.
+function deriveOptionFilters(fields: ProductField[], filters: ProductFilter[]): ProductFilter[] {
+  const derived = [...filters];
+  const seen = new Set(derived.map((filter) => `${filter.field}:${filter.operator}:${filter.value ?? ""}`));
+  for (const field of fields) {
+    if (field.type !== "category" && field.type !== "status") continue;
+    const options = field.options ?? [];
+    if (options.length < OPTION_DERIVATION_RANGE.min || options.length > OPTION_DERIVATION_RANGE.max) continue;
+    for (const option of options) {
+      const key = `${field.id}:equals:${option}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      derived.push({ id: identifier(`${field.id}_${option}`, `filter_${derived.length + 1}`), label: option, field: field.id, operator: "equals", value: option });
+    }
+  }
+  return derived;
+}
+
+function deriveOptionCalculations(fields: ProductField[], calculations: ProductCalculation[]): ProductCalculation[] {
+  const derived = [...calculations];
+  const seen = new Set(derived.map((calculation) => `${calculation.field ?? ""}:${calculation.operation}:${calculation.operator ?? ""}:${calculation.value ?? ""}`));
+  for (const field of fields) {
+    if (field.type !== "category" && field.type !== "status") continue;
+    const options = field.options ?? [];
+    if (options.length < OPTION_DERIVATION_RANGE.min || options.length > OPTION_DERIVATION_RANGE.max) continue;
+    for (const option of options) {
+      const key = `${field.id}:countWhere:equals:${option}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      derived.push({ id: identifier(`${field.id}_${option}_count`, `metric_${derived.length + 1}`), label: option, operation: "countWhere", field: field.id, operator: "equals", value: option });
+    }
+  }
+  return derived;
+}
+
 export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
   const entities = input.entities.map((entity, index) => {
     const fields = normalizeFields(entity);
@@ -73,10 +118,10 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
   }) as [ProductEntity, ...ProductEntity[]];
   const primaryFieldMap = new Map(entities[0].fields.map((field) => [field.id, field]));
   const primaryFields = new Set(primaryFieldMap.keys());
-  const filters = input.filters
+  let filters = input.filters
     .map((filter, index) => ({ ...filter, id: identifier(filter.id, `filter_${index + 1}`), label: clean(filter.label), field: identifier(filter.field, "") }))
     .filter((filter) => primaryFields.has(filter.field) && (filter.operator !== "equals" || filter.value !== undefined));
-  const calculations = input.calculations
+  let calculations = input.calculations
     .map((calculation, index) => ({ ...calculation, id: identifier(calculation.id, `metric_${index + 1}`), label: clean(calculation.label), ...(calculation.field ? { field: identifier(calculation.field, "") } : {}) }))
     .filter((calculation) => {
       if (calculation.operation === "count") return true;
@@ -85,6 +130,8 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
       const type = primaryFieldMap.get(calculation.field)?.type;
       return type === "number" || type === "currency";
     });
+  if (input.capabilities.filter) filters = deriveOptionFilters(entities[0].fields, filters);
+  if (input.capabilities.calculate) calculations = deriveOptionCalculations(entities[0].fields, calculations);
   return {
     ...input,
     version: "1",
@@ -92,7 +139,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
       ...input.product,
       name: clean(input.product.name),
       description: clean(input.product.description),
-      tagline: clean(input.product.tagline),
+      tagline: clean(input.product.tagline ?? ""),
       targetUser: clean(input.product.targetUser),
       accent: /^#[0-9a-f]{6}$/iu.test(input.product.accent ?? "") ? input.product.accent! : "#5b5bd6",
       design: inferDesignIntent(input),

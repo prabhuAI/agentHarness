@@ -1,0 +1,458 @@
+{
+  "artifacts": {
+    "idea_spec.json": {
+      "assumptions": [
+        "Single local cook"
+      ],
+      "core_utility": "Save and browse home recipes by cuisine and effort.",
+      "excluded_features": [
+        "Grocery ordering",
+        "Nutrition analysis"
+      ],
+      "included_features": [
+        "create",
+        "edit",
+        "delete",
+        "search",
+        "filter",
+        "sort",
+        "group",
+        "calculate"
+      ],
+      "target_user": "Home cooks"
+    },
+    "product-ir.json": {
+      "assumptions": [
+        "Single local cook"
+      ],
+      "calculations": [
+        {
+          "id": "total",
+          "label": "Total recipes",
+          "operation": "count"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_italian_count",
+          "label": "Italian",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Italian"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_indian_count",
+          "label": "Indian",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Indian"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_mexican_count",
+          "label": "Mexican",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Mexican"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_japanese_count",
+          "label": "Japanese",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Japanese"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_other_count",
+          "label": "Other",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Other"
+        }
+      ],
+      "capabilities": {
+        "calculate": true,
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "filter": true,
+        "group": true,
+        "search": true,
+        "sort": true,
+        "transition": false
+      },
+      "customRequirements": [],
+      "entities": [
+        {
+          "fields": [
+            {
+              "id": "name",
+              "label": "Name",
+              "required": true,
+              "type": "text"
+            },
+            {
+              "allowCustom": true,
+              "id": "cuisine",
+              "label": "Cuisine",
+              "options": [
+                "Italian",
+                "Indian",
+                "Mexican",
+                "Japanese",
+                "Other"
+              ],
+              "required": true,
+              "type": "category"
+            },
+            {
+              "id": "prep_minutes",
+              "label": "Prep (min)",
+              "min": 0,
+              "required": false,
+              "type": "number"
+            },
+            {
+              "id": "ingredients",
+              "label": "Ingredients",
+              "required": true,
+              "type": "longText"
+            },
+            {
+              "id": "favorite",
+              "label": "Favorite",
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "name": "recipe",
+          "plural": "recipes",
+          "primaryField": "name"
+        }
+      ],
+      "excluded": [
+        "Grocery ordering",
+        "Nutrition analysis"
+      ],
+      "filters": [
+        {
+          "field": "favorite",
+          "id": "favorites",
+          "label": "Favorites only",
+          "operator": "truthy"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_italian",
+          "label": "Italian",
+          "operator": "equals",
+          "value": "Italian"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_indian",
+          "label": "Indian",
+          "operator": "equals",
+          "value": "Indian"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_mexican",
+          "label": "Mexican",
+          "operator": "equals",
+          "value": "Mexican"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_japanese",
+          "label": "Japanese",
+          "operator": "equals",
+          "value": "Japanese"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_other",
+          "label": "Other",
+          "operator": "equals",
+          "value": "Other"
+        }
+      ],
+      "persistence": {
+        "strategy": "localStorage"
+      },
+      "product": {
+        "accent": "#5b5bd6",
+        "description": "Save and browse home recipes by cuisine and effort.",
+        "design": {
+          "contrast": "balanced",
+          "density": "comfortable",
+          "motion": "subtle",
+          "tone": "warm"
+        },
+        "genome": "catalog",
+        "name": "Recipe Box",
+        "tagline": "",
+        "targetUser": "Home cooks"
+      },
+      "version": "1"
+    },
+    "product.config.json": {
+      "accent": "#7c2d12",
+      "capabilities": {
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "group": true,
+        "search": true,
+        "sort": true
+      },
+      "collectionLabel": "Library",
+      "design": {
+        "colors": {
+          "accent": "#7c2d12",
+          "accentText": "#ffffff",
+          "border": "#ddd0bf",
+          "canvas": "#f7f3ee",
+          "danger": "#a52a2a",
+          "ink": "#2f231a",
+          "muted": "#6f6153",
+          "surface": "#fffdf9",
+          "surfaceAlt": "#efe5d8",
+          "topbar": "#2a1d13",
+          "topbarText": "#fdf8f2"
+        },
+        "contrast": "balanced",
+        "density": "comfortable",
+        "id": "editorial-gallery-warm-c",
+        "layout": "editorial-gallery",
+        "layoutLabel": "Editorial gallery",
+        "motion": "subtle",
+        "shape": {
+          "cardRadius": 4,
+          "panelRadius": 6
+        },
+        "spacing": {
+          "gap": 14,
+          "page": 52,
+          "panel": 22
+        },
+        "tone": "warm",
+        "typography": {
+          "body": "'Palatino Linotype', 'Book Antiqua', Palatino, ui-serif, serif",
+          "display": "'Palatino Linotype', 'Book Antiqua', Palatino, ui-serif, serif"
+        },
+        "variant": "c"
+      },
+      "entityName": "recipe",
+      "entityNamePlural": "recipes",
+      "eyebrow": "Catalog",
+      "fields": [
+        {
+          "key": "name",
+          "label": "Name",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "allowCustom": true,
+          "key": "cuisine",
+          "label": "Cuisine",
+          "options": [
+            "Italian",
+            "Indian",
+            "Mexican",
+            "Japanese",
+            "Other"
+          ],
+          "required": true,
+          "type": "category"
+        },
+        {
+          "key": "prep_minutes",
+          "label": "Prep (min)",
+          "min": 0,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "key": "ingredients",
+          "label": "Ingredients",
+          "required": true,
+          "type": "longText"
+        },
+        {
+          "key": "favorite",
+          "label": "Favorite",
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "filters": [
+        {
+          "field": "favorite",
+          "id": "favorites",
+          "label": "Favorites only",
+          "operator": "truthy"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_italian",
+          "label": "Italian",
+          "operator": "equals",
+          "value": "Italian"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_indian",
+          "label": "Indian",
+          "operator": "equals",
+          "value": "Indian"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_mexican",
+          "label": "Mexican",
+          "operator": "equals",
+          "value": "Mexican"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_japanese",
+          "label": "Japanese",
+          "operator": "equals",
+          "value": "Japanese"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_other",
+          "label": "Other",
+          "operator": "equals",
+          "value": "Other"
+        }
+      ],
+      "genome": "catalog",
+      "name": "Recipe Box",
+      "primaryField": "name",
+      "searchableFields": [
+        "name",
+        "cuisine",
+        "ingredients"
+      ],
+      "secondaryFields": [
+        "cuisine",
+        "prep_minutes",
+        "ingredients",
+        "favorite"
+      ],
+      "summaries": [
+        {
+          "id": "total",
+          "label": "Total recipes",
+          "operation": "count"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_italian_count",
+          "label": "Italian",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Italian"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_indian_count",
+          "label": "Indian",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Indian"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_mexican_count",
+          "label": "Mexican",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Mexican"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_japanese_count",
+          "label": "Japanese",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Japanese"
+        },
+        {
+          "field": "cuisine",
+          "id": "cuisine_other_count",
+          "label": "Other",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Other"
+        }
+      ],
+      "tagline": ""
+    },
+    "summary.md": "# Recipe Box\n\nSave and browse home recipes by cuisine and effort.\n\n- **Target user:** Home cooks\n- **Build route:** compile\n- **Genome:** catalog\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Verified journeys\n\n- Application loads and shows a useful empty state\n- Invalid recipe input shows validation without crashing\n- User can add a complete recipe and see it in recipes\n- recipes survive a page refresh\n- User can edit an existing recipe\n- User can search recipes\n- User can narrow recipes with a meaningful filter\n- recipes are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing recipe\n"
+  },
+  "journeys": [
+    {
+      "description": "Application loads and shows a useful empty state",
+      "id": "load"
+    },
+    {
+      "description": "Invalid recipe input shows validation without crashing",
+      "id": "validation"
+    },
+    {
+      "description": "User can add a complete recipe and see it in recipes",
+      "id": "create"
+    },
+    {
+      "description": "recipes survive a page refresh",
+      "id": "persistence"
+    },
+    {
+      "description": "User can edit an existing recipe",
+      "id": "edit"
+    },
+    {
+      "description": "User can search recipes",
+      "id": "search"
+    },
+    {
+      "description": "User can narrow recipes with a meaningful filter",
+      "id": "filter"
+    },
+    {
+      "description": "recipes are grouped by a meaningful category or status",
+      "id": "group"
+    },
+    {
+      "description": "Requested derived values update from persisted records",
+      "id": "calculate"
+    },
+    {
+      "description": "User can delete an existing recipe",
+      "id": "delete"
+    }
+  ],
+  "route": {
+    "genome": "catalog",
+    "reason": "Every required behavior maps to the deterministic runtime.",
+    "route": "compile",
+    "supported": [
+      "create",
+      "edit",
+      "delete",
+      "search",
+      "filter",
+      "sort",
+      "group",
+      "calculate"
+    ],
+    "unsupported": []
+  }
+}

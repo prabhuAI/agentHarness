@@ -1,0 +1,356 @@
+{
+  "artifacts": {
+    "idea_spec.json": {
+      "assumptions": [
+        "Single local user"
+      ],
+      "core_utility": "See daily habits and how many are done at a glance.",
+      "excluded_features": [
+        "Reminders",
+        "Cross-device sync"
+      ],
+      "included_features": [
+        "create",
+        "edit",
+        "delete",
+        "filter",
+        "sort",
+        "group",
+        "calculate"
+      ],
+      "target_user": "People building daily habits"
+    },
+    "product-ir.json": {
+      "assumptions": [
+        "Single local user"
+      ],
+      "calculations": [
+        {
+          "id": "total",
+          "label": "Total habits",
+          "operation": "count"
+        },
+        {
+          "field": "done_today",
+          "id": "done",
+          "label": "Done today",
+          "operation": "countWhere",
+          "operator": "truthy"
+        },
+        {
+          "field": "cadence",
+          "id": "cadence_daily_count",
+          "label": "Daily",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Daily"
+        },
+        {
+          "field": "cadence",
+          "id": "cadence_weekly_count",
+          "label": "Weekly",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Weekly"
+        }
+      ],
+      "capabilities": {
+        "calculate": true,
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "filter": true,
+        "group": true,
+        "search": false,
+        "sort": true,
+        "transition": false
+      },
+      "customRequirements": [],
+      "entities": [
+        {
+          "fields": [
+            {
+              "id": "name",
+              "label": "Habit",
+              "required": true,
+              "type": "text"
+            },
+            {
+              "allowCustom": false,
+              "id": "cadence",
+              "label": "Cadence",
+              "options": [
+                "Daily",
+                "Weekly"
+              ],
+              "required": true,
+              "type": "status"
+            },
+            {
+              "id": "streak",
+              "label": "Streak",
+              "min": 0,
+              "required": false,
+              "type": "number"
+            },
+            {
+              "id": "done_today",
+              "label": "Done today",
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "name": "habit",
+          "plural": "habits",
+          "primaryField": "name"
+        }
+      ],
+      "excluded": [
+        "Reminders",
+        "Cross-device sync"
+      ],
+      "filters": [
+        {
+          "field": "done_today",
+          "id": "done",
+          "label": "Done today",
+          "operator": "truthy"
+        },
+        {
+          "field": "cadence",
+          "id": "cadence_daily",
+          "label": "Daily",
+          "operator": "equals",
+          "value": "Daily"
+        },
+        {
+          "field": "cadence",
+          "id": "cadence_weekly",
+          "label": "Weekly",
+          "operator": "equals",
+          "value": "Weekly"
+        }
+      ],
+      "persistence": {
+        "strategy": "localStorage"
+      },
+      "product": {
+        "accent": "#5b5bd6",
+        "description": "See daily habits and how many are done at a glance.",
+        "design": {
+          "contrast": "balanced",
+          "density": "comfortable",
+          "motion": "subtle",
+          "tone": "calm"
+        },
+        "genome": "dashboard",
+        "name": "Habit Board",
+        "tagline": "",
+        "targetUser": "People building daily habits"
+      },
+      "version": "1"
+    },
+    "product.config.json": {
+      "accent": "#166534",
+      "capabilities": {
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "group": true,
+        "search": false,
+        "sort": true
+      },
+      "collectionLabel": "Data",
+      "design": {
+        "colors": {
+          "accent": "#166534",
+          "accentText": "#ffffff",
+          "border": "#cde0d2",
+          "canvas": "#f1f7f2",
+          "danger": "#a52a2a",
+          "ink": "#14311f",
+          "muted": "#5b7263",
+          "surface": "#ffffff",
+          "surfaceAlt": "#e4f0e6",
+          "topbar": "#0f2a1a",
+          "topbarText": "#f3faf4"
+        },
+        "contrast": "balanced",
+        "density": "comfortable",
+        "id": "command-center-calm-a",
+        "layout": "command-center",
+        "layoutLabel": "Command center",
+        "motion": "subtle",
+        "shape": {
+          "cardRadius": 4,
+          "panelRadius": 6
+        },
+        "spacing": {
+          "gap": 14,
+          "page": 52,
+          "panel": 22
+        },
+        "tone": "calm",
+        "typography": {
+          "body": "Verdana, Geneva, ui-sans-serif, sans-serif",
+          "display": "'Trebuchet MS', Verdana, ui-sans-serif, sans-serif"
+        },
+        "variant": "a"
+      },
+      "entityName": "habit",
+      "entityNamePlural": "habits",
+      "eyebrow": "Dashboard",
+      "fields": [
+        {
+          "key": "name",
+          "label": "Habit",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "allowCustom": false,
+          "key": "cadence",
+          "label": "Cadence",
+          "options": [
+            "Daily",
+            "Weekly"
+          ],
+          "required": true,
+          "type": "status"
+        },
+        {
+          "key": "streak",
+          "label": "Streak",
+          "min": 0,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "key": "done_today",
+          "label": "Done today",
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "filters": [
+        {
+          "field": "done_today",
+          "id": "done",
+          "label": "Done today",
+          "operator": "truthy"
+        },
+        {
+          "field": "cadence",
+          "id": "cadence_daily",
+          "label": "Daily",
+          "operator": "equals",
+          "value": "Daily"
+        },
+        {
+          "field": "cadence",
+          "id": "cadence_weekly",
+          "label": "Weekly",
+          "operator": "equals",
+          "value": "Weekly"
+        }
+      ],
+      "genome": "dashboard",
+      "name": "Habit Board",
+      "primaryField": "name",
+      "searchableFields": [
+        "name",
+        "cadence"
+      ],
+      "secondaryFields": [
+        "cadence",
+        "streak",
+        "done_today"
+      ],
+      "summaries": [
+        {
+          "id": "total",
+          "label": "Total habits",
+          "operation": "count"
+        },
+        {
+          "field": "done_today",
+          "id": "done",
+          "label": "Done today",
+          "operation": "countWhere",
+          "operator": "truthy"
+        },
+        {
+          "field": "cadence",
+          "id": "cadence_daily_count",
+          "label": "Daily",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Daily"
+        },
+        {
+          "field": "cadence",
+          "id": "cadence_weekly_count",
+          "label": "Weekly",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Weekly"
+        }
+      ],
+      "tagline": ""
+    },
+    "summary.md": "# Habit Board\n\nSee daily habits and how many are done at a glance.\n\n- **Target user:** People building daily habits\n- **Build route:** compile\n- **Genome:** dashboard\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Verified journeys\n\n- Application loads and shows a useful empty state\n- Invalid habit input shows validation without crashing\n- User can add a complete habit and see it in habits\n- habits survive a page refresh\n- User can edit an existing habit\n- User can narrow habits with a meaningful filter\n- habits are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing habit\n"
+  },
+  "journeys": [
+    {
+      "description": "Application loads and shows a useful empty state",
+      "id": "load"
+    },
+    {
+      "description": "Invalid habit input shows validation without crashing",
+      "id": "validation"
+    },
+    {
+      "description": "User can add a complete habit and see it in habits",
+      "id": "create"
+    },
+    {
+      "description": "habits survive a page refresh",
+      "id": "persistence"
+    },
+    {
+      "description": "User can edit an existing habit",
+      "id": "edit"
+    },
+    {
+      "description": "User can narrow habits with a meaningful filter",
+      "id": "filter"
+    },
+    {
+      "description": "habits are grouped by a meaningful category or status",
+      "id": "group"
+    },
+    {
+      "description": "Requested derived values update from persisted records",
+      "id": "calculate"
+    },
+    {
+      "description": "User can delete an existing habit",
+      "id": "delete"
+    }
+  ],
+  "route": {
+    "genome": "dashboard",
+    "reason": "Every required behavior maps to the deterministic runtime.",
+    "route": "compile",
+    "supported": [
+      "create",
+      "edit",
+      "delete",
+      "filter",
+      "sort",
+      "group",
+      "calculate"
+    ],
+    "unsupported": []
+  }
+}

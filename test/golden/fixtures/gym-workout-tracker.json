@@ -1,0 +1,48 @@
+{
+  "idea": "i want to have a app to track my gym workouts. use AI to suggest me Workout ideas. also weekly weight updates and weekly workouts plan",
+  "ir": {
+    "version": "1",
+    "product": {
+      "name": "Gym Log",
+      "description": "Track gym workouts and weekly bodyweight so progress stays visible.",
+      "tagline": "Log it, lift it, track it.",
+      "targetUser": "Individuals training at the gym",
+      "genome": "tracker"
+    },
+    "entities": [
+      {
+        "name": "workout",
+        "plural": "workouts",
+        "primaryField": "title",
+        "fields": [
+          { "id": "title", "label": "Workout", "type": "text", "required": true },
+          { "id": "day", "label": "Date", "type": "date", "required": true },
+          { "id": "focus", "label": "Focus", "type": "category", "required": true, "options": ["Push", "Pull", "Legs", "Cardio", "Full body"], "allowCustom": true },
+          { "id": "duration", "label": "Duration (min)", "type": "number", "required": false, "min": 0 },
+          { "id": "bodyweight", "label": "Bodyweight (kg)", "type": "number", "required": false, "min": 0 },
+          { "id": "notes", "label": "Notes", "type": "longText", "required": false }
+        ]
+      }
+    ],
+    "capabilities": {
+      "create": true,
+      "edit": true,
+      "delete": true,
+      "search": true,
+      "filter": true,
+      "sort": true,
+      "group": true,
+      "transition": false,
+      "calculate": true
+    },
+    "filters": [],
+    "calculations": [
+      { "id": "total", "label": "Total workouts", "operation": "count" },
+      { "id": "minutes", "label": "Total minutes", "operation": "sum", "field": "duration" }
+    ],
+    "persistence": { "strategy": "localStorage" },
+    "assumptions": ["Single local user", "AI workout suggestions mocked as saved presets"],
+    "excluded": ["Authentication", "Live coaching integrations"],
+    "customRequirements": []
+  }
+}

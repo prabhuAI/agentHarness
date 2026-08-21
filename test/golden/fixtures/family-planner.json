@@ -1,0 +1,44 @@
+{
+  "idea": "A planner for parents to coordinate the family's weekly activities across kids and days.",
+  "ir": {
+    "version": "1",
+    "product": {
+      "name": "Family Rhythm",
+      "description": "Coordinate activities for parents and kids.",
+      "tagline": "One calm family plan.",
+      "targetUser": "Parents with two kids",
+      "genome": "planner"
+    },
+    "entities": [
+      {
+        "name": "activity",
+        "plural": "activities",
+        "primaryField": "title",
+        "fields": [
+          { "id": "title", "label": "Activity", "type": "text", "required": true },
+          { "id": "who", "label": "Who", "type": "category", "required": true, "options": ["Mom", "Dad", "Kid 1", "Kid 2"], "allowCustom": true },
+          { "id": "day", "label": "Day", "type": "category", "required": true, "options": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], "allowCustom": false },
+          { "id": "at", "label": "Time", "type": "text", "required": false },
+          { "id": "done", "label": "Done", "type": "boolean", "required": false }
+        ]
+      }
+    ],
+    "capabilities": {
+      "create": true,
+      "edit": true,
+      "delete": true,
+      "search": true,
+      "filter": true,
+      "sort": true,
+      "group": true,
+      "transition": false,
+      "calculate": true
+    },
+    "filters": [],
+    "calculations": [{ "id": "total", "label": "Total activities", "operation": "count" }],
+    "persistence": { "strategy": "localStorage" },
+    "assumptions": ["One shared family device"],
+    "excluded": ["Shared cloud sync", "Notifications"],
+    "customRequirements": []
+  }
+}
