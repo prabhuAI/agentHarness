@@ -3,7 +3,20 @@ import rawConfig from "../product.config.json";
 export type FieldType =
   | "text" | "longText" | "number" | "currency" | "date" | "datetime"
   | "boolean" | "category" | "status" | "email" | "url";
-export type PredicateOperator = "equals" | "nonEmpty" | "empty" | "truthy" | "falsy";
+export type PredicateOperator = "equals" | "nonEmpty" | "empty" | "truthy" | "falsy" | "today" | "thisWeek" | "thisMonth";
+
+// A value computed at read time from other fields plus today's date, never
+// entered by the user. `dateThreshold` buckets a record by how its elapsed days
+// since `dateField` compare to a threshold (`thresholdField`'s value, or a fixed
+// `thresholdDays`), mapping to the field's own options via `buckets`.
+export interface DerivedFieldSpec {
+  kind: "dateThreshold";
+  dateField: string;
+  thresholdField?: string;
+  thresholdDays?: number;
+  soonWithinDays?: number;
+  buckets: { overdue: string; soon: string; ok: string };
+}
 
 export interface FieldConfig {
   key: string;
@@ -19,6 +32,7 @@ export interface FieldConfig {
     field: string;
     equals: string;
   };
+  derive?: DerivedFieldSpec;
 }
 
 export interface FilterPreset {
@@ -32,10 +46,23 @@ export interface FilterPreset {
 export interface SummaryConfig {
   id: string;
   label: string;
-  operation: "count" | "countWhere" | "sum";
+  operation: "count" | "countWhere" | "sum" | "sumWhere";
   field?: string;
   operator?: PredicateOperator;
   value?: string;
+  // For sumWhere: the numeric field summed over records matching the predicate.
+  sumField?: string;
+}
+
+// A single option in the list's sort control. `updated`/`created` are the two
+// built-in time orderings; a `field` option sorts by that field's value in
+// `direction`, comparing numerically for number/currency and textually otherwise.
+export interface SortOption {
+  id: string;
+  label: string;
+  field?: string;
+  direction?: "asc" | "desc";
+  type?: FieldType;
 }
 
 export interface DesignConfig {
@@ -72,8 +99,14 @@ export interface ProductConfig {
   searchableFields: string[];
   filters: FilterPreset[];
   summaries: SummaryConfig[];
+  sorts: SortOption[];
   capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean };
 }
+
+const DEFAULT_SORTS: SortOption[] = [
+  { id: "updated", label: "Recently updated" },
+  { id: "created", label: "Oldest first" },
+];
 
 const parsedConfig = rawConfig as Omit<ProductConfig, "design"> & { design?: DesignConfig };
 const fallbackDesign: DesignConfig = {
@@ -95,4 +128,8 @@ const fallbackDesign: DesignConfig = {
   spacing: { page: 52, panel: 22, gap: 14 },
 };
 
-export const productConfig: ProductConfig = { ...parsedConfig, design: parsedConfig.design ?? fallbackDesign };
+export const productConfig: ProductConfig = {
+  ...parsedConfig,
+  design: parsedConfig.design ?? fallbackDesign,
+  sorts: parsedConfig.sorts && parsedConfig.sorts.length > 0 ? parsedConfig.sorts : DEFAULT_SORTS,
+};

@@ -76,10 +76,15 @@ describe("Product IR compiler", () => {
     expect(ir.filters).toHaveLength(2);
     expect(ir.calculations).toHaveLength(3);
 
-    const noFilterCapability = fixture({ capabilities: { ...fixture().capabilities, filter: false, calculate: false } });
-    const withoutDerivation = normalizeProductIR(validateProductIR(noFilterCapability));
-    expect(withoutDerivation.filters).toHaveLength(1);
-    expect(withoutDerivation.calculations).toHaveLength(2);
+    // A status/category facet with options is inherently filterable and
+    // summarizable, so an under-scoped model that turned filter/calculate off does
+    // not strand the option set: normalization forces them on and derives anyway.
+    const underScoped = fixture({ capabilities: { ...fixture().capabilities, filter: false, calculate: false } });
+    const normalized = normalizeProductIR(validateProductIR(underScoped));
+    expect(normalized.capabilities.filter).toBe(true);
+    expect(normalized.capabilities.calculate).toBe(true);
+    expect(normalized.filters).toHaveLength(2);
+    expect(normalized.calculations).toHaveLength(3);
   });
 
   it("coerces option-bearing fields to a choice type so weaker models render a select", () => {
@@ -92,10 +97,35 @@ describe("Product IR compiler", () => {
     const category = normalized.entities[0].fields.find((field) => field.id === "category");
     expect(category?.type).toBe("category");
     expect(category?.options).toEqual(["Groceries", "Pharmacy", "Other"]);
-    // Coercion also lets the compiler derive per-option filters/counts for it.
-    expect(normalized.filters).toContainEqual(expect.objectContaining({ field: "category", operator: "equals", value: "Groceries" }));
+    // The status lifecycle is the primary facet, so its options become the filter
+    // chips; the coerced category stays reachable via grouping/search rather than
+    // adding one chip per genre. This keeps the derived filter set short.
+    expect(normalized.filters).toContainEqual(expect.objectContaining({ field: "status", operator: "equals", value: "Proposed" }));
+    expect(normalized.filters.some((filter) => filter.field === "category")).toBe(false);
     // A field with no options keeps whatever type the model chose.
     expect(normalized.entities[0].fields.find((field) => field.id === "owner")?.type).toBe("text");
+  });
+
+  it("derives filters for one meaningful facet: status when present, else a category", () => {
+    // Status wins over category so the item's core state drives the chips.
+    const withStatus = normalizeProductIR(validateProductIR(fixture()));
+    expect(withStatus.filters.map((filter) => filter.value).sort()).toEqual(["Accepted", "Proposed"]);
+
+    // No status field: a single category becomes the facet (e.g. a recipe catalog).
+    const catalog = fixture({
+      product: { name: "Recipe Box", description: "Save recipes.", tagline: "Cook well.", targetUser: "Home cooks", genome: "catalog", accent: "#4f46e5" },
+      entities: [{
+        name: "recipe", plural: "recipes", primaryField: "title",
+        fields: [
+          { id: "title", label: "Title", type: "text", required: true },
+          { id: "meal", label: "Meal", type: "category", required: true, options: ["Breakfast", "Lunch", "Dinner"], allowCustom: false },
+        ],
+      }],
+      filters: [], calculations: [{ id: "total", label: "Total recipes", operation: "count" }],
+      capabilities: { create: true, edit: true, delete: true, search: true, filter: true, sort: false, group: false, transition: false, calculate: true },
+    });
+    const normalizedCatalog = normalizeProductIR(validateProductIR(catalog));
+    expect(normalizedCatalog.filters.map((filter) => filter.value).sort()).toEqual(["Breakfast", "Dinner", "Lunch"]);
   });
 
   it("coerces synonym field types (select/dropdown/toggle) instead of failing the compile", () => {

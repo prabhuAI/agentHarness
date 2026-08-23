@@ -87,6 +87,7 @@ export function composeResult(
   verification: AppVerification,
   portReclamation: PortReclamationAudit,
   startCommand: string,
+  failureSummary = "",
 ): RunResult {
   const runFailed = piExitCode !== 0 || usage.model_calls === 0 || partial.status === "failed";
   const productJourneysPassed =
@@ -95,6 +96,7 @@ export function composeResult(
   return {
     ...partial,
     status,
+    summary: runFailed && failureSummary ? failureSummary : partial.summary,
     app_url: "http://localhost:3000",
     start_command: startCommand,
     tests_run: partial.tests_run,

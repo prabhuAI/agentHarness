@@ -259,6 +259,23 @@
         "stage",
         "owner"
       ],
+      "sorts": [
+        {
+          "id": "updated",
+          "label": "Recently updated"
+        },
+        {
+          "id": "created",
+          "label": "Oldest first"
+        },
+        {
+          "direction": "asc",
+          "field": "title",
+          "id": "by_title",
+          "label": "By title",
+          "type": "text"
+        }
+      ],
       "summaries": [
         {
           "id": "total",

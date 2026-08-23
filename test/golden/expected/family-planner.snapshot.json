@@ -62,62 +62,6 @@
           "operation": "countWhere",
           "operator": "equals",
           "value": "Kid 2"
-        },
-        {
-          "field": "day",
-          "id": "day_mon_count",
-          "label": "Mon",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Mon"
-        },
-        {
-          "field": "day",
-          "id": "day_tue_count",
-          "label": "Tue",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Tue"
-        },
-        {
-          "field": "day",
-          "id": "day_wed_count",
-          "label": "Wed",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Wed"
-        },
-        {
-          "field": "day",
-          "id": "day_thu_count",
-          "label": "Thu",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Thu"
-        },
-        {
-          "field": "day",
-          "id": "day_fri_count",
-          "label": "Fri",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Fri"
-        },
-        {
-          "field": "day",
-          "id": "day_sat_count",
-          "label": "Sat",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Sat"
-        },
-        {
-          "field": "day",
-          "id": "day_sun_count",
-          "label": "Sun",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Sun"
         }
       ],
       "capabilities": {
@@ -220,55 +164,6 @@
           "label": "Kid 2",
           "operator": "equals",
           "value": "Kid 2"
-        },
-        {
-          "field": "day",
-          "id": "day_mon",
-          "label": "Mon",
-          "operator": "equals",
-          "value": "Mon"
-        },
-        {
-          "field": "day",
-          "id": "day_tue",
-          "label": "Tue",
-          "operator": "equals",
-          "value": "Tue"
-        },
-        {
-          "field": "day",
-          "id": "day_wed",
-          "label": "Wed",
-          "operator": "equals",
-          "value": "Wed"
-        },
-        {
-          "field": "day",
-          "id": "day_thu",
-          "label": "Thu",
-          "operator": "equals",
-          "value": "Thu"
-        },
-        {
-          "field": "day",
-          "id": "day_fri",
-          "label": "Fri",
-          "operator": "equals",
-          "value": "Fri"
-        },
-        {
-          "field": "day",
-          "id": "day_sat",
-          "label": "Sat",
-          "operator": "equals",
-          "value": "Sat"
-        },
-        {
-          "field": "day",
-          "id": "day_sun",
-          "label": "Sun",
-          "operator": "equals",
-          "value": "Sun"
         }
       ],
       "persistence": {
@@ -417,55 +312,6 @@
           "label": "Kid 2",
           "operator": "equals",
           "value": "Kid 2"
-        },
-        {
-          "field": "day",
-          "id": "day_mon",
-          "label": "Mon",
-          "operator": "equals",
-          "value": "Mon"
-        },
-        {
-          "field": "day",
-          "id": "day_tue",
-          "label": "Tue",
-          "operator": "equals",
-          "value": "Tue"
-        },
-        {
-          "field": "day",
-          "id": "day_wed",
-          "label": "Wed",
-          "operator": "equals",
-          "value": "Wed"
-        },
-        {
-          "field": "day",
-          "id": "day_thu",
-          "label": "Thu",
-          "operator": "equals",
-          "value": "Thu"
-        },
-        {
-          "field": "day",
-          "id": "day_fri",
-          "label": "Fri",
-          "operator": "equals",
-          "value": "Fri"
-        },
-        {
-          "field": "day",
-          "id": "day_sat",
-          "label": "Sat",
-          "operator": "equals",
-          "value": "Sat"
-        },
-        {
-          "field": "day",
-          "id": "day_sun",
-          "label": "Sun",
-          "operator": "equals",
-          "value": "Sun"
         }
       ],
       "genome": "planner",
@@ -482,6 +328,23 @@
         "day",
         "at",
         "done"
+      ],
+      "sorts": [
+        {
+          "id": "updated",
+          "label": "Recently updated"
+        },
+        {
+          "id": "created",
+          "label": "Oldest first"
+        },
+        {
+          "direction": "asc",
+          "field": "title",
+          "id": "by_title",
+          "label": "By activity",
+          "type": "text"
+        }
       ],
       "summaries": [
         {
@@ -520,62 +383,6 @@
           "operation": "countWhere",
           "operator": "equals",
           "value": "Kid 2"
-        },
-        {
-          "field": "day",
-          "id": "day_mon_count",
-          "label": "Mon",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Mon"
-        },
-        {
-          "field": "day",
-          "id": "day_tue_count",
-          "label": "Tue",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Tue"
-        },
-        {
-          "field": "day",
-          "id": "day_wed_count",
-          "label": "Wed",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Wed"
-        },
-        {
-          "field": "day",
-          "id": "day_thu_count",
-          "label": "Thu",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Thu"
-        },
-        {
-          "field": "day",
-          "id": "day_fri_count",
-          "label": "Fri",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Fri"
-        },
-        {
-          "field": "day",
-          "id": "day_sat_count",
-          "label": "Sat",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Sat"
-        },
-        {
-          "field": "day",
-          "id": "day_sun_count",
-          "label": "Sun",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Sun"
         }
       ],
       "tagline": "One calm family plan."

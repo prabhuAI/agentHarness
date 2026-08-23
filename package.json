@@ -9,6 +9,7 @@
   },
   "scripts": {
     "challenge": "node --import tsx src/run-challenge.ts",
+    "dev": "npm --prefix output/app run dev",
     "validate:result": "node --import tsx src/validate-result.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

@@ -1,0 +1,56 @@
+{
+  "idea": "I keep killing my houseplants because I forget to water them. I want to add each plant with its name, room, and how often it needs watering, note the last time I watered it, and instantly see which plants are overdue, due soon, or fine, plus a count of how many are overdue right now.",
+  "ir": {
+    "version": "1",
+    "product": {
+      "name": "Plant Pal",
+      "description": "A personal houseplant watering tracker that shows which plants are overdue, due soon, or fine, with a count of overdue plants at a glance.",
+      "targetUser": "Solo plant owner tracking watering on their own laptop",
+      "genome": "tracker"
+    },
+    "entities": [
+      {
+        "name": "plant",
+        "plural": "plants",
+        "primaryField": "name",
+        "fields": [
+          { "id": "name", "label": "Name", "type": "text", "required": true, "placeholder": "e.g. Fiddle Leaf Fig" },
+          { "id": "room", "label": "Room", "type": "category", "required": false, "options": ["Living Room", "Kitchen", "Bedroom", "Bathroom", "Office", "Balcony"], "allowCustom": true },
+          { "id": "watering_frequency", "label": "Water every", "type": "number", "required": true, "placeholder": "days between waterings, e.g. 7", "min": 1, "max": 365 },
+          { "id": "last_watered", "label": "Last watered", "type": "date", "required": true },
+          { "id": "notes", "label": "Notes", "type": "longText", "required": false },
+          {
+            "id": "watering_status",
+            "label": "Watering status",
+            "type": "status",
+            "options": ["Overdue", "Due soon", "Fine"],
+            "derive": {
+              "kind": "dateThreshold",
+              "dateField": "last_watered",
+              "thresholdField": "watering_frequency",
+              "soonWithinDays": 2,
+              "buckets": { "overdue": "Overdue", "soon": "Due soon", "ok": "Fine" }
+            }
+          }
+        ]
+      }
+    ],
+    "capabilities": {
+      "create": true,
+      "edit": true,
+      "delete": true,
+      "search": true,
+      "filter": true,
+      "sort": true,
+      "group": true,
+      "transition": false,
+      "calculate": true
+    },
+    "filters": [],
+    "calculations": [{ "id": "total_plants", "label": "Total plants", "operation": "count" }],
+    "persistence": { "strategy": "localStorage" },
+    "assumptions": ["Watering status is auto-derived from frequency, last watered, and today", "Due soon means within 2 days of the next watering"],
+    "excluded": ["Notifications or reminders", "Photo uploads", "Multiple users or sharing"],
+    "customRequirements": []
+  }
+}

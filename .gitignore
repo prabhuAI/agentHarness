@@ -15,3 +15,10 @@ output/*
 app-template/node_modules/
 app-template/dist/
 coverage/
+
+# Local-only debug dumps and dev notes (kept on disk, not submitted)
+.playwright-cli/
+idea.txt
+IMPLEMENTATION_STATUS.md
+docs/organizer-checklist.md
+test-ideas/

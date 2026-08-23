@@ -1,5 +1,6 @@
 import {
   CALCULATION_OPERATIONS,
+  DERIVED_FIELD_KINDS,
   DESIGN_CONTRASTS,
   DESIGN_DENSITIES,
   DESIGN_MOTIONS,
@@ -65,6 +66,20 @@ export function validateProductIR(value: unknown): ProductIR {
           if (typeof field.visibleWhen.equals !== "string" || field.visibleWhen.equals.trim() === "") issues.push(`field ${fieldIndex}.visibleWhen.equals is required`);
         }
       }
+      // A malformed derive spec is not fatal: normalizeProductIR drops it and the
+      // field degrades to a normal manual field, so validate only rejects the wrong
+      // shape when the required parts are present but mistyped.
+      if (field.derive !== undefined) {
+        if (!isRecord(field.derive)) issues.push(`field ${fieldIndex}.derive must be an object`);
+        else {
+          if (!DERIVED_FIELD_KINDS.includes(field.derive.kind as never)) issues.push(`field ${fieldIndex}.derive.kind is unsupported`);
+          if (typeof field.derive.dateField !== "string" || field.derive.dateField.trim() === "") issues.push(`field ${fieldIndex}.derive.dateField is required`);
+          if (!isRecord(field.derive.buckets)) issues.push(`field ${fieldIndex}.derive.buckets must be an object`);
+          else for (const band of ["overdue", "soon", "ok"] as const) {
+            if (typeof field.derive.buckets[band] !== "string" || field.derive.buckets[band].trim() === "") issues.push(`field ${fieldIndex}.derive.buckets.${band} is required`);
+          }
+        }
+      }
     });
   });
 
@@ -84,6 +99,7 @@ export function validateProductIR(value: unknown): ProductIR {
   else if (Array.isArray(value.calculations)) value.calculations.forEach((calculation, index) => {
     if (!isRecord(calculation) || typeof calculation.id !== "string" || typeof calculation.label !== "string") issues.push(`calculations[${index}] is invalid`);
     else if (!CALCULATION_OPERATIONS.includes(calculation.operation as never)) issues.push(`calculations[${index}].operation is unsupported`);
+    else if (calculation.sumField !== undefined && typeof calculation.sumField !== "string") issues.push(`calculations[${index}].sumField must be a string`);
   });
   for (const key of ["assumptions", "excluded", "customRequirements"] as const) {
     if (value[key] !== undefined && !strings(value[key])) issues.push(`${key} must be an array of strings`);

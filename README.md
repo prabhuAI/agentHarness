@@ -76,11 +76,12 @@ For a setup-only check that does not call a model:
 npm run challenge -- --prepare-only
 ```
 
-After a complete run:
+After a complete run, start the generated application with a single command — either from the repository root or from inside the generated app:
 
 ```bash
-cd output/app
-npm run dev
+npm run dev                 # from the repository root (proxies to output/app)
+# or, equivalently:
+cd output/app && npm run dev
 ```
 
 The app must be available at `http://localhost:3000`. In another terminal, validate the machine-readable result:

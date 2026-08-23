@@ -1,0 +1,47 @@
+{
+  "idea": "I want to log expenses — what I spent, the amount, the category (food, rent, fun), and the date — and see my total spend this month broken down by category.",
+  "ir": {
+    "version": "1",
+    "product": {
+      "name": "Expense Tracker",
+      "description": "Log expenses and see total spend this month broken down by category.",
+      "targetUser": "A single person tracking personal spending on one laptop",
+      "genome": "tracker"
+    },
+    "entities": [
+      {
+        "name": "expense",
+        "plural": "expenses",
+        "primaryField": "description",
+        "fields": [
+          { "id": "description", "label": "Description", "type": "text", "required": true, "placeholder": "e.g. Groceries" },
+          { "id": "amount", "label": "Amount", "type": "currency", "required": true },
+          { "id": "category", "label": "Category", "type": "category", "required": true, "options": ["Food", "Rent", "Fun"], "allowCustom": true },
+          { "id": "date", "label": "Date", "type": "date", "required": true }
+        ]
+      }
+    ],
+    "capabilities": {
+      "create": true,
+      "edit": true,
+      "delete": true,
+      "search": true,
+      "filter": true,
+      "sort": true,
+      "group": true,
+      "transition": false,
+      "calculate": true
+    },
+    "filters": [
+      { "id": "this_month", "label": "This month", "field": "date", "operator": "equals", "value": "thisMonth" }
+    ],
+    "calculations": [
+      { "id": "total_spend", "label": "Total spend this month", "operation": "sum", "field": "amount" },
+      { "id": "food_bad", "label": "Food this month", "operation": "countWhere", "field": "amount" }
+    ],
+    "persistence": { "strategy": "localStorage" },
+    "assumptions": ["This month means the current calendar month", "Single local user, no auth"],
+    "excluded": ["Multi-user or sharing", "Bank sync"],
+    "customRequirements": []
+  }
+}

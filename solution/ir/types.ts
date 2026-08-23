@@ -26,11 +26,43 @@ export const FIELD_TYPES = [
 ] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
 
-export const FILTER_OPERATORS = ["equals", "nonEmpty", "empty", "truthy", "falsy"] as const;
+export const FILTER_OPERATORS = ["equals", "nonEmpty", "empty", "truthy", "falsy", "today", "thisWeek", "thisMonth"] as const;
 export type FilterOperator = (typeof FILTER_OPERATORS)[number];
 
-export const CALCULATION_OPERATIONS = ["count", "countWhere", "sum"] as const;
+// Operators that test a date field against the current date rather than a stored
+// value; they carry no comparison value and only apply to date/datetime fields.
+export const DATE_WINDOW_OPERATORS = ["today", "thisWeek", "thisMonth"] as const;
+export type DateWindowOperator = (typeof DATE_WINDOW_OPERATORS)[number];
+
+export const CALCULATION_OPERATIONS = ["count", "countWhere", "sum", "sumWhere"] as const;
 export type CalculationOperation = (typeof CALCULATION_OPERATIONS)[number];
+
+export const DERIVED_FIELD_KINDS = ["dateThreshold"] as const;
+export type DerivedFieldKind = (typeof DERIVED_FIELD_KINDS)[number];
+
+// A field whose value is computed at read time from other fields plus today's
+// date, rather than entered by the user. The only kind so far is `dateThreshold`:
+// bucket a record by how its elapsed days since `dateField` compare to a
+// threshold (a `thresholdField` value, or a fixed `thresholdDays`). This covers
+// the ubiquitous "overdue / due soon / fine" tracker pattern deterministically,
+// so it never needs a custom LLM patch. Buckets map to the field's own options.
+export interface DerivedFieldSpec {
+  kind: DerivedFieldKind;
+  // Field id of the reference date the elapsed span is measured from.
+  dateField: string;
+  // Field id supplying the threshold span in days; takes precedence over thresholdDays.
+  thresholdField?: string;
+  // Fixed threshold span in days, used when thresholdField is absent.
+  thresholdDays?: number;
+  // Days before the threshold that still count as the "soon" band (default 0).
+  soonWithinDays?: number;
+  // Option labels for each computed band. Must be members of the field's options.
+  buckets: {
+    overdue: string; // elapsed days exceed the threshold
+    soon: string; // within soonWithinDays of the threshold
+    ok: string; // otherwise
+  };
+}
 
 export interface ProductField {
   id: string;
@@ -46,6 +78,7 @@ export interface ProductField {
     field: string;
     equals: string;
   };
+  derive?: DerivedFieldSpec;
 }
 
 export interface ProductEntity {
@@ -67,9 +100,14 @@ export interface ProductCalculation {
   id: string;
   label: string;
   operation: CalculationOperation;
+  // For countWhere/sumWhere: the field the predicate tests. For sum: the numeric
+  // field to total.
   field?: string;
   operator?: FilterOperator;
   value?: string;
+  // For sumWhere: the numeric field whose values are summed over the matching
+  // records (e.g. sum `amount` where `category` = Food).
+  sumField?: string;
 }
 
 export interface ProductCapabilities {

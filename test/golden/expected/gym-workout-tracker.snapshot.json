@@ -356,6 +356,37 @@
         "duration",
         "bodyweight"
       ],
+      "sorts": [
+        {
+          "id": "updated",
+          "label": "Recently updated"
+        },
+        {
+          "id": "created",
+          "label": "Oldest first"
+        },
+        {
+          "direction": "asc",
+          "field": "title",
+          "id": "by_title",
+          "label": "By workout",
+          "type": "text"
+        },
+        {
+          "direction": "desc",
+          "field": "day",
+          "id": "by_day",
+          "label": "By date",
+          "type": "date"
+        },
+        {
+          "direction": "desc",
+          "field": "duration",
+          "id": "by_duration",
+          "label": "By duration (min)",
+          "type": "number"
+        }
+      ],
       "summaries": [
         {
           "id": "total",

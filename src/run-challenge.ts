@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { prepareOutput } from "./prepare-output.js";
+import { classifyPiFailure, matchProviderError } from "./classify-pi-failure.js";
 import { auditAppPortAfterPi } from "./port-owner.js";
 import { signalProcessTree, terminateProcessTree, usesDetachedProcessGroup } from "./process-tree.js";
 import {
@@ -172,10 +173,13 @@ export async function runPi(
       piChild = child;
       let timedOut = false;
       let killTimer: NodeJS.Timeout | undefined;
+      const scheduleForceKill = () => {
+        if (!killTimer) killTimer = setTimeout(() => signalProcessTree(child, "SIGKILL"), 5_000);
+      };
       const timeout = setTimeout(() => {
         timedOut = true;
         signalProcessTree(child, "SIGTERM");
-        killTimer = setTimeout(() => signalProcessTree(child, "SIGKILL"), 5_000);
+        scheduleForceKill();
       }, timeoutMs);
 
       child.stdout.on("data", (chunk: Buffer) => {
@@ -184,6 +188,22 @@ export async function runPi(
         const lines = lineBuffer.split(/\r?\n/u);
         lineBuffer = lines.pop() ?? "";
         for (const line of lines) summarizeEventLine(line);
+      });
+      // Abort early on a fatal provider/transport error (bad key, quota/rate
+      // limit, connection failure) instead of waiting out Pi's retries or the
+      // wall-clock timeout. The full stderr still reaches the log and terminal.
+      let stderrTail = "";
+      let fatalProviderError = false;
+      child.stderr.on("data", (chunk: Buffer) => {
+        if (fatalProviderError || timedOut) return;
+        stderrTail = (stderrTail + chunk.toString("utf8")).slice(-8_192);
+        const provider = matchProviderError(stderrTail);
+        if (provider) {
+          fatalProviderError = true;
+          console.error(`Aborting run early: ${provider.summary}`);
+          signalProcessTree(child, "SIGTERM");
+          scheduleForceKill();
+        }
       });
       child.stderr.pipe(errors);
       child.stderr.pipe(process.stderr);
@@ -297,10 +317,19 @@ async function main(): Promise<void> {
   const partial = await readPartialResult(outputDirectory);
   const canVerifyApp = pi.exitCode === 0 && usage.model_calls > 0;
   const startCommand = rootStartCommand(REPOSITORY_ROOT, outputDirectory);
+  const piStderr = await readFile(stderrFile, "utf8").catch(() => "");
+  // A written product report (partial.status other than "failed") means the model
+  // did compile a verifiable Product IR — a clean exit then is success, not a
+  // model_output failure, so the diagnosis must not misfire on it.
+  const diagnosis = classifyPiFailure(piStderr, pi.exitCode, usage.model_calls, partial.status !== "failed");
+  const failureSummary = pi.timedOut
+    ? "Run exceeded CHALLENGE_TIMEOUT_MS and was terminated before finishing."
+    : diagnosis.summary;
+  if (failureSummary) console.error(`Run diagnosis: ${failureSummary}`);
   let verification = unavailableAppVerification(
     canVerifyApp ? "app verification had not completed" : "Pi did not complete with audited model usage",
   );
-  let result = composeResult(partial, usage, pi.exitCode, verification, portReclamation, startCommand);
+  let result = composeResult(partial, usage, pi.exitCode, verification, portReclamation, startCommand, failureSummary);
   const appResultPath = path.join(outputDirectory, "result.json");
   const rootResultPath = path.join(REPOSITORY_ROOT, "result.json");
   const requiredResultPaths = [appResultPath, rootResultPath];
@@ -316,7 +345,7 @@ async function main(): Promise<void> {
       passed: appVerification.passed && artifactCheck.result === "passed",
       checks: [...appVerification.checks, artifactCheck],
     };
-    result = composeResult(partial, usage, pi.exitCode, verification, portReclamation, startCommand);
+    result = composeResult(partial, usage, pi.exitCode, verification, portReclamation, startCommand, failureSummary);
     resultPaths = await writeResult(outputDirectory, result, [rootResultPath]);
   }
   const missingResultPaths = missingRequiredResultPaths(resultPaths, requiredResultPaths);

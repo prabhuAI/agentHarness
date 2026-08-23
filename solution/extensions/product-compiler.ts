@@ -28,12 +28,24 @@ const fieldSchema = Type.Object({
     field: Type.String({ description: "id of another field that controls visibility" }),
     equals: Type.String({ description: "exact controlling value that makes this field visible" }),
   })),
+  derive: Type.Optional(Type.Object({
+    kind: Type.String({ enum: ["dateThreshold"], description: "Compute this field's value from a date and a threshold instead of user input" }),
+    dateField: Type.String({ description: "id of the date field the elapsed span is measured from (e.g. last_watered)" }),
+    thresholdField: Type.Optional(Type.String({ description: "id of a number field giving the threshold in days (e.g. watering_frequency); use this or thresholdDays" })),
+    thresholdDays: Type.Optional(Type.Number({ description: "fixed threshold span in days when there is no per-record threshold field" })),
+    soonWithinDays: Type.Optional(Type.Number({ description: "days before the threshold that count as the 'soon' band (default 0)" })),
+    buckets: Type.Object({
+      overdue: Type.String({ description: "option label when the elapsed span has passed the threshold" }),
+      soon: Type.String({ description: "option label when within soonWithinDays of the threshold" }),
+      ok: Type.String({ description: "option label otherwise" }),
+    }, { description: "Each label must be one of this field's options" }),
+  }, { description: "Set on a status field whose value is a date-based lifecycle (overdue / due soon / fine). The runtime computes it live and auto-derives its filters and counts; do not also list it as a customRequirement." })),
 });
 const predicateSchema = {
   id: Type.String(),
   label: Type.String(),
   field: Type.String(),
-  operator: Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy"] }),
+  operator: Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy", "today", "thisWeek", "thisMonth"], description: "today/thisWeek/thisMonth filter a date field against the current date and take no value" }),
   value: Type.Optional(Type.String()),
 };
 const productIRSchema = Type.Object({
@@ -64,11 +76,12 @@ const productIRSchema = Type.Object({
   filters: Type.Optional(Type.Array(Type.Object(predicateSchema), { maxItems: 6, description: "Only filters that are not a simple equals check on one category/status field option — those are derived automatically" })),
   calculations: Type.Optional(Type.Array(Type.Object({
     id: Type.String(), label: Type.String(),
-    operation: Type.String({ enum: ["count", "countWhere", "sum"] }),
-    field: Type.Optional(Type.String()),
-    operator: Type.Optional(Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy"] })),
+    operation: Type.String({ enum: ["count", "countWhere", "sum", "sumWhere"], description: "count = all records; sum = total of a number/currency field; countWhere/sumWhere = over records matching a predicate" }),
+    field: Type.Optional(Type.String({ description: "For sum: the number/currency field to total. For countWhere/sumWhere: the field the predicate tests." })),
+    operator: Type.Optional(Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy", "today", "thisWeek", "thisMonth"] })),
     value: Type.Optional(Type.String()),
-  }), { maxItems: 4, description: "Only a totals count and any sums — per-category-option counts are derived automatically" })),
+    sumField: Type.Optional(Type.String({ description: "For sumWhere: the number/currency field summed over the matching records" })),
+  }), { maxItems: 4, description: "Only a totals count and any sums — per-facet-option counts and per-option spend breakdowns are derived automatically" })),
   persistence: Type.Optional(Type.Object({ strategy: Type.String({ enum: ["localStorage"] }) })),
   assumptions: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
   excluded: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
@@ -148,10 +161,13 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
     promptGuidelines: [
       "Call compile_product exactly once after interpreting the idea; do not read or edit application files first.",
       "Use customRequirements only for essential interactions that cannot be represented by fields, CRUD, search, filters, state transitions, or count/sum calculations.",
+      "For a status that is a date-based lifecycle (e.g. overdue / due soon / fine from a last-done date and a frequency), add a status field with those options and set its `derive` (kind dateThreshold) instead of a customRequirement — the runtime computes it live and auto-derives its per-band filters and counts.",
       "For ambiguous categories, prefer useful suggestions with allowCustom true.",
       "Use visibleWhen for a field that only applies when another field has one exact selected value.",
       "Use product.design only when the idea clearly signals a tone, density, contrast, or motion preference; never generate colors, fonts, CSS, or layout instructions.",
-      "Do not list one filter or one count per category/status field option — the compiler derives an equals filter and a countWhere count for every option automatically. Only add filters/calculations here for logic beyond that: sums, cross-field conditions, or a totals count.",
+      "Do not list one filter or one count per option: the compiler auto-derives an equals filter and a per-option metric for each option of the primary facet (the status field if present, otherwise one category). When the entity has a currency field, that per-option metric is the option's summed amount (spend breakdown); otherwise it is a count. Only add filters/calculations for logic beyond that: an overall total, cross-field conditions, or a totals count.",
+      "For a date window like \"this month\", add a filter on the date field with operator today/thisWeek/thisMonth (no value) — never a value like \"thisMonth\". The runtime evaluates it against the current date.",
+      "When an entity has a category or status field with a fixed option set, enable filter, group, and calculate so the user can browse and break down by it — leaving them off strands the options with no way to use them.",
       "Omit product.tagline unless a short tagline adds real clarity beyond the product name.",
       "Keep assumptions and excluded entries short phrases, not full sentences.",
       "Add a field placeholder only when the field's purpose is not already obvious from its label and type.",

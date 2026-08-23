@@ -1,0 +1,421 @@
+{
+  "artifacts": {
+    "idea_spec.json": {
+      "assumptions": [
+        "This month means the current calendar month",
+        "Single local user, no auth"
+      ],
+      "core_utility": "Log expenses and see total spend this month broken down by category.",
+      "excluded_features": [
+        "Multi-user or sharing",
+        "Bank sync"
+      ],
+      "included_features": [
+        "create",
+        "edit",
+        "delete",
+        "search",
+        "filter",
+        "sort",
+        "group",
+        "calculate"
+      ],
+      "target_user": "A single person tracking personal spending on one laptop"
+    },
+    "product-ir.json": {
+      "assumptions": [
+        "This month means the current calendar month",
+        "Single local user, no auth"
+      ],
+      "calculations": [
+        {
+          "field": "amount",
+          "id": "total_spend",
+          "label": "Total spend this month",
+          "operation": "sum"
+        },
+        {
+          "field": "category",
+          "id": "category_food_amount",
+          "label": "Food",
+          "operation": "sumWhere",
+          "operator": "equals",
+          "sumField": "amount",
+          "value": "Food"
+        },
+        {
+          "field": "category",
+          "id": "category_rent_amount",
+          "label": "Rent",
+          "operation": "sumWhere",
+          "operator": "equals",
+          "sumField": "amount",
+          "value": "Rent"
+        },
+        {
+          "field": "category",
+          "id": "category_fun_amount",
+          "label": "Fun",
+          "operation": "sumWhere",
+          "operator": "equals",
+          "sumField": "amount",
+          "value": "Fun"
+        }
+      ],
+      "capabilities": {
+        "calculate": true,
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "filter": true,
+        "group": true,
+        "search": true,
+        "sort": true,
+        "transition": false
+      },
+      "customRequirements": [],
+      "entities": [
+        {
+          "fields": [
+            {
+              "id": "description",
+              "label": "Description",
+              "placeholder": "e.g. Groceries",
+              "required": true,
+              "type": "text"
+            },
+            {
+              "id": "amount",
+              "label": "Amount",
+              "required": true,
+              "type": "currency"
+            },
+            {
+              "allowCustom": true,
+              "id": "category",
+              "label": "Category",
+              "options": [
+                "Food",
+                "Rent",
+                "Fun"
+              ],
+              "required": true,
+              "type": "category"
+            },
+            {
+              "id": "date",
+              "label": "Date",
+              "required": true,
+              "type": "date"
+            }
+          ],
+          "name": "expense",
+          "plural": "expenses",
+          "primaryField": "description"
+        }
+      ],
+      "excluded": [
+        "Multi-user or sharing",
+        "Bank sync"
+      ],
+      "filters": [
+        {
+          "field": "date",
+          "id": "this_month",
+          "label": "This month",
+          "operator": "thisMonth"
+        },
+        {
+          "field": "category",
+          "id": "category_food",
+          "label": "Food",
+          "operator": "equals",
+          "value": "Food"
+        },
+        {
+          "field": "category",
+          "id": "category_rent",
+          "label": "Rent",
+          "operator": "equals",
+          "value": "Rent"
+        },
+        {
+          "field": "category",
+          "id": "category_fun",
+          "label": "Fun",
+          "operator": "equals",
+          "value": "Fun"
+        }
+      ],
+      "persistence": {
+        "strategy": "localStorage"
+      },
+      "product": {
+        "accent": "#5b5bd6",
+        "description": "Log expenses and see total spend this month broken down by category.",
+        "design": {
+          "contrast": "balanced",
+          "density": "comfortable",
+          "motion": "subtle",
+          "tone": "calm"
+        },
+        "genome": "tracker",
+        "name": "Expense Tracker",
+        "tagline": "",
+        "targetUser": "A single person tracking personal spending on one laptop"
+      },
+      "version": "1"
+    },
+    "product.config.json": {
+      "accent": "#0e7490",
+      "capabilities": {
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "group": true,
+        "search": true,
+        "sort": true
+      },
+      "collectionLabel": "Collection",
+      "design": {
+        "colors": {
+          "accent": "#0e7490",
+          "accentText": "#ffffff",
+          "border": "#cbdde3",
+          "canvas": "#f0f6f8",
+          "danger": "#a52a2a",
+          "ink": "#142a33",
+          "muted": "#567079",
+          "surface": "#ffffff",
+          "surfaceAlt": "#e2eef2",
+          "topbar": "#0a232b",
+          "topbarText": "#f0fafc"
+        },
+        "contrast": "balanced",
+        "density": "comfortable",
+        "id": "progress-workbench-calm-c",
+        "layout": "progress-workbench",
+        "layoutLabel": "Progress workbench",
+        "motion": "subtle",
+        "shape": {
+          "cardRadius": 22,
+          "panelRadius": 28
+        },
+        "spacing": {
+          "gap": 14,
+          "page": 52,
+          "panel": 22
+        },
+        "tone": "calm",
+        "typography": {
+          "body": "Inter, ui-sans-serif, system-ui, sans-serif",
+          "display": "Inter, ui-sans-serif, system-ui, sans-serif"
+        },
+        "variant": "c"
+      },
+      "entityName": "expense",
+      "entityNamePlural": "expenses",
+      "eyebrow": "Tracker",
+      "fields": [
+        {
+          "key": "description",
+          "label": "Description",
+          "placeholder": "e.g. Groceries",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "key": "amount",
+          "label": "Amount",
+          "required": true,
+          "type": "currency"
+        },
+        {
+          "allowCustom": true,
+          "key": "category",
+          "label": "Category",
+          "options": [
+            "Food",
+            "Rent",
+            "Fun"
+          ],
+          "required": true,
+          "type": "category"
+        },
+        {
+          "key": "date",
+          "label": "Date",
+          "required": true,
+          "type": "date"
+        }
+      ],
+      "filters": [
+        {
+          "field": "date",
+          "id": "this_month",
+          "label": "This month",
+          "operator": "thisMonth"
+        },
+        {
+          "field": "category",
+          "id": "category_food",
+          "label": "Food",
+          "operator": "equals",
+          "value": "Food"
+        },
+        {
+          "field": "category",
+          "id": "category_rent",
+          "label": "Rent",
+          "operator": "equals",
+          "value": "Rent"
+        },
+        {
+          "field": "category",
+          "id": "category_fun",
+          "label": "Fun",
+          "operator": "equals",
+          "value": "Fun"
+        }
+      ],
+      "genome": "tracker",
+      "name": "Expense Tracker",
+      "primaryField": "description",
+      "searchableFields": [
+        "description",
+        "category"
+      ],
+      "secondaryFields": [
+        "amount",
+        "category",
+        "date"
+      ],
+      "sorts": [
+        {
+          "id": "updated",
+          "label": "Recently updated"
+        },
+        {
+          "id": "created",
+          "label": "Oldest first"
+        },
+        {
+          "direction": "asc",
+          "field": "description",
+          "id": "by_description",
+          "label": "By description",
+          "type": "text"
+        },
+        {
+          "direction": "desc",
+          "field": "date",
+          "id": "by_date",
+          "label": "By date",
+          "type": "date"
+        },
+        {
+          "direction": "desc",
+          "field": "amount",
+          "id": "by_amount",
+          "label": "By amount",
+          "type": "currency"
+        }
+      ],
+      "summaries": [
+        {
+          "field": "amount",
+          "id": "total_spend",
+          "label": "Total spend this month",
+          "operation": "sum"
+        },
+        {
+          "field": "category",
+          "id": "category_food_amount",
+          "label": "Food",
+          "operation": "sumWhere",
+          "operator": "equals",
+          "sumField": "amount",
+          "value": "Food"
+        },
+        {
+          "field": "category",
+          "id": "category_rent_amount",
+          "label": "Rent",
+          "operation": "sumWhere",
+          "operator": "equals",
+          "sumField": "amount",
+          "value": "Rent"
+        },
+        {
+          "field": "category",
+          "id": "category_fun_amount",
+          "label": "Fun",
+          "operation": "sumWhere",
+          "operator": "equals",
+          "sumField": "amount",
+          "value": "Fun"
+        }
+      ],
+      "tagline": ""
+    },
+    "summary.md": "# Expense Tracker\n\nLog expenses and see total spend this month broken down by category.\n\n- **Target user:** A single person tracking personal spending on one laptop\n- **Build route:** compile\n- **Genome:** tracker\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Verified journeys\n\n- Application loads and shows a useful empty state\n- Invalid expense input shows validation without crashing\n- User can add a complete expense and see it in expenses\n- expenses survive a page refresh\n- User can edit an existing expense\n- User can search expenses\n- User can narrow expenses with a meaningful filter\n- expenses are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing expense\n"
+  },
+  "journeys": [
+    {
+      "description": "Application loads and shows a useful empty state",
+      "id": "load"
+    },
+    {
+      "description": "Invalid expense input shows validation without crashing",
+      "id": "validation"
+    },
+    {
+      "description": "User can add a complete expense and see it in expenses",
+      "id": "create"
+    },
+    {
+      "description": "expenses survive a page refresh",
+      "id": "persistence"
+    },
+    {
+      "description": "User can edit an existing expense",
+      "id": "edit"
+    },
+    {
+      "description": "User can search expenses",
+      "id": "search"
+    },
+    {
+      "description": "User can narrow expenses with a meaningful filter",
+      "id": "filter"
+    },
+    {
+      "description": "expenses are grouped by a meaningful category or status",
+      "id": "group"
+    },
+    {
+      "description": "Requested derived values update from persisted records",
+      "id": "calculate"
+    },
+    {
+      "description": "User can delete an existing expense",
+      "id": "delete"
+    }
+  ],
+  "route": {
+    "genome": "tracker",
+    "reason": "Every required behavior maps to the deterministic runtime.",
+    "route": "compile",
+    "supported": [
+      "create",
+      "edit",
+      "delete",
+      "search",
+      "filter",
+      "sort",
+      "group",
+      "calculate"
+    ],
+    "unsupported": []
+  }
+}

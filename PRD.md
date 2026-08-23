@@ -1,24 +1,19 @@
-# PRD — AgentCofounder Competition Entry
+# PRD — AgentCofounder
 
 **Version:** 2.0
 **Status:** Implementation Ready
 **Date:** August 17, 2026
-**Submission Deadline:** September 4, 2026
-**Primary Objective:** Win the AgentCofounder Hackathon by maximizing functional reliability and minimizing weighted token expenditure.
-
-> Implementation tracking: the repository implementation is mapped in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Code-complete capabilities are distinguished from provider-dependent benchmark and submission gates.
+**Primary Objective:** Maximize functional reliability while minimizing weighted token expenditure.
 
 ---
 
 # 1. Product Summary
 
-This project implements an autonomous AI product-building system for the Stockholm AI AgentCofounder Hackathon.
+AgentCofounder is an autonomous AI product-building system.
 
 The system accepts a raw, informal startup idea and autonomously converts it into a working micro-application.
 
-The official challenge defines Phase 1 as:
-
-> From a raw, unstructured human idea to a fully working, token-efficient micro-application.
+Its goal is to go from a raw, unstructured human idea to a fully working, token-efficient micro-application.
 
 The generated application must be usable, tested, persistent, maintainable, and runnable locally at:
 
@@ -70,13 +65,13 @@ Capability Router
               VERIFIED APP
 ```
 
-This architecture is designed specifically around the competition's token-efficiency metric.
+This architecture is designed specifically around token efficiency.
 
 ---
 
-# 3. Official Challenge Contract
+# 3. Input Contract
 
-This section contains competition requirements rather than implementation preferences.
+This section defines input requirements rather than implementation preferences.
 
 ## 3.1 Input
 
@@ -96,7 +91,7 @@ The system must infer sensible product requirements without requiring clarificat
 
 # 4. Required Autonomous Execution Loop
 
-The system MUST autonomously perform all six official stages.
+The system MUST autonomously perform all six stages.
 
 ## 4.1 Understand Intent
 
@@ -171,7 +166,7 @@ trace.jsonl
 result.json
 ```
 
-The organizers explicitly expect the system to produce a runnable POC together with specification, summary and transparent execution traces.
+The system produces a runnable POC together with specification, summary and transparent execution traces.
 
 ---
 
@@ -214,7 +209,7 @@ The specification SHOULD be generated from Product IR rather than through an add
 
 # 7. Required `result.json`
 
-At the conclusion of every run, the system MUST produce a machine-readable `result.json` reconciled with actual Pi/session telemetry.
+At the conclusion of every run, the system MUST produce a machine-readable `result.json` reconciled with actual session telemetry.
 
 Required information includes:
 
@@ -279,17 +274,17 @@ It SHOULD NOT contain:
 * chain-of-thought;
 * redundant model output.
 
-The official challenge requires decisions to be auditable and replayable through `trace.jsonl`.
+Decisions must be auditable and replayable through `trace.jsonl`.
 
 ---
 
-# 9. Primary Competition Metric
+# 9. Primary Efficiency Metric
 
 Functional qualification comes first.
 
 An application that fails baseline user journeys does not benefit from being token-efficient.
 
-After qualifying, entries are ranked strictly by weighted token expenditure:
+After qualifying, runs are evaluated by weighted token expenditure:
 
 `Efficiency = Input Tokens + (Output Tokens × 3) + (Cache Read Tokens × 0.1)`
 
@@ -326,7 +321,7 @@ Priority:
 
 # 11. Application Readiness Requirements
 
-The official application-readiness score totals 100 points.
+The application-readiness score totals 100 points.
 
 ## 11.1 Usability & UX — 30 points
 
@@ -368,19 +363,19 @@ Applications should have:
 * readable code;
 * structures another developer or agent can extend.
 
-These categories and weights are defined directly in the challenge specification.
+These categories and weights guide application quality.
 
 ---
 
 # 12. Framework Strategy
 
-The competition states:
+The guiding principle:
 
 > The harness is a contract, not a framework.
 
-The system therefore MUST comply with the challenge contracts regardless of implementation technology.
+The system therefore MUST comply with the fixed contracts regardless of implementation technology.
 
-The competition permits:
+Supported runtimes include:
 
 * Pi;
 * LangChain;
@@ -389,21 +384,19 @@ The competition permits:
 * custom Python;
 * custom TypeScript.
 
-The official starter repository comes preconfigured with Pi contracts and verification tooling, while the Contracts Track is specifically recommended for maximizing evaluation score and token efficiency.
+Pi is used as the runtime because it comes preconfigured with contracts and verification tooling that maximize evaluation quality and token efficiency.
 
 ---
 
 # 13. Selected Architecture
 
-For this submission:
-
-**Pi will be used as the agent runtime/orchestration layer.**
+**Pi is used as the agent runtime/orchestration layer.**
 
 However:
 
-> Pi is infrastructure, not the competitive advantage.
+> Pi is infrastructure, not the differentiator.
 
-The competitive system will sit on top of Pi.
+The core system sits on top of Pi.
 
 ```text
               PI HARNESS
@@ -1113,7 +1106,7 @@ Only relevant journeys should execute.
 
 # 31. Self-Review Contract
 
-The challenge explicitly requires the system to review its own work and send broken work back for repair before shipping.
+The system reviews its own work and sends broken work back for repair before shipping.
 
 Therefore:
 
@@ -1270,13 +1263,13 @@ Potential stable prefixes:
 * coding conventions;
 * repair protocol.
 
-Because cache-read tokens receive only a `0.1×` weight, effective caching can materially improve competition ranking.
+Because cache-read tokens receive only a `0.1×` weight, effective caching can materially improve efficiency.
 
 ---
 
 # 38. Public Development Benchmark
 
-The official public prompt is **Book Lending Tracker**.
+The public development prompt is **Book Lending Tracker**.
 
 It tests:
 
@@ -1422,7 +1415,7 @@ runtime
 
 # 42. Target Performance
 
-Before submission:
+Before release:
 
 ```text
 Final functional success     > 90%
@@ -1501,7 +1494,7 @@ solution/
     └── metrics.ts
 ```
 
-Preserve official starter/contracts outside participant-owned architecture where appropriate.
+Preserve provided starter/contracts outside the core architecture where appropriate.
 
 ---
 
@@ -1602,12 +1595,12 @@ A generated application is complete only when:
 
 ---
 
-# 46. Definition of Done — Competition Submission
+# 46. Definition of Done — Release
 
-The submission is ready only when:
+A release is ready only when:
 
 * clean checkout works;
-* single-command challenge execution works;
+* single-command execution works;
 * public development prompt passes;
 * internal benchmark meets target success rate;
 * no manual fixes are required;
@@ -1621,20 +1614,18 @@ The submission is ready only when:
 * repository contains no benchmark-specific hacks;
 * final verification has been executed from a clean environment.
 
-The official submission requires the repository, verification output and `trace.jsonl` by September 4, 2026.
-
 ---
 
 # 47. Implementation Schedule
 
 ## Aug 17–19 — Foundation
 
-* official repository running;
+* starter repository running;
 * Pi configured;
 * understand verifier;
 * hard-coded Product IR;
 * Book Tracker compiled;
-* official public journey passing.
+* public journey passing.
 
 ### Exit criterion
 
@@ -1744,7 +1735,7 @@ Implement:
 
 ### Critical milestone
 
-**The entire official autonomous execution loop must work by August 28.**
+**The entire autonomous execution loop must work by August 28.**
 
 ---
 
@@ -1794,11 +1785,11 @@ Improve:
 
 ## Sep 2 — Demo / Optional Launch Mode
 
-Only after competition core is stable.
+Only after the core pipeline is stable.
 
 ---
 
-## Sep 3 — Submission Hardening
+## Sep 3 — Release Hardening
 
 * clean repository;
 * clean-environment run;
@@ -1809,17 +1800,15 @@ Only after competition core is stable.
 
 ---
 
-## Sep 4 — Submission
+## Sep 4 — Release
 
-Run official verification from clean checkout.
-
-Submit before deadline.
+Run full verification from a clean checkout.
 
 ---
 
 # 48. OPTIONAL — Launch Mode
 
-**This section is NOT part of the scored core execution pipeline.**
+**This section is NOT part of the core execution pipeline.**
 
 It exists only as a demonstration of the broader product vision.
 
@@ -1847,20 +1836,20 @@ Verified Product
 └── announcement copy
 ```
 
-Do NOT allow Launch Mode to consume tokens during official core evaluation unless specifically required.
+Do NOT allow Launch Mode to consume tokens during core evaluation unless specifically required.
 
 ---
 
 # 49. Why Launch Mode Matters
 
-The organizers' own long-term vision describes an AI cofounder that does more than code: it turns ideas into products, markets them, sells them, supports them and even handles bookkeeping.
+The long-term vision describes an AI cofounder that does more than code: it turns ideas into products, markets them, sells them, supports them and even handles bookkeeping.
 
-However, the organizers explicitly describe this hackathon as the **first milestone**, focused on building the coding module.
+The current milestone is the **first step**, focused on building the coding module.
 
 Therefore:
 
 ```text
-COMPETITION
+CURRENT SCOPE
 
 Idea → Code → Product → Verify
 
@@ -1892,7 +1881,7 @@ Launch Mode demonstrates the second story without compromising the first.
 
 # 50. Demo Narrative
 
-The competition demonstration should first prove the scored system.
+The demonstration should first prove the core system.
 
 Use an unfamiliar idea.
 
@@ -1937,15 +1926,15 @@ localhost:3000
 
 Then open the application.
 
-Only after proving the challenge should the presentation transition to the broader vision:
+Only after proving the core system should the presentation transition to the broader vision:
 
-> **“The challenge ends when localhost starts. A real cofounder doesn't.”**
+> **“The build ends when localhost starts. A real cofounder doesn't.”**
 
 Then optionally demonstrate Launch Mode.
 
 ---
 
-# 51. Competitive Positioning
+# 51. Positioning
 
 Do NOT pitch:
 
@@ -2081,7 +2070,7 @@ Journey success %
 
 # 55. Final Acceptance Test
 
-Before submission, choose a startup idea that has never been used during development.
+Before release, choose a startup idea that has never been used during development.
 
 Run the complete system from a clean environment.
 
@@ -2161,7 +2150,7 @@ SERVE localhost:3000
 VERIFIED_PASS
 ```
 
-If that works reliably across unseen ideas while consuming fewer weighted tokens than competing systems, the architecture has achieved its objective.
+If that works reliably across unseen ideas while consuming as few weighted tokens as possible, the architecture has achieved its objective.
 
 ---
 
@@ -2179,7 +2168,7 @@ It is an autonomous product-building system that decides:
 * whether it needs repair;
 * when the product is ready to ship.
 
-The competition implementation focuses entirely on:
+The current implementation focuses entirely on:
 
 > **Idea → Working, Verified Micro-Application**
 
@@ -2187,4 +2176,4 @@ The architecture is deliberately designed so the same system can later extend to
 
 > **Idea → Product → Launch → Market → Sell → Support**
 
-without compromising the token efficiency required to win Phase 1.
+without compromising token efficiency.

@@ -1,0 +1,474 @@
+{
+  "artifacts": {
+    "idea_spec.json": {
+      "assumptions": [
+        "Watering status is auto-derived from frequency, last watered, and today",
+        "Due soon means within 2 days of the next watering"
+      ],
+      "core_utility": "A personal houseplant watering tracker that shows which plants are overdue, due soon, or fine, with a count of overdue plants at a glance.",
+      "excluded_features": [
+        "Notifications or reminders",
+        "Photo uploads",
+        "Multiple users or sharing"
+      ],
+      "included_features": [
+        "create",
+        "edit",
+        "delete",
+        "search",
+        "filter",
+        "sort",
+        "group",
+        "calculate"
+      ],
+      "target_user": "Solo plant owner tracking watering on their own laptop"
+    },
+    "product-ir.json": {
+      "assumptions": [
+        "Watering status is auto-derived from frequency, last watered, and today",
+        "Due soon means within 2 days of the next watering"
+      ],
+      "calculations": [
+        {
+          "id": "total_plants",
+          "label": "Total plants",
+          "operation": "count"
+        },
+        {
+          "field": "watering_status",
+          "id": "watering_status_overdue_count",
+          "label": "Overdue",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Overdue"
+        },
+        {
+          "field": "watering_status",
+          "id": "watering_status_due_soon_count",
+          "label": "Due soon",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Due soon"
+        },
+        {
+          "field": "watering_status",
+          "id": "watering_status_fine_count",
+          "label": "Fine",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Fine"
+        }
+      ],
+      "capabilities": {
+        "calculate": true,
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "filter": true,
+        "group": true,
+        "search": true,
+        "sort": true,
+        "transition": false
+      },
+      "customRequirements": [],
+      "entities": [
+        {
+          "fields": [
+            {
+              "id": "name",
+              "label": "Name",
+              "placeholder": "e.g. Fiddle Leaf Fig",
+              "required": true,
+              "type": "text"
+            },
+            {
+              "allowCustom": true,
+              "id": "room",
+              "label": "Room",
+              "options": [
+                "Living Room",
+                "Kitchen",
+                "Bedroom",
+                "Bathroom",
+                "Office",
+                "Balcony"
+              ],
+              "required": false,
+              "type": "category"
+            },
+            {
+              "id": "watering_frequency",
+              "label": "Water every",
+              "max": 365,
+              "min": 1,
+              "placeholder": "days between waterings, e.g. 7",
+              "required": true,
+              "type": "number"
+            },
+            {
+              "id": "last_watered",
+              "label": "Last watered",
+              "required": true,
+              "type": "date"
+            },
+            {
+              "id": "notes",
+              "label": "Notes",
+              "required": false,
+              "type": "longText"
+            },
+            {
+              "derive": {
+                "buckets": {
+                  "ok": "Fine",
+                  "overdue": "Overdue",
+                  "soon": "Due soon"
+                },
+                "dateField": "last_watered",
+                "kind": "dateThreshold",
+                "soonWithinDays": 2,
+                "thresholdField": "watering_frequency"
+              },
+              "id": "watering_status",
+              "label": "Watering status",
+              "options": [
+                "Overdue",
+                "Due soon",
+                "Fine"
+              ],
+              "required": false,
+              "type": "status"
+            }
+          ],
+          "name": "plant",
+          "plural": "plants",
+          "primaryField": "name"
+        }
+      ],
+      "excluded": [
+        "Notifications or reminders",
+        "Photo uploads",
+        "Multiple users or sharing"
+      ],
+      "filters": [
+        {
+          "field": "watering_status",
+          "id": "watering_status_overdue",
+          "label": "Overdue",
+          "operator": "equals",
+          "value": "Overdue"
+        },
+        {
+          "field": "watering_status",
+          "id": "watering_status_due_soon",
+          "label": "Due soon",
+          "operator": "equals",
+          "value": "Due soon"
+        },
+        {
+          "field": "watering_status",
+          "id": "watering_status_fine",
+          "label": "Fine",
+          "operator": "equals",
+          "value": "Fine"
+        }
+      ],
+      "persistence": {
+        "strategy": "localStorage"
+      },
+      "product": {
+        "accent": "#5b5bd6",
+        "description": "A personal houseplant watering tracker that shows which plants are overdue, due soon, or fine, with a count of overdue plants at a glance.",
+        "design": {
+          "contrast": "balanced",
+          "density": "comfortable",
+          "motion": "subtle",
+          "tone": "calm"
+        },
+        "genome": "tracker",
+        "name": "Plant Pal",
+        "tagline": "",
+        "targetUser": "Solo plant owner tracking watering on their own laptop"
+      },
+      "version": "1"
+    },
+    "product.config.json": {
+      "accent": "#0e7490",
+      "capabilities": {
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "group": true,
+        "search": true,
+        "sort": true
+      },
+      "collectionLabel": "Collection",
+      "design": {
+        "colors": {
+          "accent": "#0e7490",
+          "accentText": "#ffffff",
+          "border": "#cbdde3",
+          "canvas": "#f0f6f8",
+          "danger": "#a52a2a",
+          "ink": "#142a33",
+          "muted": "#567079",
+          "surface": "#ffffff",
+          "surfaceAlt": "#e2eef2",
+          "topbar": "#0a232b",
+          "topbarText": "#f0fafc"
+        },
+        "contrast": "balanced",
+        "density": "comfortable",
+        "id": "progress-workbench-calm-a",
+        "layout": "progress-workbench",
+        "layoutLabel": "Progress workbench",
+        "motion": "subtle",
+        "shape": {
+          "cardRadius": 22,
+          "panelRadius": 28
+        },
+        "spacing": {
+          "gap": 14,
+          "page": 52,
+          "panel": 22
+        },
+        "tone": "calm",
+        "typography": {
+          "body": "Inter, ui-sans-serif, system-ui, sans-serif",
+          "display": "Inter, ui-sans-serif, system-ui, sans-serif"
+        },
+        "variant": "a"
+      },
+      "entityName": "plant",
+      "entityNamePlural": "plants",
+      "eyebrow": "Tracker",
+      "fields": [
+        {
+          "key": "name",
+          "label": "Name",
+          "placeholder": "e.g. Fiddle Leaf Fig",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "allowCustom": true,
+          "key": "room",
+          "label": "Room",
+          "options": [
+            "Living Room",
+            "Kitchen",
+            "Bedroom",
+            "Bathroom",
+            "Office",
+            "Balcony"
+          ],
+          "required": false,
+          "type": "category"
+        },
+        {
+          "key": "watering_frequency",
+          "label": "Water every",
+          "max": 365,
+          "min": 1,
+          "placeholder": "days between waterings, e.g. 7",
+          "required": true,
+          "type": "number"
+        },
+        {
+          "key": "last_watered",
+          "label": "Last watered",
+          "required": true,
+          "type": "date"
+        },
+        {
+          "key": "notes",
+          "label": "Notes",
+          "required": false,
+          "type": "longText"
+        },
+        {
+          "derive": {
+            "buckets": {
+              "ok": "Fine",
+              "overdue": "Overdue",
+              "soon": "Due soon"
+            },
+            "dateField": "last_watered",
+            "kind": "dateThreshold",
+            "soonWithinDays": 2,
+            "thresholdField": "watering_frequency"
+          },
+          "key": "watering_status",
+          "label": "Watering status",
+          "options": [
+            "Overdue",
+            "Due soon",
+            "Fine"
+          ],
+          "required": false,
+          "type": "status"
+        }
+      ],
+      "filters": [
+        {
+          "field": "watering_status",
+          "id": "watering_status_overdue",
+          "label": "Overdue",
+          "operator": "equals",
+          "value": "Overdue"
+        },
+        {
+          "field": "watering_status",
+          "id": "watering_status_due_soon",
+          "label": "Due soon",
+          "operator": "equals",
+          "value": "Due soon"
+        },
+        {
+          "field": "watering_status",
+          "id": "watering_status_fine",
+          "label": "Fine",
+          "operator": "equals",
+          "value": "Fine"
+        }
+      ],
+      "genome": "tracker",
+      "name": "Plant Pal",
+      "primaryField": "name",
+      "searchableFields": [
+        "name",
+        "room",
+        "notes",
+        "watering_status"
+      ],
+      "secondaryFields": [
+        "room",
+        "watering_frequency",
+        "last_watered",
+        "notes"
+      ],
+      "sorts": [
+        {
+          "id": "updated",
+          "label": "Recently updated"
+        },
+        {
+          "id": "created",
+          "label": "Oldest first"
+        },
+        {
+          "direction": "asc",
+          "field": "name",
+          "id": "by_name",
+          "label": "By name",
+          "type": "text"
+        },
+        {
+          "direction": "desc",
+          "field": "last_watered",
+          "id": "by_last_watered",
+          "label": "By last watered",
+          "type": "date"
+        },
+        {
+          "direction": "desc",
+          "field": "watering_frequency",
+          "id": "by_watering_frequency",
+          "label": "By water every",
+          "type": "number"
+        }
+      ],
+      "summaries": [
+        {
+          "id": "total_plants",
+          "label": "Total plants",
+          "operation": "count"
+        },
+        {
+          "field": "watering_status",
+          "id": "watering_status_overdue_count",
+          "label": "Overdue",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Overdue"
+        },
+        {
+          "field": "watering_status",
+          "id": "watering_status_due_soon_count",
+          "label": "Due soon",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Due soon"
+        },
+        {
+          "field": "watering_status",
+          "id": "watering_status_fine_count",
+          "label": "Fine",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Fine"
+        }
+      ],
+      "tagline": ""
+    },
+    "summary.md": "# Plant Pal\n\nA personal houseplant watering tracker that shows which plants are overdue, due soon, or fine, with a count of overdue plants at a glance.\n\n- **Target user:** Solo plant owner tracking watering on their own laptop\n- **Build route:** compile\n- **Genome:** tracker\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Verified journeys\n\n- Application loads and shows a useful empty state\n- Invalid plant input shows validation without crashing\n- User can add a complete plant and see it in plants\n- plants survive a page refresh\n- User can edit an existing plant\n- User can search plants\n- User can narrow plants with a meaningful filter\n- plants are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing plant\n"
+  },
+  "journeys": [
+    {
+      "description": "Application loads and shows a useful empty state",
+      "id": "load"
+    },
+    {
+      "description": "Invalid plant input shows validation without crashing",
+      "id": "validation"
+    },
+    {
+      "description": "User can add a complete plant and see it in plants",
+      "id": "create"
+    },
+    {
+      "description": "plants survive a page refresh",
+      "id": "persistence"
+    },
+    {
+      "description": "User can edit an existing plant",
+      "id": "edit"
+    },
+    {
+      "description": "User can search plants",
+      "id": "search"
+    },
+    {
+      "description": "User can narrow plants with a meaningful filter",
+      "id": "filter"
+    },
+    {
+      "description": "plants are grouped by a meaningful category or status",
+      "id": "group"
+    },
+    {
+      "description": "Requested derived values update from persisted records",
+      "id": "calculate"
+    },
+    {
+      "description": "User can delete an existing plant",
+      "id": "delete"
+    }
+  ],
+  "route": {
+    "genome": "tracker",
+    "reason": "Every required behavior maps to the deterministic runtime.",
+    "route": "compile",
+    "supported": [
+      "create",
+      "edit",
+      "delete",
+      "search",
+      "filter",
+      "sort",
+      "group",
+      "calculate"
+    ],
+    "unsupported": []
+  }
+}

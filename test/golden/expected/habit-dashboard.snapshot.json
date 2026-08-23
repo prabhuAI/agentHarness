@@ -266,6 +266,30 @@
         "streak",
         "done_today"
       ],
+      "sorts": [
+        {
+          "id": "updated",
+          "label": "Recently updated"
+        },
+        {
+          "id": "created",
+          "label": "Oldest first"
+        },
+        {
+          "direction": "asc",
+          "field": "name",
+          "id": "by_name",
+          "label": "By habit",
+          "type": "text"
+        },
+        {
+          "direction": "desc",
+          "field": "streak",
+          "id": "by_streak",
+          "label": "By streak",
+          "type": "number"
+        }
+      ],
       "summaries": [
         {
           "id": "total",
