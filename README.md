@@ -27,10 +27,31 @@ Official hidden prompts, hidden tests, model credentials, and final scoring code
 
 ## Setup
 
+The runtime is pinned to **Node.js 22.19.x**. If you use a version manager, the correct version is selected automatically from `.nvmrc`:
+
+```bash
+nvm install && nvm use     # or: fnm use --install-if-missing
+```
+
+Then install and verify:
+
 ```bash
 npm ci --ignore-scripts
 npm --prefix app-template ci --ignore-scripts
 npm run check
+```
+
+If you are on the wrong Node major, `npm run challenge` stops immediately with a message telling you how to switch — it will not fail cryptically mid-install.
+
+### No version manager? Use Docker (zero Node setup)
+
+The committed `Dockerfile` pins Node 22.19.0 and runs the full check suite at build time, so judges need only Docker and a provider key:
+
+```bash
+docker build -t compilekit .
+docker run --rm \
+  -e BERGET_API_KEY -e CHALLENGE_PROVIDER=berget -e CHALLENGE_MODEL=zai-org/GLM-5.2 \
+  compilekit --idea-file contract-public/development-idea.txt
 ```
 
 Provider-specific credentials are read by Pi. The optional challenge variables select the organizer's runtime configuration:

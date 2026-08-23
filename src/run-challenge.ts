@@ -269,7 +269,36 @@ function timeoutFromEnvironment(): number {
   return value;
 }
 
+const REQUIRED_NODE_MAJOR = 22;
+const REQUIRED_NODE_MIN_MINOR = 19;
+
+/**
+ * Fail fast on an unsupported Node runtime before `npm ci` errors out mid-run
+ * with a cryptic EBADENGINE message. The pinned engine is `>=22.19.0 <23`.
+ */
+export function assertSupportedNode(version: string = process.versions.node): void {
+  const [major = 0, minor = 0] = version.split(".").map((part) => Number.parseInt(part, 10));
+  if (major === REQUIRED_NODE_MAJOR && minor >= REQUIRED_NODE_MIN_MINOR) return;
+  console.error(
+    [
+      ``,
+      `✖ Unsupported Node.js version: v${version}`,
+      `  This challenge requires Node.js ${REQUIRED_NODE_MAJOR}.${REQUIRED_NODE_MIN_MINOR}.x (>=22.19.0 <23).`,
+      `  npm ci fails on any other major, so the run is stopped before it fails cryptically.`,
+      ``,
+      `  Switch Node with any one of:`,
+      `    nvm:    nvm install && nvm use          # uses the pinned .nvmrc`,
+      `    fnm:    fnm use --install-if-missing`,
+      `    brew:   brew install node@22 && export PATH="$(brew --prefix node@22)/bin:$PATH"`,
+      `    docker: docker build -t compilekit . && docker run --rm -e BERGET_API_KEY compilekit`,
+      ``,
+    ].join("\n"),
+  );
+  process.exit(1);
+}
+
 async function main(): Promise<void> {
+  assertSupportedNode();
   const args = parseArguments(process.argv.slice(2));
   const idea = await readFile(args.ideaFile, "utf8");
   const outputDirectory = await prepareOutput(REPOSITORY_ROOT, args.outputDirectory);
