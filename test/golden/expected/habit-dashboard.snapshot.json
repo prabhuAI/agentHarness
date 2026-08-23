@@ -149,6 +149,7 @@
         "tagline": "",
         "targetUser": "People building daily habits"
       },
+      "quickActions": [],
       "version": "1"
     },
     "product.config.json": {
@@ -259,6 +260,7 @@
       "genome": "dashboard",
       "name": "Habit Board",
       "primaryField": "name",
+      "quickActions": [],
       "searchableFields": [
         "name",
         "cadence"

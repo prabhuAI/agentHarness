@@ -197,6 +197,7 @@
         "tagline": "",
         "targetUser": "Home cooks"
       },
+      "quickActions": [],
       "version": "1"
     },
     "product.config.json": {
@@ -337,6 +338,7 @@
       "genome": "catalog",
       "name": "Recipe Box",
       "primaryField": "name",
+      "quickActions": [],
       "searchableFields": [
         "name",
         "cuisine",

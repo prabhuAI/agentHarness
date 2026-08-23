@@ -147,6 +147,7 @@
         "tagline": "",
         "targetUser": "Product teams"
       },
+      "quickActions": [],
       "version": "1"
     },
     "product.config.json": {
@@ -252,6 +253,7 @@
       "genome": "workflow",
       "name": "Roadmap",
       "primaryField": "title",
+      "quickActions": [],
       "searchableFields": [
         "title",
         "stage",

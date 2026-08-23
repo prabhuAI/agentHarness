@@ -35,7 +35,7 @@ function fixture(overrides: Partial<ProductIR> = {}): ProductIR {
     calculations: [{ id: "total", label: "Total decisions", operation: "count" }, { id: "accepted", label: "Accepted", operation: "countWhere", field: "status", operator: "equals", value: "Accepted" }],
     charts: [],
     persistence: { strategy: "localStorage" },
-    assumptions: ["Single workspace"], excluded: ["Authentication"], customRequirements: [],
+    assumptions: ["Single workspace"], excluded: ["Authentication"], quickActions: [], customRequirements: [],
     ...overrides,
   };
 }

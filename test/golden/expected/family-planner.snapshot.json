@@ -184,6 +184,7 @@
         "tagline": "One calm family plan.",
         "targetUser": "Parents with two kids"
       },
+      "quickActions": [],
       "version": "1"
     },
     "product.config.json": {
@@ -319,6 +320,7 @@
       "genome": "planner",
       "name": "Family Rhythm",
       "primaryField": "title",
+      "quickActions": [],
       "searchableFields": [
         "title",
         "who",

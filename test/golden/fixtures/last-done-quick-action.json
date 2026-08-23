@@ -1,0 +1,30 @@
+{
+  "idea": "I keep forgetting when I last did household chores. I want to list each chore and tap a button to mark it done today, and see how overdue each one is.",
+  "ir": {
+    "version": "1",
+    "product": {
+      "name": "Last Done",
+      "description": "Track household chores and mark them done in one tap.",
+      "targetUser": "Someone keeping up with recurring chores",
+      "genome": "tracker"
+    },
+    "entities": [
+      {
+        "name": "activity",
+        "plural": "activities",
+        "primaryField": "name",
+        "fields": [
+          { "id": "name", "label": "Activity", "type": "text", "required": true },
+          { "id": "last_done", "label": "Last done", "type": "date" },
+          { "id": "frequency_days", "label": "Every (days)", "type": "number", "min": 1 },
+          { "id": "status", "label": "Status", "type": "status", "options": ["Overdue", "Due soon", "Fine"], "derive": { "kind": "dateThreshold", "dateField": "last_done", "thresholdField": "frequency_days", "buckets": { "overdue": "Overdue", "soon": "Due soon", "ok": "Fine" } } }
+        ]
+      }
+    ],
+    "capabilities": { "create": true, "edit": true, "delete": true, "search": true, "sort": true, "group": true, "calculate": true },
+    "quickActions": [
+      { "id": "did_it", "label": "Done!", "field": "last_done", "set": "today" }
+    ],
+    "customRequirements": []
+  }
+}

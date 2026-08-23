@@ -1,0 +1,419 @@
+{
+  "artifacts": {
+    "idea_spec.json": {
+      "assumptions": [],
+      "core_utility": "Track household chores and mark them done in one tap.",
+      "excluded_features": [],
+      "included_features": [
+        "create",
+        "edit",
+        "delete",
+        "search",
+        "filter",
+        "sort",
+        "group",
+        "calculate"
+      ],
+      "target_user": "Someone keeping up with recurring chores"
+    },
+    "product-ir.json": {
+      "assumptions": [],
+      "calculations": [
+        {
+          "field": "status",
+          "id": "status_overdue_count",
+          "label": "Overdue",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Overdue"
+        },
+        {
+          "field": "status",
+          "id": "status_due_soon_count",
+          "label": "Due soon",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Due soon"
+        },
+        {
+          "field": "status",
+          "id": "status_fine_count",
+          "label": "Fine",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Fine"
+        }
+      ],
+      "capabilities": {
+        "calculate": true,
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "filter": true,
+        "group": true,
+        "search": true,
+        "sort": true,
+        "transition": false
+      },
+      "charts": [],
+      "customRequirements": [],
+      "entities": [
+        {
+          "fields": [
+            {
+              "id": "name",
+              "label": "Activity",
+              "required": true,
+              "type": "text"
+            },
+            {
+              "id": "last_done",
+              "label": "Last done",
+              "required": false,
+              "type": "date"
+            },
+            {
+              "id": "frequency_days",
+              "label": "Every (days)",
+              "min": 1,
+              "required": false,
+              "type": "number"
+            },
+            {
+              "derive": {
+                "buckets": {
+                  "ok": "Fine",
+                  "overdue": "Overdue",
+                  "soon": "Due soon"
+                },
+                "dateField": "last_done",
+                "kind": "dateThreshold",
+                "thresholdField": "frequency_days"
+              },
+              "id": "status",
+              "label": "Status",
+              "options": [
+                "Overdue",
+                "Due soon",
+                "Fine"
+              ],
+              "required": false,
+              "type": "status"
+            }
+          ],
+          "name": "activity",
+          "plural": "activities",
+          "primaryField": "name"
+        }
+      ],
+      "excluded": [],
+      "filters": [
+        {
+          "field": "status",
+          "id": "status_overdue",
+          "label": "Overdue",
+          "operator": "equals",
+          "value": "Overdue"
+        },
+        {
+          "field": "status",
+          "id": "status_due_soon",
+          "label": "Due soon",
+          "operator": "equals",
+          "value": "Due soon"
+        },
+        {
+          "field": "status",
+          "id": "status_fine",
+          "label": "Fine",
+          "operator": "equals",
+          "value": "Fine"
+        }
+      ],
+      "persistence": {
+        "strategy": "localStorage"
+      },
+      "product": {
+        "accent": "#5b5bd6",
+        "description": "Track household chores and mark them done in one tap.",
+        "design": {
+          "contrast": "balanced",
+          "density": "comfortable",
+          "motion": "subtle",
+          "tone": "calm"
+        },
+        "genome": "tracker",
+        "name": "Last Done",
+        "tagline": "",
+        "targetUser": "Someone keeping up with recurring chores"
+      },
+      "quickActions": [
+        {
+          "field": "last_done",
+          "id": "did_it",
+          "label": "Done!",
+          "set": "today"
+        }
+      ],
+      "version": "1"
+    },
+    "product.config.json": {
+      "accent": "#0f766e",
+      "capabilities": {
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "group": true,
+        "search": true,
+        "sort": true
+      },
+      "charts": [],
+      "collectionLabel": "Collection",
+      "design": {
+        "colors": {
+          "accent": "#0f766e",
+          "accentText": "#ffffff",
+          "border": "#cdded8",
+          "canvas": "#f2f7f5",
+          "danger": "#a52a2a",
+          "ink": "#17332d",
+          "muted": "#5e746f",
+          "surface": "#ffffff",
+          "surfaceAlt": "#e7f1ed",
+          "topbar": "#102b27",
+          "topbarText": "#f4fbf8"
+        },
+        "contrast": "balanced",
+        "density": "comfortable",
+        "id": "progress-workbench-calm-c",
+        "layout": "progress-workbench",
+        "layoutLabel": "Progress workbench",
+        "motion": "subtle",
+        "shape": {
+          "cardRadius": 4,
+          "panelRadius": 6
+        },
+        "spacing": {
+          "gap": 14,
+          "page": 52,
+          "panel": 22
+        },
+        "tone": "calm",
+        "typography": {
+          "body": "Verdana, Geneva, ui-sans-serif, sans-serif",
+          "display": "'Trebuchet MS', Verdana, ui-sans-serif, sans-serif"
+        },
+        "variant": "c"
+      },
+      "entityName": "activity",
+      "entityNamePlural": "activities",
+      "eyebrow": "Tracker",
+      "fields": [
+        {
+          "key": "name",
+          "label": "Activity",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "key": "last_done",
+          "label": "Last done",
+          "required": false,
+          "type": "date"
+        },
+        {
+          "key": "frequency_days",
+          "label": "Every (days)",
+          "min": 1,
+          "required": false,
+          "type": "number"
+        },
+        {
+          "derive": {
+            "buckets": {
+              "ok": "Fine",
+              "overdue": "Overdue",
+              "soon": "Due soon"
+            },
+            "dateField": "last_done",
+            "kind": "dateThreshold",
+            "thresholdField": "frequency_days"
+          },
+          "key": "status",
+          "label": "Status",
+          "options": [
+            "Overdue",
+            "Due soon",
+            "Fine"
+          ],
+          "required": false,
+          "type": "status"
+        }
+      ],
+      "filters": [
+        {
+          "field": "status",
+          "id": "status_overdue",
+          "label": "Overdue",
+          "operator": "equals",
+          "value": "Overdue"
+        },
+        {
+          "field": "status",
+          "id": "status_due_soon",
+          "label": "Due soon",
+          "operator": "equals",
+          "value": "Due soon"
+        },
+        {
+          "field": "status",
+          "id": "status_fine",
+          "label": "Fine",
+          "operator": "equals",
+          "value": "Fine"
+        }
+      ],
+      "genome": "tracker",
+      "name": "Last Done",
+      "primaryField": "name",
+      "quickActions": [
+        {
+          "field": "last_done",
+          "id": "did_it",
+          "label": "Done!",
+          "set": "today"
+        }
+      ],
+      "searchableFields": [
+        "name",
+        "status"
+      ],
+      "secondaryFields": [
+        "last_done",
+        "frequency_days",
+        "status"
+      ],
+      "sorts": [
+        {
+          "id": "updated",
+          "label": "Recently updated"
+        },
+        {
+          "id": "created",
+          "label": "Oldest first"
+        },
+        {
+          "direction": "asc",
+          "field": "name",
+          "id": "by_name",
+          "label": "By activity",
+          "type": "text"
+        },
+        {
+          "direction": "desc",
+          "field": "last_done",
+          "id": "by_last_done",
+          "label": "By last done",
+          "type": "date"
+        },
+        {
+          "direction": "desc",
+          "field": "frequency_days",
+          "id": "by_frequency_days",
+          "label": "By every (days)",
+          "type": "number"
+        }
+      ],
+      "summaries": [
+        {
+          "field": "status",
+          "id": "status_overdue_count",
+          "label": "Overdue",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Overdue"
+        },
+        {
+          "field": "status",
+          "id": "status_due_soon_count",
+          "label": "Due soon",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Due soon"
+        },
+        {
+          "field": "status",
+          "id": "status_fine_count",
+          "label": "Fine",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Fine"
+        }
+      ],
+      "tagline": ""
+    },
+    "summary.md": "# Last Done\n\nTrack household chores and mark them done in one tap.\n\n- **Target user:** Someone keeping up with recurring chores\n- **Build route:** compile\n- **Genome:** tracker\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Verified journeys\n\n- Application loads and shows a useful empty state\n- Invalid activity input shows validation without crashing\n- User can add a complete activity and see it in activities\n- activities survive a page refresh\n- User can edit an existing activity\n- User can search activities\n- User can narrow activities with a meaningful filter\n- activities are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing activity\n- A one-tap action updates a activity field and persists\n"
+  },
+  "journeys": [
+    {
+      "description": "Application loads and shows a useful empty state",
+      "id": "load"
+    },
+    {
+      "description": "Invalid activity input shows validation without crashing",
+      "id": "validation"
+    },
+    {
+      "description": "User can add a complete activity and see it in activities",
+      "id": "create"
+    },
+    {
+      "description": "activities survive a page refresh",
+      "id": "persistence"
+    },
+    {
+      "description": "User can edit an existing activity",
+      "id": "edit"
+    },
+    {
+      "description": "User can search activities",
+      "id": "search"
+    },
+    {
+      "description": "User can narrow activities with a meaningful filter",
+      "id": "filter"
+    },
+    {
+      "description": "activities are grouped by a meaningful category or status",
+      "id": "group"
+    },
+    {
+      "description": "Requested derived values update from persisted records",
+      "id": "calculate"
+    },
+    {
+      "description": "User can delete an existing activity",
+      "id": "delete"
+    },
+    {
+      "description": "A one-tap action updates a activity field and persists",
+      "id": "quick_action"
+    }
+  ],
+  "route": {
+    "genome": "tracker",
+    "reason": "Every required behavior maps to the deterministic runtime.",
+    "route": "compile",
+    "supported": [
+      "create",
+      "edit",
+      "delete",
+      "search",
+      "filter",
+      "sort",
+      "group",
+      "calculate"
+    ],
+    "unsupported": []
+  }
+}

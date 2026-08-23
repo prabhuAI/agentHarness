@@ -9,6 +9,17 @@ beforeEach(() => { window.localStorage.clear(); vi.stubGlobal("confirm", vi.fn((
 afterEach(cleanup);
 
 const requiredValue = (type: string) => type === "email" ? "person@example.com" : type === "url" ? "https://example.com" : type === "number" || type === "currency" ? "12" : type === "date" ? "2026-08-17" : type === "datetime" ? "2026-08-17T10:00" : "Sample value";
+// A number/currency field carries its own min/max, so the canonical sample (12)
+// can violate the field's constraints (e.g. a weight with min 20). Clamp the
+// sample into the field's declared range so create is never blocked by a bound
+// the product legitimately set — the journey exercises create, not validation.
+const sampleValue = (field: { type: string; min?: number; max?: number }) => {
+  if (field.type !== "number" && field.type !== "currency") return requiredValue(field.type);
+  let n = 12;
+  if (typeof field.min === "number" && n < field.min) n = field.min;
+  if (typeof field.max === "number" && n > field.max) n = field.max;
+  return String(n);
+};
 
 async function createRecord() {
   const user = userEvent.setup();
@@ -22,7 +33,7 @@ async function createRecord() {
     if (!control) continue;
     if (field.type === "boolean") { await user.click(control); created[field.key] = true; }
     else {
-      const value = field.options?.[0] ?? requiredValue(field.type);
+      const value = field.options?.[0] ?? sampleValue(field);
       if (field.options?.length) await user.selectOptions(control, value);
       else await user.type(control, value);
       created[field.key] = value;
@@ -261,12 +272,11 @@ describe("compiled product runtime", () => {
       const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
       const filterGroup = within(screen.getByRole("group", { name: new RegExp(`filter ${escape(productConfig.entityNamePlural)}`, "i") }));
       await user.click(filterGroup.getByRole("button", { name: new RegExp(escape(preset.label), "i"), pressed: false }));
-      const text = String(created[preset.field] ?? "").trim();
-      const matches = preset.operator === "equals" ? text === String(preset.value ?? "")
-        : preset.operator === "nonEmpty" ? text !== ""
-        : preset.operator === "empty" ? text === ""
-        : preset.operator === "truthy" ? created[preset.field] === true
-        : created[preset.field] !== true;
+      // Predict the filter's effect with the runtime's own predicate rather than a
+      // re-implementation: a hand-rolled version could not reason about date-window
+      // operators (today/thisWeek/thisMonth), so a product whose first filter was a
+      // date window was wrongly expected to still show the record and failed here.
+      const matches = matchesPredicate(created[preset.field] as string | boolean | undefined, preset.operator, preset.value);
       if (matches) expect(screen.getAllByText(primaryValue).length).toBeGreaterThan(0);
       else expect(screen.getByText(/nothing matches/i)).toBeInTheDocument();
       await user.click(filterGroup.getByRole("button", { name: new RegExp(`^all ${escape(productConfig.entityNamePlural)}`, "i") }));
@@ -276,5 +286,25 @@ describe("compiled product runtime", () => {
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /close/i }));
     await user.click(screen.getByRole("button", { name: /delete/i }));
     expect(screen.getByText(new RegExp(`no ${productConfig.entityNamePlural}`, "i"))).toBeInTheDocument();
+  });
+
+  it("runs a configured quick action and persists the field change", async () => {
+    if (productConfig.quickActions.length === 0) return; // no-op for products without quick actions
+    const user = userEvent.setup();
+    render(<App />);
+    await createRecord();
+    const action = productConfig.quickActions[0];
+    const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    await user.click(screen.getAllByRole("button", { name: new RegExp(escape(action.label), "i") })[0]);
+    const stored = JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]");
+    const saved = stored[stored.length - 1];
+    if (action.set === "today") {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      expect(String(saved.values[action.field]).startsWith(today)).toBe(true);
+    } else {
+      expect(saved.values[action.field]).toBe("");
+    }
   });
 });

@@ -191,6 +191,7 @@
         "tagline": "",
         "targetUser": "Solo plant owner tracking watering on their own laptop"
       },
+      "quickActions": [],
       "version": "1"
     },
     "product.config.json": {
@@ -337,6 +338,7 @@
       "genome": "tracker",
       "name": "Plant Pal",
       "primaryField": "name",
+      "quickActions": [],
       "searchableFields": [
         "name",
         "room",

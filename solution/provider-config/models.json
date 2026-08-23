@@ -41,8 +41,8 @@
           }
         },
         {
-          "id": "Qwen/Qwen3.8-27B",
-          "name": "Qwen3.8 27B via Berget",
+          "id": "Qwen/Qwen3.8-27B-FP8",
+          "name": "Qwen3.8 27B (FP8) via Berget",
           "reasoning": true,
           "thinkingLevelMap": {
             "off": "none",

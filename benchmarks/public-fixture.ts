@@ -33,5 +33,6 @@ export const PUBLIC_BOOK_LENDING_IR: ProductIR = {
   persistence: { strategy: "localStorage" },
   assumptions: ["Category suggestions accept custom values because the requested categories are approximate", "Clearing the borrower marks a book as returned"],
   excluded: ["Authentication", "Cloud synchronization", "Multi-user accounts"],
+  quickActions: [],
   customRequirements: [],
 };

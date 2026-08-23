@@ -1,5 +1,5 @@
 import { analyzeFormula } from "./formula.js";
-import type { DateThresholdDerive, DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductField, ProductFilter, ProductIR } from "./types.js";
+import type { DateThresholdDerive, DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductField, ProductFilter, ProductIR, ProductQuickAction } from "./types.js";
 import { DATE_WINDOW_OPERATORS, DERIVED_FIELD_KINDS, FIELD_TYPES, FILTER_OPERATORS, GENOMES, type FieldType } from "./types.js";
 
 // Common field-type synonyms weaker models emit, mapped to the runtime's vocabulary.
@@ -194,6 +194,24 @@ function primaryFacetField(fields: ProductField[]): ProductField | undefined {
     ?? fields.find((field) => field.type === "category" && inRange(field));
 }
 
+// Filter chips are identified by their visible label (the runtime renders one
+// button per filter, and both the UI and the accessibility tree key off the
+// label). Two filters that share a label — e.g. a model that writes an explicit
+// "Running low" filter and also carries a "Running low" status option that
+// auto-derives its own band filter — collide into duplicate buttons, which
+// breaks the filter journey (an ambiguous getByRole) and confuses the user.
+// Keep the first occurrence: explicit model filters precede derived per-option
+// ones, so an intentional filter always wins over an auto-derived duplicate.
+function dedupeFiltersByLabel(filters: ProductFilter[]): ProductFilter[] {
+  const seen = new Set<string>();
+  return filters.filter((filter) => {
+    const key = clean(filter.label).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function deriveOptionFilters(fields: ProductField[], filters: ProductFilter[]): ProductFilter[] {
   const field = primaryFacetField(fields);
   if (!field) return filters;
@@ -273,8 +291,15 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     const fields = normalizeFields(entity);
     // A derived field is computed, never entered, so it can never identify a record.
     const enterable = fields.filter((field) => !field.derive);
-    const requestedPrimary = identifier(entity.primaryField, enterable[0]?.id ?? fields[0]?.id ?? "name");
-    const primaryField = enterable.some((field) => field.id === requestedPrimary) ? requestedPrimary : (enterable[0]?.id ?? fields[0]?.id ?? "name");
+    // A date/datetime makes a poor record title: it renders formatted (e.g.
+    // "Aug 17, 2026"), so its raw stored value never appears verbatim, and it
+    // rarely identifies the record. Prefer a non-date enterable field for the
+    // primary when one exists; fall back to a date only when nothing else can.
+    const titleable = enterable.filter((field) => field.type !== "date" && field.type !== "datetime");
+    const pool = titleable.length > 0 ? titleable : enterable;
+    const fallbackPrimary = pool[0]?.id ?? enterable[0]?.id ?? fields[0]?.id ?? "name";
+    const requestedPrimary = identifier(entity.primaryField, fallbackPrimary);
+    const primaryField = pool.some((field) => field.id === requestedPrimary) ? requestedPrimary : fallbackPrimary;
     // The primary field identifies the record, so it is always required — this also
     // guarantees at least one required field for the validation journey.
     const requiredFields = fields.map((field) => field.id === primaryField ? { ...field, required: true } : field);
@@ -332,6 +357,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
       return predicateUsable(calculation.field, calculation.operator, calculation.value, primaryFieldMap);
     });
   if (capabilities.filter) filters = deriveOptionFilters(entities[0].fields, filters);
+  filters = dedupeFiltersByLabel(filters);
   if (capabilities.calculate) calculations = deriveOptionCalculations(entities[0].fields, calculations);
   // A chart is kept only when its axes resolve to a real date field (x) and a
   // real numeric field (y); anything else is dropped rather than rejected, so a
@@ -348,6 +374,22 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
       const xType = primaryFieldMap.get(chart.xField)?.type;
       const yType = primaryFieldMap.get(chart.yField)?.type;
       return (xType === "date" || xType === "datetime") && (yType === "number" || yType === "currency");
+    });
+  // A quick action mutates one stored field, so it is kept only when the field
+  // exists and is enterable (never a derived field), and — for a "today" stamp —
+  // is actually a date/datetime field. Anything else is dropped rather than
+  // rejected, so a mis-specified action never blocks a compile.
+  const quickActions = (input.quickActions ?? [])
+    .map((action, index): ProductQuickAction => ({
+      id: identifier(String(action?.id ?? ""), `action_${index + 1}`),
+      label: clean(String(action?.label ?? "")) || "Update",
+      field: identifier(String(action?.field ?? ""), ""),
+      set: action?.set === "clear" ? "clear" : "today",
+    }))
+    .filter((action) => {
+      const field = primaryFieldMap.get(action.field);
+      if (!field || field.derive) return false;
+      return action.set === "clear" || field.type === "date" || field.type === "datetime";
     });
   const name = clean(input.product?.name ?? "") || "Untitled";
   return {
@@ -368,6 +410,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     filters,
     calculations,
     charts,
+    quickActions,
     persistence: { strategy: "localStorage" },
     assumptions: uniqueStrings(input.assumptions ?? []),
     excluded: uniqueStrings(input.excluded ?? []),

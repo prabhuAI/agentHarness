@@ -1,0 +1,609 @@
+{
+  "artifacts": {
+    "idea_spec.json": {
+      "assumptions": [
+        "'Running low' is derived from quantity vs. the per-item low threshold",
+        "Expiring soon means within 7 days of today; expired means past the expiry date",
+        "Single local user with browser storage; no sync or accounts",
+        "No shopping list or purchase history — only current pantry state"
+      ],
+      "core_utility": "Track pantry items, quantities, and expiry dates to quickly see what's running low or expiring soon.",
+      "excluded_features": [
+        "Shopping list generation",
+        "Barcode scanning",
+        "Multi-user sharing",
+        "Price tracking"
+      ],
+      "included_features": [
+        "create",
+        "edit",
+        "delete",
+        "search",
+        "filter",
+        "sort",
+        "group",
+        "transition",
+        "calculate"
+      ],
+      "target_user": "Home cooks who want to avoid buying duplicates"
+    },
+    "product-ir.json": {
+      "assumptions": [
+        "'Running low' is derived from quantity vs. the per-item low threshold",
+        "Expiring soon means within 7 days of today; expired means past the expiry date",
+        "Single local user with browser storage; no sync or accounts",
+        "No shopping list or purchase history — only current pantry state"
+      ],
+      "calculations": [
+        {
+          "id": "total_items",
+          "label": "Total items",
+          "operation": "count"
+        },
+        {
+          "field": "expiry_date",
+          "id": "expiring_count",
+          "label": "Expiring within 7 days",
+          "operation": "countWhere",
+          "operator": "thisWeek"
+        },
+        {
+          "field": "expiry_date",
+          "id": "expired_count",
+          "label": "Expired",
+          "operation": "countWhere",
+          "operator": "today"
+        },
+        {
+          "field": "status",
+          "id": "status_stocked_count",
+          "label": "Stocked",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Stocked"
+        },
+        {
+          "field": "status",
+          "id": "status_running_low_count",
+          "label": "Running low",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Running low"
+        },
+        {
+          "field": "status",
+          "id": "status_expiring_soon_count",
+          "label": "Expiring soon",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Expiring soon"
+        },
+        {
+          "field": "status",
+          "id": "status_expired_count",
+          "label": "Expired",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Expired"
+        }
+      ],
+      "capabilities": {
+        "calculate": true,
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "filter": true,
+        "group": true,
+        "search": true,
+        "sort": true,
+        "transition": true
+      },
+      "charts": [],
+      "customRequirements": [],
+      "entities": [
+        {
+          "fields": [
+            {
+              "id": "name",
+              "label": "Item name",
+              "placeholder": "e.g. Olive oil",
+              "required": true,
+              "type": "text"
+            },
+            {
+              "allowCustom": true,
+              "id": "category",
+              "label": "Category",
+              "options": [
+                "Pantry staples",
+                "Spices & herbs",
+                "Baking",
+                "Canned goods",
+                "Snacks",
+                "Beverages",
+                "Dairy & eggs",
+                "Frozen",
+                "Other"
+              ],
+              "required": false,
+              "type": "category"
+            },
+            {
+              "id": "quantity",
+              "label": "Quantity",
+              "min": 0,
+              "placeholder": "e.g. 3",
+              "required": true,
+              "type": "number"
+            },
+            {
+              "allowCustom": true,
+              "id": "unit",
+              "label": "Unit",
+              "options": [
+                "units",
+                "bottles",
+                "cans",
+                "bags",
+                "boxes",
+                "packs",
+                "tubs",
+                "jars"
+              ],
+              "required": false,
+              "type": "category"
+            },
+            {
+              "id": "low_threshold",
+              "label": "Low when at or below",
+              "min": 0,
+              "placeholder": "e.g. 1",
+              "required": false,
+              "type": "number"
+            },
+            {
+              "id": "expiry_date",
+              "label": "Expiry date",
+              "required": false,
+              "type": "date"
+            },
+            {
+              "derive": {
+                "buckets": {
+                  "ok": "Stocked",
+                  "overdue": "Expired",
+                  "soon": "Expiring soon"
+                },
+                "dateField": "expiry_date",
+                "kind": "dateThreshold",
+                "thresholdDays": 7
+              },
+              "id": "status",
+              "label": "Status",
+              "options": [
+                "Stocked",
+                "Running low",
+                "Expiring soon",
+                "Expired"
+              ],
+              "required": false,
+              "type": "status"
+            },
+            {
+              "id": "notes",
+              "label": "Notes",
+              "placeholder": "Brand, size, where it's stored…",
+              "required": false,
+              "type": "longText"
+            }
+          ],
+          "name": "item",
+          "plural": "items",
+          "primaryField": "name"
+        }
+      ],
+      "excluded": [
+        "Shopping list generation",
+        "Barcode scanning",
+        "Multi-user sharing",
+        "Price tracking"
+      ],
+      "filters": [
+        {
+          "field": "quantity",
+          "id": "running_low",
+          "label": "Running low",
+          "operator": "truthy"
+        },
+        {
+          "field": "expiry_date",
+          "id": "expiring_soon",
+          "label": "Expiring soon (7 days)",
+          "operator": "thisWeek"
+        },
+        {
+          "field": "expiry_date",
+          "id": "expired",
+          "label": "Expired",
+          "operator": "today"
+        },
+        {
+          "field": "status",
+          "id": "status_stocked",
+          "label": "Stocked",
+          "operator": "equals",
+          "value": "Stocked"
+        },
+        {
+          "field": "status",
+          "id": "status_expiring_soon",
+          "label": "Expiring soon",
+          "operator": "equals",
+          "value": "Expiring soon"
+        }
+      ],
+      "persistence": {
+        "strategy": "localStorage"
+      },
+      "product": {
+        "accent": "#5b5bd6",
+        "description": "Track pantry items, quantities, and expiry dates to quickly see what's running low or expiring soon.",
+        "design": {
+          "contrast": "balanced",
+          "density": "comfortable",
+          "motion": "subtle",
+          "tone": "warm"
+        },
+        "genome": "tracker",
+        "name": "Pantry Keeper",
+        "tagline": "Know what's in your pantry before you shop",
+        "targetUser": "Home cooks who want to avoid buying duplicates"
+      },
+      "quickActions": [],
+      "version": "1"
+    },
+    "product.config.json": {
+      "accent": "#7c2d12",
+      "capabilities": {
+        "create": true,
+        "delete": true,
+        "edit": true,
+        "group": true,
+        "search": true,
+        "sort": true
+      },
+      "charts": [],
+      "collectionLabel": "Collection",
+      "design": {
+        "colors": {
+          "accent": "#7c2d12",
+          "accentText": "#ffffff",
+          "border": "#ddd0bf",
+          "canvas": "#f7f3ee",
+          "danger": "#a52a2a",
+          "ink": "#2f231a",
+          "muted": "#6f6153",
+          "surface": "#fffdf9",
+          "surfaceAlt": "#efe5d8",
+          "topbar": "#2a1d13",
+          "topbarText": "#fdf8f2"
+        },
+        "contrast": "balanced",
+        "density": "comfortable",
+        "id": "progress-workbench-warm-b",
+        "layout": "progress-workbench",
+        "layoutLabel": "Progress workbench",
+        "motion": "subtle",
+        "shape": {
+          "cardRadius": 4,
+          "panelRadius": 6
+        },
+        "spacing": {
+          "gap": 14,
+          "page": 52,
+          "panel": 22
+        },
+        "tone": "warm",
+        "typography": {
+          "body": "'Avenir Next', ui-sans-serif, system-ui, sans-serif",
+          "display": "Georgia, ui-serif, serif"
+        },
+        "variant": "b"
+      },
+      "entityName": "item",
+      "entityNamePlural": "items",
+      "eyebrow": "Tracker",
+      "fields": [
+        {
+          "key": "name",
+          "label": "Item name",
+          "placeholder": "e.g. Olive oil",
+          "required": true,
+          "type": "text"
+        },
+        {
+          "allowCustom": true,
+          "key": "category",
+          "label": "Category",
+          "options": [
+            "Pantry staples",
+            "Spices & herbs",
+            "Baking",
+            "Canned goods",
+            "Snacks",
+            "Beverages",
+            "Dairy & eggs",
+            "Frozen",
+            "Other"
+          ],
+          "required": false,
+          "type": "category"
+        },
+        {
+          "key": "quantity",
+          "label": "Quantity",
+          "min": 0,
+          "placeholder": "e.g. 3",
+          "required": true,
+          "type": "number"
+        },
+        {
+          "allowCustom": true,
+          "key": "unit",
+          "label": "Unit",
+          "options": [
+            "units",
+            "bottles",
+            "cans",
+            "bags",
+            "boxes",
+            "packs",
+            "tubs",
+            "jars"
+          ],
+          "required": false,
+          "type": "category"
+        },
+        {
+          "key": "low_threshold",
+          "label": "Low when at or below",
+          "min": 0,
+          "placeholder": "e.g. 1",
+          "required": false,
+          "type": "number"
+        },
+        {
+          "key": "expiry_date",
+          "label": "Expiry date",
+          "required": false,
+          "type": "date"
+        },
+        {
+          "derive": {
+            "buckets": {
+              "ok": "Stocked",
+              "overdue": "Expired",
+              "soon": "Expiring soon"
+            },
+            "dateField": "expiry_date",
+            "kind": "dateThreshold",
+            "thresholdDays": 7
+          },
+          "key": "status",
+          "label": "Status",
+          "options": [
+            "Stocked",
+            "Running low",
+            "Expiring soon",
+            "Expired"
+          ],
+          "required": false,
+          "type": "status"
+        },
+        {
+          "key": "notes",
+          "label": "Notes",
+          "placeholder": "Brand, size, where it's stored…",
+          "required": false,
+          "type": "longText"
+        }
+      ],
+      "filters": [
+        {
+          "field": "quantity",
+          "id": "running_low",
+          "label": "Running low",
+          "operator": "truthy"
+        },
+        {
+          "field": "expiry_date",
+          "id": "expiring_soon",
+          "label": "Expiring soon (7 days)",
+          "operator": "thisWeek"
+        },
+        {
+          "field": "expiry_date",
+          "id": "expired",
+          "label": "Expired",
+          "operator": "today"
+        },
+        {
+          "field": "status",
+          "id": "status_stocked",
+          "label": "Stocked",
+          "operator": "equals",
+          "value": "Stocked"
+        },
+        {
+          "field": "status",
+          "id": "status_expiring_soon",
+          "label": "Expiring soon",
+          "operator": "equals",
+          "value": "Expiring soon"
+        }
+      ],
+      "genome": "tracker",
+      "name": "Pantry Keeper",
+      "primaryField": "name",
+      "quickActions": [],
+      "searchableFields": [
+        "name",
+        "category",
+        "unit",
+        "status",
+        "notes"
+      ],
+      "secondaryFields": [
+        "category",
+        "quantity",
+        "unit",
+        "low_threshold"
+      ],
+      "sorts": [
+        {
+          "id": "updated",
+          "label": "Recently updated"
+        },
+        {
+          "id": "created",
+          "label": "Oldest first"
+        },
+        {
+          "direction": "asc",
+          "field": "name",
+          "id": "by_name",
+          "label": "By item name",
+          "type": "text"
+        },
+        {
+          "direction": "desc",
+          "field": "expiry_date",
+          "id": "by_expiry_date",
+          "label": "By expiry date",
+          "type": "date"
+        },
+        {
+          "direction": "desc",
+          "field": "quantity",
+          "id": "by_quantity",
+          "label": "By quantity",
+          "type": "number"
+        }
+      ],
+      "summaries": [
+        {
+          "id": "total_items",
+          "label": "Total items",
+          "operation": "count"
+        },
+        {
+          "field": "expiry_date",
+          "id": "expiring_count",
+          "label": "Expiring within 7 days",
+          "operation": "countWhere",
+          "operator": "thisWeek"
+        },
+        {
+          "field": "expiry_date",
+          "id": "expired_count",
+          "label": "Expired",
+          "operation": "countWhere",
+          "operator": "today"
+        },
+        {
+          "field": "status",
+          "id": "status_stocked_count",
+          "label": "Stocked",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Stocked"
+        },
+        {
+          "field": "status",
+          "id": "status_running_low_count",
+          "label": "Running low",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Running low"
+        },
+        {
+          "field": "status",
+          "id": "status_expiring_soon_count",
+          "label": "Expiring soon",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Expiring soon"
+        },
+        {
+          "field": "status",
+          "id": "status_expired_count",
+          "label": "Expired",
+          "operation": "countWhere",
+          "operator": "equals",
+          "value": "Expired"
+        }
+      ],
+      "tagline": "Know what's in your pantry before you shop"
+    },
+    "summary.md": "# Pantry Keeper\n\nTrack pantry items, quantities, and expiry dates to quickly see what's running low or expiring soon.\n\n- **Target user:** Home cooks who want to avoid buying duplicates\n- **Build route:** compile\n- **Genome:** tracker\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Verified journeys\n\n- Application loads and shows a useful empty state\n- Invalid item input shows validation without crashing\n- User can add a complete item and see it in items\n- items survive a page refresh\n- User can edit an existing item\n- User can search items\n- User can narrow items with a meaningful filter\n- items are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing item\n"
+  },
+  "journeys": [
+    {
+      "description": "Application loads and shows a useful empty state",
+      "id": "load"
+    },
+    {
+      "description": "Invalid item input shows validation without crashing",
+      "id": "validation"
+    },
+    {
+      "description": "User can add a complete item and see it in items",
+      "id": "create"
+    },
+    {
+      "description": "items survive a page refresh",
+      "id": "persistence"
+    },
+    {
+      "description": "User can edit an existing item",
+      "id": "edit"
+    },
+    {
+      "description": "User can search items",
+      "id": "search"
+    },
+    {
+      "description": "User can narrow items with a meaningful filter",
+      "id": "filter"
+    },
+    {
+      "description": "items are grouped by a meaningful category or status",
+      "id": "group"
+    },
+    {
+      "description": "Requested derived values update from persisted records",
+      "id": "calculate"
+    },
+    {
+      "description": "User can delete an existing item",
+      "id": "delete"
+    }
+  ],
+  "route": {
+    "genome": "tracker",
+    "reason": "Every required behavior maps to the deterministic runtime.",
+    "route": "compile",
+    "supported": [
+      "create",
+      "edit",
+      "delete",
+      "search",
+      "filter",
+      "sort",
+      "group",
+      "transition",
+      "calculate"
+    ],
+    "unsupported": []
+  }
+}

@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { defineTool, type ExecResult, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
+import { Type, IsOptional, RemoveOptional, type TObject, type TSchema } from "typebox";
 import { classifyCapabilities } from "../compiler/capability-map.js";
 import { writeCompiledProduct } from "../compiler/compile.js";
 import { normalizeProductIR } from "../ir/normalize.js";
@@ -49,7 +49,7 @@ const predicateSchema = {
   operator: Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy", "today", "thisWeek", "thisMonth"], description: "today/thisWeek/thisMonth filter a date field against the current date and take no value" }),
   value: Type.Optional(Type.String()),
 };
-export const productIRSchema = Type.Object({
+const strictProductIRSchema = Type.Object({
   version: Type.String({ enum: ["1"] }),
   product: Type.Object({
     name: Type.String(),
@@ -90,11 +90,102 @@ export const productIRSchema = Type.Object({
     xField: Type.String({ description: "id of the date or datetime field for the x axis" }),
     yField: Type.String({ description: "id of the number or currency field plotted on the y axis" }),
   }), { maxItems: 3, description: "Trend charts the runtime renders deterministically: a number plotted over time. Use this — never a customRequirement — when the user wants to see a value graphed or track progress over time (e.g. weight over date). Requires a date field and a number/currency field on the entity." })),
+  quickActions: Type.Optional(Type.Array(Type.Object({
+    id: Type.String(),
+    label: Type.String({ description: "the button caption, e.g. \"Done!\", \"Mark paid\", \"Returned\"" }),
+    field: Type.String({ description: "id of the field this action mutates" }),
+    set: Type.String({ enum: ["today", "clear"], description: "today = stamp a date field to the current date; clear = empty the field" }),
+  }), { maxItems: 4, description: "One-tap per-record buttons that set a field to a computed value. Use this — never a customRequirement — for a \"mark done today\" / \"mark paid\" / \"returned\" button that stamps a date field to today or clears a field." })),
   persistence: Type.Optional(Type.Object({ strategy: Type.String({ enum: ["localStorage"] }) })),
   assumptions: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
   excluded: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
   customRequirements: Type.Optional(Type.Array(Type.String(), { maxItems: 8, description: "Only core behavior not expressible as fields, CRUD, search, filters, states, or calculations" })),
 });
+
+// Weaker models sometimes emit a nested object/array argument as a JSON *string*
+// (e.g. `entities: "[{...}]"`) instead of real JSON. pi-ai validates tool
+// arguments against this schema before the tool runs and rejects a stringified
+// container, sending the model into a retry loop it cannot escape. Accept a
+// string alternative for every object/array property so the call passes
+// validation; execute() then parses those strings back with coerceStringifiedIR
+// and the strict, hand-written validateProductIR enforces correctness (returning
+// a model-visible error if the parsed IR is still wrong). Scalar properties like
+// `version` keep their exact schema.
+function stringTolerant(schema: TObject): TObject {
+  const properties: Record<string, TSchema> = {};
+  for (const [key, value] of Object.entries(schema.properties)) {
+    const optional = IsOptional(value);
+    const base = optional ? (RemoveOptional(value) as TSchema) : value;
+    const kind = (base as { type?: string }).type;
+    if (kind === "object" || kind === "array") {
+      const union = Type.Union([base, Type.String({ description: "or a JSON string of the same structure" })]);
+      properties[key] = optional ? Type.Optional(union) : union;
+    } else {
+      properties[key] = value;
+    }
+  }
+  return Type.Object(properties);
+}
+
+// The lenient schema advertised to the model as compile_product's parameters.
+export const productIRSchema = stringTolerant(strictProductIRSchema);
+
+// Index just past the first balanced top-level JSON value in `s`, or -1. String
+// aware (brackets inside quotes don't count) so trailing garbage after a complete
+// value — the extra `}` weaker models sometimes append — can be sliced off.
+function balancedPrefixEnd(s: string): number {
+  let depth = 0, inString = false, escaped = false, started = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; started = true; }
+    else if (ch === "[" || ch === "{") { depth++; started = true; }
+    else if (ch === "]" || ch === "}") { depth--; if (started && depth === 0) return i + 1; }
+  }
+  return -1;
+}
+
+// Parse a value that arrived as a JSON string back into JSON. Only strings that
+// look like a JSON object/array are touched, so a genuine text value is left
+// alone. Falls back to the first balanced prefix when a model appends trailing
+// junk (e.g. a stray closing brace) that makes a plain JSON.parse throw.
+function parseIfJsonString(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try { return JSON.parse(trimmed); } catch { /* fall through to best-effort repair */ }
+  const end = balancedPrefixEnd(trimmed);
+  if (end > 0) { try { return JSON.parse(trimmed.slice(0, end)); } catch { /* give up */ } }
+  return value;
+}
+
+// Undo a model's over-stringification before validation: parse any top-level
+// container that arrived as a JSON string, and repair the common nested case
+// where `entities`, an entity, or its `fields` were each stringified.
+export function coerceStringifiedIR(params: unknown): unknown {
+  if (typeof params !== "object" || params === null) return params;
+  const out: Record<string, unknown> = { ...(params as Record<string, unknown>) };
+  for (const key of Object.keys(out)) out[key] = parseIfJsonString(out[key]);
+  if (Array.isArray(out.entities)) {
+    out.entities = out.entities.map((entity) => {
+      const parsed = parseIfJsonString(entity);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const record = parsed as Record<string, unknown>;
+        if (typeof record.fields === "string") {
+          const fields = parseIfJsonString(record.fields);
+          record.fields = Array.isArray(fields) ? fields.map(parseIfJsonString) : fields;
+        }
+      }
+      return parsed;
+    });
+  }
+  return out;
+}
 
 interface CompilerState {
   route: RouteDecision;
@@ -173,6 +264,7 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
       "A status the user sets by hand (marking an item Lent then Returned, a bill Paid, a task Done) is a plain status field with `transition` enabled — the user edits it directly. Never add a customRequirement to auto-flip a status from whether another field is filled in or cleared; that coupling is ordinary editing, and a manually-set status field with its options covers it.",
       "When the idea asks to see a number graphed or tracked over time (a weight chart, spend trend, progress over dates), add a `charts` entry (type line) with the date field as xField and the number/currency field as yField — never a customRequirement. The runtime renders it deterministically.",
       "For a per-record number computed by arithmetic from other number/currency fields (remaining = target − current, monthly = price ÷ 12, one-rep-max = weight × (1 + reps ÷ 30)), add a number/currency field with `derive` kind formula and an `expression` over the other field ids — never a customRequirement. The runtime evaluates it live.",
+      "For a one-tap button on each record that stamps a date field to today (a \"Done!\" / \"Mark paid\" / \"Watered\" button) or clears a field (a \"Returned\" button that empties a borrower), add a `quickActions` entry with the target field id and set today/clear — never a customRequirement. The runtime renders the button and saves the change.",
       "For ambiguous categories, prefer useful suggestions with allowCustom true.",
       "Use visibleWhen for a field that only applies when another field has one exact selected value.",
       "Use product.design only when the idea clearly signals a tone, density, contrast, or motion preference; never generate colors, fonts, CSS, or layout instructions.",
@@ -189,7 +281,7 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
       onUpdate?.({ content: [{ type: "text", text: "Validating Product IR and selecting a build route…" }], details: {} });
       const trace = new TraceWriter(appRoot);
       await trace.reset();
-      const ir = normalizeProductIR(validateProductIR(params));
+      const ir = normalizeProductIR(validateProductIR(coerceStringifiedIR(params)));
       await trace.record({ agent: "product", action: "interpret_idea", status: "success", genome: ir.product.genome, entities: ir.entities.length });
       await trace.record({ agent: "product", action: "select_scope", status: "success", included: Object.values(ir.capabilities).filter(Boolean).length, excluded: ir.excluded.length });
       const route = classifyCapabilities(ir);

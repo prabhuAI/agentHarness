@@ -99,6 +99,15 @@ export interface DesignConfig {
   spacing: { page: number; panel: number; gap: number };
 }
 
+// A one-tap per-record button that mutates one field to a computed value:
+// "today" stamps a date field to the current date; "clear" empties the field.
+export interface QuickActionConfig {
+  id: string;
+  label: string;
+  field: string;
+  set: "today" | "clear";
+}
+
 export interface ProductConfig {
   name: string;
   tagline: string;
@@ -116,6 +125,7 @@ export interface ProductConfig {
   filters: FilterPreset[];
   summaries: SummaryConfig[];
   charts: ChartConfig[];
+  quickActions: QuickActionConfig[];
   sorts: SortOption[];
   capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean };
 }
@@ -149,5 +159,6 @@ export const productConfig: ProductConfig = {
   ...parsedConfig,
   design: parsedConfig.design ?? fallbackDesign,
   charts: parsedConfig.charts ?? [],
+  quickActions: parsedConfig.quickActions ?? [],
   sorts: parsedConfig.sorts && parsedConfig.sorts.length > 0 ? parsedConfig.sorts : DEFAULT_SORTS,
 };

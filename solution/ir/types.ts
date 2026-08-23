@@ -141,6 +141,17 @@ export interface ProductCalculation {
   sumField?: string;
 }
 
+// A one-tap action on each record that mutates one field to a computed value —
+// the deterministic form of the recurring "Done!"/"Mark paid"/"Returned" button
+// that would otherwise force the hybrid (LLM) route. `set` is the mutation:
+// "today" stamps a date field to the current date; "clear" empties the field.
+export interface ProductQuickAction {
+  id: string;
+  label: string;
+  field: string;
+  set: "today" | "clear";
+}
+
 export interface ProductCapabilities {
   create: boolean;
   edit: boolean;
@@ -169,6 +180,7 @@ export interface ProductIR {
   filters: ProductFilter[];
   calculations: ProductCalculation[];
   charts: ProductChart[];
+  quickActions: ProductQuickAction[];
   persistence: { strategy: "localStorage" };
   assumptions: string[];
   excluded: string[];

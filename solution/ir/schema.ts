@@ -107,6 +107,14 @@ export function validateProductIR(value: unknown): ProductIR {
   // axes do not resolve to a date and a numeric field, so validate only rejects
   // a charts value of the wrong top-level type.
   if (value.charts !== undefined && !Array.isArray(value.charts)) issues.push("charts must be an array");
+  // quickActions are recoverable: normalizeProductIR drops any whose field is
+  // missing or whose set/field-type combination is invalid, so validate only
+  // rejects a quickActions value of the wrong top-level type or a mistyped entry.
+  if (value.quickActions !== undefined && !Array.isArray(value.quickActions)) issues.push("quickActions must be an array");
+  else if (Array.isArray(value.quickActions)) value.quickActions.forEach((action, index) => {
+    if (!isRecord(action) || typeof action.id !== "string" || typeof action.label !== "string" || typeof action.field !== "string") issues.push(`quickActions[${index}] is invalid`);
+    else if (action.set !== "today" && action.set !== "clear") issues.push(`quickActions[${index}].set must be today or clear`);
+  });
   for (const key of ["assumptions", "excluded", "customRequirements"] as const) {
     if (value[key] !== undefined && !strings(value[key])) issues.push(`${key} must be an array of strings`);
   }

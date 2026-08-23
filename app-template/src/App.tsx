@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { type ChartConfig, FieldConfig, type PredicateOperator, productConfig, type SummaryConfig } from "./product-config.js";
+import { type ChartConfig, FieldConfig, type PredicateOperator, productConfig, type QuickActionConfig, type SummaryConfig } from "./product-config.js";
 import { evaluateFormula } from "./formula.js";
 import { createRepository, EntityRecord, RecordValue } from "./repository.js";
 import {
@@ -445,6 +445,25 @@ export function App() {
     }
   };
 
+  // A quick action mutates one field on a record and saves immediately, no dialog:
+  // "today" stamps a date/datetime field to now; "clear" empties the field.
+  const runQuickAction = (record: EntityRecord, action: QuickActionConfig) => {
+    const field = productConfig.fields.find((candidate) => candidate.key === action.field);
+    let next: RecordValue = "";
+    if (action.set === "today") {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const day = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      next = field?.type === "datetime" ? `${day}T${pad(now.getHours())}:${pad(now.getMinutes())}` : day;
+    }
+    try {
+      repository.update(record.id, { ...record.values, [action.field]: next });
+      setRecords(repository.list());
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "The update could not be saved.");
+    }
+  };
+
   const undoDelete = () => {
     if (!undo) return;
     try { repository.restore(undo); setRecords(repository.list()); setNotice(`${entityLabel} restored.`); }
@@ -480,7 +499,7 @@ export function App() {
 
   const recordCard = (record: EntityRecord) => <article className="card" key={record.id}>
     <div className="card-top"><h3>{displayValue(productConfig.fields.find((field) => field.key === productConfig.primaryField)!, record.values[productConfig.primaryField])}</h3>
-      <div className="actions">{productConfig.capabilities.edit && <button onClick={() => openEdit(record)}>Edit</button>}{productConfig.capabilities.delete && <button className="danger" onClick={() => remove(record)}>Delete</button>}</div></div>
+      <div className="actions">{productConfig.quickActions.map((action) => <button key={action.id} type="button" className="quick-action" onClick={() => runQuickAction(record, action)}>{action.label}</button>)}{productConfig.capabilities.edit && <button onClick={() => openEdit(record)}>Edit</button>}{productConfig.capabilities.delete && <button className="danger" onClick={() => remove(record)}>Delete</button>}</div></div>
     <dl>{productConfig.secondaryFields.map((key) => { const field = productConfig.fields.find((candidate) => candidate.key === key); return field && isFieldVisible(field, record.values) ? <div key={key}><dt>{field.label}</dt><dd className={field.type === "status" ? "badge" : ""}>{displayValue(field, record.values[key])}</dd></div> : null; })}</dl>
   </article>;
 

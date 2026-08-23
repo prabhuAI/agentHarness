@@ -1,0 +1,185 @@
+{
+  "idea": "I keep buying things I already have at home. I want to add whats in my pantry, how many I have, and when it expires. I mostly want to quickly see whats running low or expiring soon.",
+  "ir": {
+    "version": "1",
+    "product": {
+      "name": "Pantry Keeper",
+      "description": "Track pantry items, quantities, and expiry dates to quickly see what's running low or expiring soon.",
+      "tagline": "Know what's in your pantry before you shop",
+      "targetUser": "Home cooks who want to avoid buying duplicates",
+      "genome": "tracker",
+      "design": {
+        "tone": "warm",
+        "density": "comfortable",
+        "contrast": "balanced",
+        "motion": "subtle"
+      }
+    },
+    "entities": [
+      {
+        "name": "item",
+        "plural": "items",
+        "primaryField": "name",
+        "fields": [
+          {
+            "id": "name",
+            "label": "Item name",
+            "type": "text",
+            "required": true,
+            "placeholder": "e.g. Olive oil"
+          },
+          {
+            "id": "category",
+            "label": "Category",
+            "type": "category",
+            "options": [
+              "Pantry staples",
+              "Spices & herbs",
+              "Baking",
+              "Canned goods",
+              "Snacks",
+              "Beverages",
+              "Dairy & eggs",
+              "Frozen",
+              "Other"
+            ],
+            "allowCustom": true
+          },
+          {
+            "id": "quantity",
+            "label": "Quantity",
+            "type": "number",
+            "required": true,
+            "min": 0,
+            "placeholder": "e.g. 3"
+          },
+          {
+            "id": "unit",
+            "label": "Unit",
+            "type": "category",
+            "options": [
+              "units",
+              "bottles",
+              "cans",
+              "bags",
+              "boxes",
+              "packs",
+              "tubs",
+              "jars"
+            ],
+            "allowCustom": true
+          },
+          {
+            "id": "low_threshold",
+            "label": "Low when at or below",
+            "type": "number",
+            "min": 0,
+            "placeholder": "e.g. 1"
+          },
+          {
+            "id": "expiry_date",
+            "label": "Expiry date",
+            "type": "date"
+          },
+          {
+            "id": "status",
+            "label": "Status",
+            "type": "status",
+            "options": [
+              "Stocked",
+              "Running low",
+              "Expiring soon",
+              "Expired"
+            ],
+            "derive": {
+              "kind": "dateThreshold",
+              "dateField": "expiry_date",
+              "thresholdDays": 7,
+              "soonWithinDays": 0,
+              "buckets": {
+                "overdue": "Expired",
+                "soon": "Expiring soon",
+                "ok": "Stocked"
+              }
+            }
+          },
+          {
+            "id": "notes",
+            "label": "Notes",
+            "type": "longText",
+            "placeholder": "Brand, size, where it's stored…"
+          }
+        ]
+      }
+    ],
+    "capabilities": {
+      "create": true,
+      "edit": true,
+      "delete": true,
+      "search": true,
+      "filter": true,
+      "sort": true,
+      "group": true,
+      "transition": true,
+      "calculate": true
+    },
+    "filters": [
+      {
+        "id": "running_low",
+        "label": "Running low",
+        "field": "quantity",
+        "operator": "truthy"
+      },
+      {
+        "id": "expiring_soon",
+        "label": "Expiring soon (7 days)",
+        "field": "expiry_date",
+        "operator": "thisWeek"
+      },
+      {
+        "id": "expired",
+        "label": "Expired",
+        "field": "expiry_date",
+        "operator": "today"
+      }
+    ],
+    "calculations": [
+      {
+        "id": "total_items",
+        "label": "Total items",
+        "operation": "count"
+      },
+      {
+        "id": "expiring_count",
+        "label": "Expiring within 7 days",
+        "operation": "countWhere",
+        "field": "expiry_date",
+        "operator": "thisWeek"
+      },
+      {
+        "id": "expired_count",
+        "label": "Expired",
+        "operation": "countWhere",
+        "field": "expiry_date",
+        "operator": "today"
+      }
+    ],
+    "charts": [],
+    "persistence": {
+      "strategy": "localStorage"
+    },
+    "assumptions": [
+      "'Running low' is derived from quantity vs. the per-item low threshold",
+      "Expiring soon means within 7 days of today; expired means past the expiry date",
+      "Single local user with browser storage; no sync or accounts",
+      "No shopping list or purchase history — only current pantry state"
+    ],
+    "excluded": [
+      "Shopping list generation",
+      "Barcode scanning",
+      "Multi-user sharing",
+      "Price tracking"
+    ],
+    "customRequirements": []
+  }
+}

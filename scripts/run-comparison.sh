@@ -28,11 +28,17 @@ SUMMARY_CSV="$OUT_DIR/summary.csv"
 # slug | provider | model-id
 MODELS=(
   "glm52|berget|zai-org/GLM-5.2"
-  "qwen38|berget|Qwen/Qwen3.8-27B"
+  "qwen38|berget|Qwen/Qwen3.8-27B-FP8"
 )
 
 # Optional filter: comma-separated list of model slugs to include (e.g. MODELS_ONLY=glm52).
 MODEL_SLUG_FILTER="${MODELS_ONLY:-}"
+
+# Fail-fast wall-clock cap per run (ms). A weak model that emits a malformed IR
+# can otherwise burn the full default (15 min) hand-repairing before it is killed.
+# Capping at 4 min keeps a doomed run cheap without cutting off a healthy compile.
+# Override by exporting CHALLENGE_TIMEOUT_MS before invoking this script.
+SWEEP_TIMEOUT_MS="${CHALLENGE_TIMEOUT_MS:-240000}"
 
 mkdir -p "$OUT_DIR"
 
@@ -57,7 +63,7 @@ if [[ ! -f "$SUMMARY_CSV" ]]; then
   echo "timestamp,model_slug,provider,model_id,idea,status,model_calls,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,reasoning_tokens,total_tokens,weighted_token_expenditure,cost_total,pi_exit_code,run_dir" > "$SUMMARY_CSV"
 fi
 
-echo "Ideas: ${#IDEA_FILES[@]}   Models: ${#MODELS[@]}"
+echo "Ideas: ${#IDEA_FILES[@]}   Models: ${#MODELS[@]}   Per-run timeout: $((SWEEP_TIMEOUT_MS / 1000))s"
 echo "Writing outputs under $OUT_DIR/ and rows to $SUMMARY_CSV"
 echo
 
@@ -78,14 +84,14 @@ for entry in "${MODELS[@]}"; do
 
     ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-    CHALLENGE_PROVIDER="$provider" CHALLENGE_MODEL="$model_id" \
+    CHALLENGE_PROVIDER="$provider" CHALLENGE_MODEL="$model_id" CHALLENGE_TIMEOUT_MS="$SWEEP_TIMEOUT_MS" \
       npm run challenge -- --idea-file "$idea_file" \
       > "$run_dir/run.log" 2>&1
     exit_code=$?
     echo "   challenge exit code: $exit_code (full log: $run_dir/run.log)"
 
     # Copy the run's outputs out before the next run overwrites them.
-    for f in result.json summary.md idea_spec.json trace.jsonl; do
+    for f in result.json summary.md idea_spec.json product-ir.json trace.jsonl; do
       [[ -f "output/app/$f" ]] && cp "output/app/$f" "$run_dir/$f"
     done
     # Fallback for result.json (root copy) if app copy is missing.

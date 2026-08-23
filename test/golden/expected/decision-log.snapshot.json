@@ -134,6 +134,7 @@
         "tagline": "Decide, record, revisit.",
         "targetUser": "Small project teams"
       },
+      "quickActions": [],
       "version": "1"
     },
     "product.config.json": {
@@ -237,6 +238,7 @@
       "genome": "workflow",
       "name": "Decision Log",
       "primaryField": "title",
+      "quickActions": [],
       "searchableFields": [
         "title",
         "owner",

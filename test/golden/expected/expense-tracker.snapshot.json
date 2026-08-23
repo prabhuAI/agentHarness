@@ -165,6 +165,7 @@
         "tagline": "",
         "targetUser": "A single person tracking personal spending on one laptop"
       },
+      "quickActions": [],
       "version": "1"
     },
     "product.config.json": {
@@ -283,6 +284,7 @@
       "genome": "tracker",
       "name": "Expense Tracker",
       "primaryField": "description",
+      "quickActions": [],
       "searchableFields": [
         "description",
         "category"

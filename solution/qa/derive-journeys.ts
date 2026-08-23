@@ -21,5 +21,6 @@ export function deriveJourneys(ir: NormalizedProductIR): DerivedJourney[] {
   if (ir.capabilities.group && entity.fields.some((field) => field.type === "category" || field.type === "status")) journeys.push({ id: "group", description: `${entity.plural} are grouped by a meaningful category or status` });
   if (ir.capabilities.calculate && ir.calculations.length > 0) journeys.push({ id: "calculate", description: "Requested derived values update from persisted records" });
   if (ir.capabilities.delete) journeys.push({ id: "delete", description: `User can delete an existing ${entity.name}` });
+  if (ir.quickActions.length > 0) journeys.push({ id: "quick_action", description: `A one-tap action updates a ${entity.name} field and persists` });
   return journeys;
 }

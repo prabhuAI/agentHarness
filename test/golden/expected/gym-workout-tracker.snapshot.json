@@ -206,6 +206,7 @@
         "tagline": "Log it, lift it, track it.",
         "targetUser": "Individuals training at the gym"
       },
+      "quickActions": [],
       "version": "1"
     },
     "product.config.json": {
@@ -347,6 +348,7 @@
       "genome": "tracker",
       "name": "Gym Log",
       "primaryField": "title",
+      "quickActions": [],
       "searchableFields": [
         "title",
         "focus",
