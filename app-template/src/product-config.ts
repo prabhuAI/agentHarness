@@ -5,11 +5,12 @@ export type FieldType =
   | "boolean" | "category" | "status" | "email" | "url";
 export type PredicateOperator = "equals" | "nonEmpty" | "empty" | "truthy" | "falsy" | "today" | "thisWeek" | "thisMonth";
 
-// A value computed at read time from other fields plus today's date, never
-// entered by the user. `dateThreshold` buckets a record by how its elapsed days
-// since `dateField` compare to a threshold (`thresholdField`'s value, or a fixed
-// `thresholdDays`), mapping to the field's own options via `buckets`.
-export interface DerivedFieldSpec {
+// A value computed at read time from other fields, never entered by the user.
+// `dateThreshold` buckets a record by how its elapsed days since `dateField`
+// compare to a threshold (`thresholdField`'s value, or a fixed `thresholdDays`),
+// mapping to the field's own options via `buckets`. `formula` computes a number
+// by evaluating `expression` (arithmetic over other number/currency field ids).
+export interface DateThresholdDerive {
   kind: "dateThreshold";
   dateField: string;
   thresholdField?: string;
@@ -17,6 +18,11 @@ export interface DerivedFieldSpec {
   soonWithinDays?: number;
   buckets: { overdue: string; soon: string; ok: string };
 }
+export interface FormulaDerive {
+  kind: "formula";
+  expression: string;
+}
+export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive;
 
 export interface FieldConfig {
   key: string;
@@ -52,6 +58,16 @@ export interface SummaryConfig {
   value?: string;
   // For sumWhere: the numeric field summed over records matching the predicate.
   sumField?: string;
+}
+
+// A deterministic trend chart: the numeric `yField` plotted against the date
+// `xField`, one point per record, ordered chronologically.
+export interface ChartConfig {
+  id: string;
+  label: string;
+  type: "line";
+  xField: string;
+  yField: string;
 }
 
 // A single option in the list's sort control. `updated`/`created` are the two
@@ -99,6 +115,7 @@ export interface ProductConfig {
   searchableFields: string[];
   filters: FilterPreset[];
   summaries: SummaryConfig[];
+  charts: ChartConfig[];
   sorts: SortOption[];
   capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean };
 }
@@ -131,5 +148,6 @@ const fallbackDesign: DesignConfig = {
 export const productConfig: ProductConfig = {
   ...parsedConfig,
   design: parsedConfig.design ?? fallbackDesign,
+  charts: parsedConfig.charts ?? [],
   sorts: parsedConfig.sorts && parsedConfig.sorts.length > 0 ? parsedConfig.sorts : DEFAULT_SORTS,
 };

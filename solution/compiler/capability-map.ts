@@ -8,6 +8,9 @@ export function classifyCapabilities(ir: NormalizedProductIR): RouteDecision {
   if (ir.entities.length > 1) unsupported.push("multiple editable entities");
   unsupported.push(...ir.customRequirements);
   const supported = requested.filter((name) => RUNTIME_CAPABILITIES.has(name));
+  // Trend charts are a deterministic runtime feature, not a custom requirement,
+  // so they count as supported and never push the idea off the compile route.
+  if (ir.charts.length > 0) supported.push("chart");
   if (unsupported.length === 0) return {
     route: "compile", genome: ir.product.genome, supported, unsupported: [],
     reason: "Every required behavior maps to the deterministic runtime.",

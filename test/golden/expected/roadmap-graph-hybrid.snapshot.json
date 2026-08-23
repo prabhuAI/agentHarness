@@ -67,6 +67,7 @@
         "sort": true,
         "transition": true
       },
+      "charts": [],
       "customRequirements": [
         "Render an interactive dependency graph between initiatives"
       ],
@@ -158,6 +159,7 @@
         "search": true,
         "sort": true
       },
+      "charts": [],
       "collectionLabel": "Pipeline",
       "design": {
         "colors": {

@@ -71,8 +71,10 @@ export function validateProductIR(value: unknown): ProductIR {
       // shape when the required parts are present but mistyped.
       if (field.derive !== undefined) {
         if (!isRecord(field.derive)) issues.push(`field ${fieldIndex}.derive must be an object`);
-        else {
-          if (!DERIVED_FIELD_KINDS.includes(field.derive.kind as never)) issues.push(`field ${fieldIndex}.derive.kind is unsupported`);
+        else if (!DERIVED_FIELD_KINDS.includes(field.derive.kind as never)) issues.push(`field ${fieldIndex}.derive.kind is unsupported`);
+        else if (field.derive.kind === "formula") {
+          if (typeof field.derive.expression !== "string" || field.derive.expression.trim() === "") issues.push(`field ${fieldIndex}.derive.expression is required`);
+        } else {
           if (typeof field.derive.dateField !== "string" || field.derive.dateField.trim() === "") issues.push(`field ${fieldIndex}.derive.dateField is required`);
           if (!isRecord(field.derive.buckets)) issues.push(`field ${fieldIndex}.derive.buckets must be an object`);
           else for (const band of ["overdue", "soon", "ok"] as const) {
@@ -101,6 +103,10 @@ export function validateProductIR(value: unknown): ProductIR {
     else if (!CALCULATION_OPERATIONS.includes(calculation.operation as never)) issues.push(`calculations[${index}].operation is unsupported`);
     else if (calculation.sumField !== undefined && typeof calculation.sumField !== "string") issues.push(`calculations[${index}].sumField must be a string`);
   });
+  // A malformed chart is not fatal: normalizeProductIR drops any chart whose
+  // axes do not resolve to a date and a numeric field, so validate only rejects
+  // a charts value of the wrong top-level type.
+  if (value.charts !== undefined && !Array.isArray(value.charts)) issues.push("charts must be an array");
   for (const key of ["assumptions", "excluded", "customRequirements"] as const) {
     if (value[key] !== undefined && !strings(value[key])) issues.push(`${key} must be an array of strings`);
   }

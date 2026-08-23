@@ -65,6 +65,7 @@
         "sort": true,
         "transition": false
       },
+      "charts": [],
       "customRequirements": [],
       "entities": [
         {
@@ -160,6 +161,7 @@
         "search": false,
         "sort": true
       },
+      "charts": [],
       "collectionLabel": "Data",
       "design": {
         "colors": {

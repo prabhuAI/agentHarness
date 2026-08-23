@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { FieldConfig, type PredicateOperator, productConfig, type SummaryConfig } from "./product-config.js";
+import { type ChartConfig, FieldConfig, type PredicateOperator, productConfig, type SummaryConfig } from "./product-config.js";
+import { evaluateFormula } from "./formula.js";
 import { createRepository, EntityRecord, RecordValue } from "./repository.js";
 import {
   loadThemePreference,
@@ -50,6 +51,19 @@ function dayIndex(value: unknown): number | null {
 export function computeDerivedValue(field: FieldConfig, values: Values, now: Date): RecordValue {
   const spec = field.derive;
   if (!spec) return values[field.key] ?? "";
+  if (spec.kind === "formula") {
+    // Resolve each referenced field to its numeric value; a blank or non-numeric
+    // input makes the whole formula unresolved, so the record shows no value.
+    const result = evaluateFormula(spec.expression, (id) => {
+      const text = String(values[id] ?? "").trim();
+      if (text === "") return null;
+      const number = Number(text);
+      return Number.isFinite(number) ? number : null;
+    });
+    // Round to at most two decimals so a computed metric reads cleanly (8.33,
+    // not 8.333333) while whole numbers stay whole.
+    return result === null ? "" : Math.round(result * 100) / 100;
+  }
   const from = dayIndex(values[spec.dateField]);
   if (from === null) return "";
   const threshold = spec.thresholdField !== undefined ? Number(values[spec.thresholdField]) : Number(spec.thresholdDays);
@@ -74,6 +88,68 @@ export function withDerivedValues(values: Values, now: Date = new Date()): Value
 
 function isFieldVisible(field: FieldConfig, values: Values): boolean {
   return !field.visibleWhen || String(values[field.visibleWhen.field] ?? "") === field.visibleWhen.equals;
+}
+
+export interface ChartPoint { x: number; y: number; label: string }
+
+// Build a chart's chronological series: one point per record that has both a
+// parseable date (x) and a finite number (y), sorted oldest→newest. Records
+// missing either axis are skipped so a partial dataset still plots cleanly.
+export function chartSeries(chart: ChartConfig, records: ReadonlyArray<{ values: Values }>): ChartPoint[] {
+  return records
+    .map((record) => {
+      const x = dayIndex(record.values[chart.xField]);
+      // Number("") is 0, so an empty value must be rejected before coercion,
+      // otherwise a record with no measurement would plot as a spurious zero.
+      const yText = String(record.values[chart.yField] ?? "").trim();
+      const y = yText === "" ? Number.NaN : Number(yText);
+      const label = String(record.values[chart.xField] ?? "");
+      return x !== null && Number.isFinite(y) ? { x, y, label } : null;
+    })
+    .filter((point): point is ChartPoint => point !== null)
+    .sort((left, right) => left.x - right.x);
+}
+
+// A dependency-free inline SVG line chart. Renders an empty-state hint until
+// there are at least two points to connect.
+function TrendChart({ chart, records }: { chart: ChartConfig; records: ReadonlyArray<{ values: Values }> }) {
+  const series = chartSeries(chart, records);
+  const width = 640;
+  const height = 200;
+  const padX = 44;
+  const padY = 22;
+  if (series.length < 2) {
+    return <figure className="trend-chart trend-chart-empty">
+      <figcaption>{chart.label}</figcaption>
+      <p className="trend-chart-hint">Add at least two dated entries to see this trend.</p>
+    </figure>;
+  }
+  const xs = series.map((point) => point.x);
+  const ys = series.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const spanX = maxX - minX || 1;
+  const spanY = maxY - minY || 1;
+  const sx = (x: number) => padX + ((x - minX) / spanX) * (width - padX * 2);
+  const sy = (y: number) => height - padY - ((y - minY) / spanY) * (height - padY * 2);
+  const points = series.map((point) => `${sx(point.x).toFixed(1)},${sy(point.y).toFixed(1)}`).join(" ");
+  const firstLabel = series[0].label;
+  const lastLabel = series[series.length - 1].label;
+  return <figure className="trend-chart">
+    <figcaption>{chart.label}</figcaption>
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${chart.label} line chart with ${series.length} points`} preserveAspectRatio="none">
+      <line className="trend-axis" x1={padX} y1={height - padY} x2={width - padX} y2={height - padY} />
+      <line className="trend-axis" x1={padX} y1={padY} x2={padX} y2={height - padY} />
+      <text className="trend-tick" x={padX - 6} y={sy(maxY)} textAnchor="end" dominantBaseline="middle">{maxY}</text>
+      <text className="trend-tick" x={padX - 6} y={sy(minY)} textAnchor="end" dominantBaseline="middle">{minY}</text>
+      <polyline className="trend-line" fill="none" points={points} />
+      {series.map((point) => <circle className="trend-dot" key={`${point.x}-${point.y}`} cx={sx(point.x)} cy={sy(point.y)} r={3} />)}
+      <text className="trend-tick" x={padX} y={height - 6} textAnchor="start">{firstLabel}</text>
+      <text className="trend-tick" x={width - padX} y={height - 6} textAnchor="end">{lastLabel}</text>
+    </svg>
+  </figure>;
 }
 
 function validate(values: Values): Errors {
@@ -300,8 +376,11 @@ export function App() {
       && String(summary.value ?? "") === String(preset.value ?? ""));
     return match ? summaryValueById[match.id] : undefined;
   };
+  // Group only by a field the user actually sets. Derived fields are computed at
+  // read time and never stored, so grouping by one would bucket every record as
+  // "Uncategorized" on the stored value; those bands belong in filters/summaries.
   const groupField = productConfig.capabilities.group
-    ? productConfig.fields.find((field) => field.type === "category" || field.type === "status")
+    ? productConfig.fields.find((field) => !field.derive && (field.type === "category" || field.type === "status"))
     : undefined;
   const groupedVisible = useMemo(() => {
     if (!groupField) return [];
@@ -435,6 +514,9 @@ export function App() {
             <span className="stat-icon" aria-hidden="true"><SummaryIcon operation={summary.operation} /></span>
             <span className="stat-body"><strong>{formatSummaryValue(summary.operation, summary.operation === "sumWhere" ? summary.sumField : summary.field, summary.value)}</strong><span>{summary.label}</span></span>
           </div>)}
+        </div>}
+        {productConfig.charts.length > 0 && <div className="chart-strip" aria-label="Trends">
+          {productConfig.charts.map((chart) => <TrendChart key={chart.id} chart={chart} records={derivedRecords} />)}
         </div>}
         <div className="toolbar">
           {productConfig.capabilities.search && <label className="search"><span className="sr-only">Search {productConfig.entityNamePlural}</span><input type="search" placeholder={`Search ${productConfig.entityNamePlural}…`} value={query} onChange={(event) => setQuery(event.target.value)} /></label>}

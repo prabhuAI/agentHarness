@@ -33,6 +33,7 @@ function fixture(overrides: Partial<ProductIR> = {}): ProductIR {
     capabilities: { create: true, edit: true, delete: true, search: true, filter: true, sort: false, group: false, transition: true, calculate: true },
     filters: [{ id: "accepted", label: "Accepted", field: "status", operator: "equals", value: "Accepted" }],
     calculations: [{ id: "total", label: "Total decisions", operation: "count" }, { id: "accepted", label: "Accepted", operation: "countWhere", field: "status", operator: "equals", value: "Accepted" }],
+    charts: [],
     persistence: { strategy: "localStorage" },
     assumptions: ["Single workspace"], excluded: ["Authentication"], customRequirements: [],
     ...overrides,
@@ -104,6 +105,30 @@ describe("Product IR compiler", () => {
     expect(normalized.filters.some((filter) => filter.field === "category")).toBe(false);
     // A field with no options keeps whatever type the model chose.
     expect(normalized.entities[0].fields.find((field) => field.id === "owner")?.type).toBe("text");
+  });
+
+  it("keeps a valid formula derived field numeric and drops an unusable one", () => {
+    // A per-record arithmetic value over sibling numeric fields compiles as a
+    // computed number — the deterministic path that replaces a custom patch.
+    const withFormula = fixture();
+    withFormula.entities[0]!.fields.push(
+      { id: "target", label: "Target", type: "currency", required: true },
+      { id: "current", label: "Current", type: "currency", required: false },
+      { id: "remaining", label: "Remaining", type: "currency", required: false, derive: { kind: "formula", expression: "target - current" } as never },
+      // References a text field → not numeric → dropped, degrading to a plain field.
+      { id: "bogus", label: "Bogus", type: "number", required: false, derive: { kind: "formula", expression: "title + 1" } as never },
+    );
+    const normalized = normalizeProductIR(validateProductIR(withFormula));
+    const remaining = normalized.entities[0].fields.find((field) => field.id === "remaining");
+    expect(remaining?.type).toBe("currency");
+    expect(remaining?.derive).toEqual({ kind: "formula", expression: "target - current" });
+    expect(remaining?.required).toBe(false); // computed fields are never user-required
+    const bogus = normalized.entities[0].fields.find((field) => field.id === "bogus");
+    expect(bogus?.derive).toBeUndefined(); // unusable formula dropped
+    // A formula field is not a facet, so it never adds filter chips.
+    expect(normalized.filters.some((filter) => filter.field === "remaining")).toBe(false);
+    // The idea still compiles on the cheap route — no custom requirement introduced.
+    expect(classifyCapabilities(normalized).route).toBe("compile");
   });
 
   it("derives filters for one meaningful facet: status when present, else a category", () => {

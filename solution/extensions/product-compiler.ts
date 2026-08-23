@@ -29,17 +29,18 @@ const fieldSchema = Type.Object({
     equals: Type.String({ description: "exact controlling value that makes this field visible" }),
   })),
   derive: Type.Optional(Type.Object({
-    kind: Type.String({ enum: ["dateThreshold"], description: "Compute this field's value from a date and a threshold instead of user input" }),
-    dateField: Type.String({ description: "id of the date field the elapsed span is measured from (e.g. last_watered)" }),
+    kind: Type.String({ enum: ["dateThreshold", "formula"], description: "dateThreshold = a date-based status; formula = a number computed by arithmetic over other fields" }),
+    dateField: Type.Optional(Type.String({ description: "dateThreshold only: id of the date field the elapsed span is measured from (e.g. last_watered)" })),
     thresholdField: Type.Optional(Type.String({ description: "id of a number field giving the threshold in days (e.g. watering_frequency); use this or thresholdDays" })),
     thresholdDays: Type.Optional(Type.Number({ description: "fixed threshold span in days when there is no per-record threshold field" })),
     soonWithinDays: Type.Optional(Type.Number({ description: "days before the threshold that count as the 'soon' band (default 0)" })),
-    buckets: Type.Object({
+    buckets: Type.Optional(Type.Object({
       overdue: Type.String({ description: "option label when the elapsed span has passed the threshold" }),
       soon: Type.String({ description: "option label when within soonWithinDays of the threshold" }),
       ok: Type.String({ description: "option label otherwise" }),
-    }, { description: "Each label must be one of this field's options" }),
-  }, { description: "Set on a status field whose value is a date-based lifecycle (overdue / due soon / fine). The runtime computes it live and auto-derives its filters and counts; do not also list it as a customRequirement." })),
+    }, { description: "dateThreshold only: each label must be one of this field's options" })),
+    expression: Type.Optional(Type.String({ description: "formula only: arithmetic over other number/currency field ids and numeric literals, using + - * / and parentheses (e.g. \"target_amount - current_amount\", \"price / 12\", \"weight * (1 + reps / 30)\")" })),
+  }, { description: "Compute this field's value instead of taking user input. Use kind dateThreshold on a status field for a date-based lifecycle (overdue / due soon / fine), or kind formula on a number/currency field for a value derived by arithmetic from other fields. Either way, do not also list it as a customRequirement." })),
 });
 const predicateSchema = {
   id: Type.String(),
@@ -48,7 +49,7 @@ const predicateSchema = {
   operator: Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy", "today", "thisWeek", "thisMonth"], description: "today/thisWeek/thisMonth filter a date field against the current date and take no value" }),
   value: Type.Optional(Type.String()),
 };
-const productIRSchema = Type.Object({
+export const productIRSchema = Type.Object({
   version: Type.String({ enum: ["1"] }),
   product: Type.Object({
     name: Type.String(),
@@ -82,6 +83,13 @@ const productIRSchema = Type.Object({
     value: Type.Optional(Type.String()),
     sumField: Type.Optional(Type.String({ description: "For sumWhere: the number/currency field summed over the matching records" })),
   }), { maxItems: 4, description: "Only a totals count and any sums — per-facet-option counts and per-option spend breakdowns are derived automatically" })),
+  charts: Type.Optional(Type.Array(Type.Object({
+    id: Type.String(),
+    label: Type.String(),
+    type: Type.String({ enum: ["line"], description: "A line/trend chart" }),
+    xField: Type.String({ description: "id of the date or datetime field for the x axis" }),
+    yField: Type.String({ description: "id of the number or currency field plotted on the y axis" }),
+  }), { maxItems: 3, description: "Trend charts the runtime renders deterministically: a number plotted over time. Use this — never a customRequirement — when the user wants to see a value graphed or track progress over time (e.g. weight over date). Requires a date field and a number/currency field on the entity." })),
   persistence: Type.Optional(Type.Object({ strategy: Type.String({ enum: ["localStorage"] }) })),
   assumptions: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
   excluded: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
@@ -162,6 +170,9 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
       "Call compile_product exactly once after interpreting the idea; do not read or edit application files first.",
       "Use customRequirements only for essential interactions that cannot be represented by fields, CRUD, search, filters, state transitions, or count/sum calculations.",
       "For a status that is a date-based lifecycle (e.g. overdue / due soon / fine from a last-done date and a frequency), add a status field with those options and set its `derive` (kind dateThreshold) instead of a customRequirement — the runtime computes it live and auto-derives its per-band filters and counts.",
+      "A status the user sets by hand (marking an item Lent then Returned, a bill Paid, a task Done) is a plain status field with `transition` enabled — the user edits it directly. Never add a customRequirement to auto-flip a status from whether another field is filled in or cleared; that coupling is ordinary editing, and a manually-set status field with its options covers it.",
+      "When the idea asks to see a number graphed or tracked over time (a weight chart, spend trend, progress over dates), add a `charts` entry (type line) with the date field as xField and the number/currency field as yField — never a customRequirement. The runtime renders it deterministically.",
+      "For a per-record number computed by arithmetic from other number/currency fields (remaining = target − current, monthly = price ÷ 12, one-rep-max = weight × (1 + reps ÷ 30)), add a number/currency field with `derive` kind formula and an `expression` over the other field ids — never a customRequirement. The runtime evaluates it live.",
       "For ambiguous categories, prefer useful suggestions with allowCustom true.",
       "Use visibleWhen for a field that only applies when another field has one exact selected value.",
       "Use product.design only when the idea clearly signals a tone, density, contrast, or motion preference; never generate colors, fonts, CSS, or layout instructions.",

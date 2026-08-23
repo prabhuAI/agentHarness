@@ -29,6 +29,7 @@ export const PUBLIC_BOOK_LENDING_IR: ProductIR = {
     { id: "total", label: "Total books", operation: "count" },
     { id: "lent", label: "Lent out", operation: "countWhere", field: "borrower", operator: "nonEmpty" },
   ],
+  charts: [],
   persistence: { strategy: "localStorage" },
   assumptions: ["Category suggestions accept custom values because the requested categories are approximate", "Clearing the borrower marks a book as returned"],
   excluded: ["Authentication", "Cloud synchronization", "Multi-user accounts"],

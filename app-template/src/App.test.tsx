@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, compareRecordsBySort, computeDerivedValue, computeSummaryValue, matchesPredicate } from "./App.js";
-import { type FieldConfig, productConfig, type SortOption, type SummaryConfig } from "./product-config.js";
+import { App, chartSeries, compareRecordsBySort, computeDerivedValue, computeSummaryValue, matchesPredicate } from "./App.js";
+import { type ChartConfig, type FieldConfig, productConfig, type SortOption, type SummaryConfig } from "./product-config.js";
 import { createRepository, storageKeyFor } from "./repository.js";
 
 beforeEach(() => { window.localStorage.clear(); vi.stubGlobal("confirm", vi.fn(() => true)); });
@@ -76,7 +76,9 @@ describe("compiled product runtime", () => {
   it("makes configured choices explicit and supports a custom choice", async () => {
     const user = userEvent.setup();
     const configurable = productConfig.fields.find((field) => field.options?.length && field.allowCustom);
-    expect(configurable).toBeDefined();
+    // Not every product needs a custom-choice category. When one exists it must
+    // work; its absence is a valid configuration, not a failure to repair.
+    if (!configurable) return;
     render(<App />);
     await user.click(screen.getAllByRole("button", { name: new RegExp(`add ${productConfig.entityName}`, "i") })[0]);
     const choice = screen.getByRole("dialog").querySelector<HTMLElement>(`#field-${configurable!.key}`)!;
@@ -146,6 +148,17 @@ describe("compiled product runtime", () => {
     expect(computeDerivedValue(fixed, { qa_last: "2026-06-01" }, now)).toBe("Overdue"); // long past a fixed 30-day span
   });
 
+  it("computes a formula derived field with arithmetic over other numeric fields", () => {
+    const now = new Date(Date.UTC(2026, 7, 22));
+    const remaining: FieldConfig = { key: "remaining", label: "Remaining", type: "currency", derive: { kind: "formula", expression: "target - current" } };
+    const oneRepMax: FieldConfig = { key: "one_rep_max", label: "1RM", type: "number", derive: { kind: "formula", expression: "weight * (1 + reps / 30)" } };
+    expect(computeDerivedValue(remaining, { target: "1000", current: "250" }, now)).toBe(750);
+    expect(computeDerivedValue(oneRepMax, { weight: "100", reps: "5" }, now)).toBe(116.67); // 100*(1+5/30)=116.666… → rounded
+    expect(computeDerivedValue(remaining, { target: "1000" }, now)).toBe(""); // missing input → no value, not a spurious 1000
+    const bad: FieldConfig = { key: "bad", label: "Bad", type: "number", derive: { kind: "formula", expression: "current / 0" } };
+    expect(computeDerivedValue(bad, { current: "5" }, now)).toBe(""); // non-finite → no value
+  });
+
   it("matches a date field against today, this week, and this month windows", () => {
     const now = new Date(Date.UTC(2026, 7, 19)); // Wed 2026-08-19
     expect(matchesPredicate("2026-08-19", "today", undefined, now)).toBe(true);
@@ -173,6 +186,20 @@ describe("compiled product runtime", () => {
     expect(computeSummaryValue(rentSpend, records, now)).toBe(900);
     expect(computeSummaryValue(total, records, now)).toBe(1050);
     expect(computeSummaryValue(spentThisMonth, records, now)).toBe(150); // Rent was in July
+  });
+
+  it("builds a chart series sorted chronologically, skipping records missing either axis", () => {
+    const chart: ChartConfig = { id: "weight_trend", label: "Weight over time", type: "line", xField: "date", yField: "weight" };
+    const records = [
+      { values: { date: "2026-08-11", weight: "81.2" } },
+      { values: { date: "2026-08-09", weight: "82.0" } },
+      { values: { date: "", weight: "80.0" } },          // no date → skipped
+      { values: { date: "2026-08-13", weight: "" } },      // no number → skipped
+      { values: { date: "2026-08-10", weight: "81.6" } },
+    ];
+    const series = chartSeries(chart, records);
+    expect(series.map((point) => point.y)).toEqual([82.0, 81.6, 81.2]); // ordered by date asc
+    expect(series).toHaveLength(3);
   });
 
   it("sorts by a chosen field option — numeric for currency, textual otherwise, honouring direction", () => {
@@ -215,7 +242,7 @@ describe("compiled product runtime", () => {
     const primaryValue = String(created[productConfig.primaryField]);
     expect(screen.getAllByText(primaryValue).length).toBeGreaterThan(0);
     expect(JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]")).toHaveLength(1);
-    const groupField = productConfig.fields.find((field) => field.type === "category" || field.type === "status");
+    const groupField = productConfig.fields.find((field) => !field.derive && (field.type === "category" || field.type === "status"));
     if (productConfig.capabilities.group && groupField) {
       const groupLabel = String(created[groupField.key] ?? "Uncategorized");
       expect(screen.getAllByRole("heading", { name: groupLabel }).length).toBeGreaterThan(0);

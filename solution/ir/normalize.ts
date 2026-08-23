@@ -1,4 +1,5 @@
-import type { DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductEntity, ProductField, ProductFilter, ProductIR } from "./types.js";
+import { analyzeFormula } from "./formula.js";
+import type { DateThresholdDerive, DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductField, ProductFilter, ProductIR } from "./types.js";
 import { DATE_WINDOW_OPERATORS, DERIVED_FIELD_KINDS, FIELD_TYPES, FILTER_OPERATORS, GENOMES, type FieldType } from "./types.js";
 
 // Common field-type synonyms weaker models emit, mapped to the runtime's vocabulary.
@@ -62,19 +63,31 @@ function inferDesignIntent(input: ProductIR): DesignIntent {
 // Resolve and sanitize a field's derive spec against the normalized field ids.
 // Returns undefined (dropping the spec so the field degrades to a plain manual
 // field) when the shape is unusable: unknown kind, dangling date/threshold
-// reference, self-reference, or no usable threshold. Field-id references are run
+// reference, self-reference, no usable threshold, or a formula that does not
+// parse or references a missing/non-numeric field. Field-id references are run
 // through `identifier` so they match the normalized ids exactly.
-function normalizeDerive(raw: unknown, fieldId: string, fieldIds: Set<string>): DerivedFieldSpec | undefined {
+function normalizeDerive(raw: unknown, fieldId: string, fieldIds: Set<string>, numericIds: Set<string>): DerivedFieldSpec | undefined {
   if (!raw || typeof raw !== "object") return undefined;
-  const spec = raw as Partial<DerivedFieldSpec> & { buckets?: Partial<DerivedFieldSpec["buckets"]> };
-  if (!(DERIVED_FIELD_KINDS as readonly string[]).includes(String(spec.kind))) return undefined;
+  const spec = raw as { kind?: unknown; dateField?: unknown; thresholdField?: unknown; thresholdDays?: unknown; soonWithinDays?: unknown; buckets?: Partial<DateThresholdDerive["buckets"]>; expression?: unknown };
+  const kind = String(spec.kind);
+  if (!(DERIVED_FIELD_KINDS as readonly string[]).includes(kind)) return undefined;
+  if (kind === "formula") {
+    const expression = clean(String(spec.expression ?? ""));
+    if (!expression) return undefined;
+    const analyzed = analyzeFormula(expression);
+    // A usable formula parses and references only real numeric sibling fields
+    // (never itself, never a non-numeric or missing field, and at least one).
+    if (!analyzed || analyzed.ids.length === 0) return undefined;
+    if (analyzed.ids.some((id) => id === fieldId || !numericIds.has(id))) return undefined;
+    return { kind: "formula", expression };
+  }
   const dateField = identifier(String(spec.dateField ?? ""), "");
   if (!fieldIds.has(dateField) || dateField === fieldId) return undefined;
   const thresholdField = spec.thresholdField !== undefined ? identifier(String(spec.thresholdField), "") : "";
   const hasThresholdField = Boolean(thresholdField) && fieldIds.has(thresholdField) && thresholdField !== fieldId;
   const thresholdDays = Number(spec.thresholdDays);
   if (!hasThresholdField && !Number.isFinite(thresholdDays)) return undefined;
-  const buckets: Partial<DerivedFieldSpec["buckets"]> = spec.buckets ?? {};
+  const buckets: Partial<DateThresholdDerive["buckets"]> = spec.buckets ?? {};
   const overdue = clean(String(buckets.overdue ?? ""));
   const soon = clean(String(buckets.soon ?? ""));
   const ok = clean(String(buckets.ok ?? ""));
@@ -101,8 +114,14 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     // (dedup-preserving) so the facet machinery derives per-band filters and counts,
     // and so a model that omitted options still gets a usable choice set.
     const rawDerive = (field as ProductField).derive;
-    if (rawDerive && typeof rawDerive === "object" && rawDerive.buckets) {
-      const bands = [rawDerive.buckets.overdue, rawDerive.buckets.soon, rawDerive.buckets.ok].filter((value): value is string => typeof value === "string");
+    const deriveKind = rawDerive && typeof rawDerive === "object" ? String((rawDerive as { kind?: unknown }).kind) : "";
+    const buckets = (rawDerive as { buckets?: Partial<DateThresholdDerive["buckets"]> } | undefined)?.buckets;
+    // Only a date-threshold lifecycle folds its bucket labels into options (so the
+    // facet machinery derives per-band filters and counts); a formula stays numeric.
+    const isDateThresholdDerive = deriveKind === "dateThreshold" || (deriveKind !== "formula" && Boolean(buckets));
+    const isFormulaDerive = deriveKind === "formula";
+    if (isDateThresholdDerive && buckets) {
+      const bands = [buckets.overdue, buckets.soon, buckets.ok].filter((value): value is string => typeof value === "string");
       options = uniqueStrings([...(options ?? []), ...bands]);
     }
     // A field carrying an enumerated option list is a choice control regardless of
@@ -111,9 +130,11 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     // the compiler derive per-option filters and counts.
     const hasOptions = Boolean(options && options.length > 0);
     let type = coerceFieldType(field.type, hasOptions);
-    // A derived bucket field is a computed lifecycle: force `status` so it groups,
-    // filters, and badges like one — never a free-text or category input.
-    if (rawDerive) type = "status";
+    // A date-threshold field is a computed lifecycle: force `status` so it groups,
+    // filters, and badges like one. A formula field is a computed number: force a
+    // numeric type so it renders and sums as a number, never a free-text input.
+    if (isDateThresholdDerive) type = "status";
+    else if (isFormulaDerive) type = field.type === "currency" ? "currency" : "number";
     // A category dropdown defaults to accepting custom input when the model didn't say
     // otherwise: it matches the "prefer suggestions with custom input" guidance and keeps
     // an open-ended category (e.g. "kind of book") usable. Status stays a fixed lifecycle.
@@ -132,6 +153,13 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     };
   });
   const normalizedIds = new Set(normalized.map((field) => field.id));
+  // A formula may reference only genuine numeric input fields — not itself, not a
+  // date/text field, and not another computed field (which is not in stored values).
+  const numericIds = new Set(
+    normalized
+      .filter((field, index) => (field.type === "number" || field.type === "currency") && !(entity.fields[index] as ProductField | undefined)?.derive)
+      .map((field) => field.id),
+  );
   return normalized.map((field, index) => {
     const source = entity.fields[index];
     let result: ProductField = field;
@@ -143,7 +171,7 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
         result = { ...result, visibleWhen: { field: controllingField, equals } };
       }
     }
-    const derive = normalizeDerive((source as ProductField | undefined)?.derive, field.id, normalizedIds);
+    const derive = normalizeDerive((source as ProductField | undefined)?.derive, field.id, normalizedIds, numericIds);
     if (derive) result = { ...result, derive };
     return result;
   });
@@ -305,6 +333,22 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     });
   if (capabilities.filter) filters = deriveOptionFilters(entities[0].fields, filters);
   if (capabilities.calculate) calculations = deriveOptionCalculations(entities[0].fields, calculations);
+  // A chart is kept only when its axes resolve to a real date field (x) and a
+  // real numeric field (y); anything else is dropped rather than rejected, so a
+  // mis-specified chart never blocks a compile.
+  const charts = (input.charts ?? [])
+    .map((chart, index): ProductChart => ({
+      id: identifier(String(chart?.id ?? ""), `chart_${index + 1}`),
+      label: clean(String(chart?.label ?? "")) || "Trend",
+      type: "line",
+      xField: identifier(String(chart?.xField ?? ""), ""),
+      yField: identifier(String(chart?.yField ?? ""), ""),
+    }))
+    .filter((chart) => {
+      const xType = primaryFieldMap.get(chart.xField)?.type;
+      const yType = primaryFieldMap.get(chart.yField)?.type;
+      return (xType === "date" || xType === "datetime") && (yType === "number" || yType === "currency");
+    });
   const name = clean(input.product?.name ?? "") || "Untitled";
   return {
     ...input,
@@ -323,6 +367,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     capabilities,
     filters,
     calculations,
+    charts,
     persistence: { strategy: "localStorage" },
     assumptions: uniqueStrings(input.assumptions ?? []),
     excluded: uniqueStrings(input.excluded ?? []),

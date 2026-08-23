@@ -37,17 +37,40 @@ export type DateWindowOperator = (typeof DATE_WINDOW_OPERATORS)[number];
 export const CALCULATION_OPERATIONS = ["count", "countWhere", "sum", "sumWhere"] as const;
 export type CalculationOperation = (typeof CALCULATION_OPERATIONS)[number];
 
-export const DERIVED_FIELD_KINDS = ["dateThreshold"] as const;
+export const DERIVED_FIELD_KINDS = ["dateThreshold", "formula"] as const;
 export type DerivedFieldKind = (typeof DERIVED_FIELD_KINDS)[number];
 
-// A field whose value is computed at read time from other fields plus today's
-// date, rather than entered by the user. The only kind so far is `dateThreshold`:
-// bucket a record by how its elapsed days since `dateField` compare to a
-// threshold (a `thresholdField` value, or a fixed `thresholdDays`). This covers
-// the ubiquitous "overdue / due soon / fine" tracker pattern deterministically,
-// so it never needs a custom LLM patch. Buckets map to the field's own options.
-export interface DerivedFieldSpec {
-  kind: DerivedFieldKind;
+export const CHART_TYPES = ["line"] as const;
+export type ChartType = (typeof CHART_TYPES)[number];
+
+// A deterministic trend chart of one numeric field plotted against one date
+// field, sorted chronologically. This covers the ubiquitous "see my <number>
+// over time" request (weight over date, spend over month) without a custom LLM
+// patch. Points come straight from the persisted records at read time.
+export interface ProductChart {
+  id: string;
+  label: string;
+  type: ChartType;
+  // Field id of the date/datetime axis (x).
+  xField: string;
+  // Field id of the number/currency value plotted (y).
+  yField: string;
+}
+
+// A field whose value is computed at read time from other fields, rather than
+// entered by the user. Two kinds:
+//
+// `dateThreshold` buckets a record by how its elapsed days since `dateField`
+// compare to a threshold (a `thresholdField` value, or a fixed `thresholdDays`) —
+// the ubiquitous "overdue / due soon / fine" pattern. Buckets map to options.
+//
+// `formula` computes a number per record by evaluating an arithmetic expression
+// (+ - * /, parentheses, unary minus) over sibling number/currency field ids and
+// numeric literals — "price / 12", "target - current", "weight * (1 + reps/30)".
+//
+// Both compile deterministically, so a computed value never needs a custom patch.
+export interface DateThresholdDerive {
+  kind: "dateThreshold";
   // Field id of the reference date the elapsed span is measured from.
   dateField: string;
   // Field id supplying the threshold span in days; takes precedence over thresholdDays.
@@ -63,6 +86,14 @@ export interface DerivedFieldSpec {
     ok: string; // otherwise
   };
 }
+
+export interface FormulaDerive {
+  kind: "formula";
+  // Arithmetic over sibling number/currency field ids and numeric literals.
+  expression: string;
+}
+
+export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive;
 
 export interface ProductField {
   id: string;
@@ -137,6 +168,7 @@ export interface ProductIR {
   capabilities: ProductCapabilities;
   filters: ProductFilter[];
   calculations: ProductCalculation[];
+  charts: ProductChart[];
   persistence: { strategy: "localStorage" };
   assumptions: string[];
   excluded: string[];

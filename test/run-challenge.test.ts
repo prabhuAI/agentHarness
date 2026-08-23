@@ -182,7 +182,9 @@ describe("Pi launch", () => {
         thinkingFormat: "baseten",
         chatTemplateArgs: { enable_thinking: { $var: "thinking.enabled" } },
       },
-      models: [{ reasoning: true, thinkingLevelMap: { off: "none" } }],
+      models: expect.arrayContaining([
+        expect.objectContaining({ reasoning: true, thinkingLevelMap: expect.objectContaining({ off: "none" }) }),
+      ]),
     });
     expect(await readFile(path.join(directory, "pi-agent", "models.json"), "utf8")).not.toMatch(
       /Bearer\s+[A-Za-z0-9]/u,

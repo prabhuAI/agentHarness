@@ -58,6 +58,7 @@
         "sort": false,
         "transition": true
       },
+      "charts": [],
       "customRequirements": [],
       "entities": [
         {
@@ -145,6 +146,7 @@
         "search": true,
         "sort": false
       },
+      "charts": [],
       "collectionLabel": "Pipeline",
       "design": {
         "colors": {

@@ -75,6 +75,7 @@
         "sort": true,
         "transition": false
       },
+      "charts": [],
       "customRequirements": [],
       "entities": [
         {
@@ -195,6 +196,7 @@
         "search": true,
         "sort": true
       },
+      "charts": [],
       "collectionLabel": "Plan",
       "design": {
         "colors": {

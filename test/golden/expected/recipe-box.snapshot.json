@@ -83,6 +83,7 @@
         "sort": true,
         "transition": false
       },
+      "charts": [],
       "customRequirements": [],
       "entities": [
         {
@@ -208,6 +209,7 @@
         "search": true,
         "sort": true
       },
+      "charts": [],
       "collectionLabel": "Library",
       "design": {
         "colors": {
