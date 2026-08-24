@@ -337,7 +337,7 @@ export function App() {
   const [editingId, setEditingId] = useState<string>();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
-  const [sort, setSort] = useState("updated");
+  const [sort, setSort] = useState(productConfig.priority ? "priority" : "updated");
   const [notice, setNotice] = useState(recoveredFromInvalidData ? "Saved data was damaged, so a clean workspace was restored." : "");
   const [undo, setUndo] = useState<EntityRecord | null>(null);
   const entityLabel = productConfig.entityName.charAt(0).toUpperCase() + productConfig.entityName.slice(1);
@@ -368,7 +368,22 @@ export function App() {
     const preset = productConfig.filters.find((candidate) => candidate.id === filter);
     const matchesFilter = !preset || matchesPredicate(record.values[preset.field], preset.operator, preset.value);
     return matchesQuery && matchesFilter;
-  }).sort((left, right) => compareRecordsBySort(sort, left, right)), [derivedRecords, query, filter, sort]);
+  }).sort((left, right) => {
+    if (sort === "priority" && productConfig.priority?.filter) {
+      const predicate = productConfig.priority.filter;
+      const leftEligible = matchesPredicate(left.values[predicate.field], predicate.operator, predicate.value);
+      const rightEligible = matchesPredicate(right.values[predicate.field], predicate.operator, predicate.value);
+      if (leftEligible !== rightEligible) return leftEligible ? -1 : 1;
+    }
+    return compareRecordsBySort(sort, left, right);
+  }), [derivedRecords, query, filter, sort]);
+  const priorityRecordId = useMemo(() => {
+    const priority = productConfig.priority;
+    if (!priority) return undefined;
+    return [...derivedRecords]
+      .filter((record) => !priority.filter || matchesPredicate(record.values[priority.filter.field], priority.filter.operator, priority.filter.value))
+      .sort((left, right) => compareRecordsBySort("priority", left, right))[0]?.id;
+  }, [derivedRecords]);
   const summaries = useMemo(() => productConfig.summaries.map((summary) => ({ ...summary, value: computeSummaryValue(summary, derivedRecords) })), [derivedRecords]);
   const summaryValueById = useMemo(() => Object.fromEntries(summaries.map((summary) => [summary.id, summary.value])), [summaries]);
   const filterCount = (preset: (typeof productConfig.filters)[number]): number | undefined => {
@@ -502,8 +517,8 @@ export function App() {
     "--layout-gap": `${design.spacing.gap}px`,
   } as CSSProperties;
 
-  const recordCard = (record: EntityRecord) => <article className="card" key={record.id}>
-    <div className="card-top"><h3>{displayValue(productConfig.fields.find((field) => field.key === productConfig.primaryField)!, record.values[productConfig.primaryField])}</h3>
+  const recordCard = (record: EntityRecord) => <article className={`card${record.id === priorityRecordId ? " is-priority" : ""}`} key={record.id}>
+    <div className="card-top"><h3>{record.id === priorityRecordId && <span className="priority-badge">{productConfig.priority?.label}</span>}<span>{displayValue(productConfig.fields.find((field) => field.key === productConfig.primaryField)!, record.values[productConfig.primaryField])}</span></h3>
       <div className="actions">{productConfig.quickActions.map((action) => <button key={action.id} type="button" className="quick-action" onClick={() => runQuickAction(record, action)}>{action.label}</button>)}{productConfig.capabilities.edit && <button onClick={() => openEdit(record)}>Edit</button>}{productConfig.capabilities.delete && <button className="danger" onClick={() => remove(record)}>Delete</button>}</div></div>
     <dl>{productConfig.secondaryFields.map((key) => { const field = productConfig.fields.find((candidate) => candidate.key === key); return field && isFieldVisible(field, record.values) ? <div key={key}><dt>{field.label}</dt><dd className={field.type === "status" ? "badge" : ""}>{displayValue(field, record.values[key])}</dd></div> : null; })}</dl>
   </article>;

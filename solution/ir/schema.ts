@@ -135,6 +135,13 @@ export function validateProductIR(value: unknown): ProductIR {
       issues.push(`standings[${index}].points is invalid`);
     }
   });
+  if (value.priority !== undefined && !isRecord(value.priority)) issues.push("priority must be an object");
+  else if (isRecord(value.priority)) {
+    if (typeof value.priority.sortField !== "string" || value.priority.sortField.trim() === "") issues.push("priority.sortField is required");
+    if (value.priority.label !== undefined && typeof value.priority.label !== "string") issues.push("priority.label must be a string");
+    if (value.priority.direction !== undefined && value.priority.direction !== "asc" && value.priority.direction !== "desc") issues.push("priority.direction must be asc or desc");
+    if (value.priority.filter !== undefined && !isRecord(value.priority.filter)) issues.push("priority.filter must be an object");
+  }
   for (const key of ["assumptions", "excluded", "customRequirements"] as const) {
     if (value[key] !== undefined && !strings(value[key])) issues.push(`${key} must be an array of strings`);
   }

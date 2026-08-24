@@ -197,13 +197,14 @@ describe("Product IR compiler", () => {
     const sparse = {
       version: "1",
       product: { name: "Book Shelf", targetUser: "A reader" },
-      entities: [{ name: "book", plural: "books", primaryField: "title", fields: [
+      entities: [{ name: "book", plural: "books", fields: [
         { id: "title", label: "Title", type: "text" },
         { id: "genre", label: "Genre", type: "select", options: ["Novel", "Cookbook", "Reference"] },
       ] }],
     };
     const ir = normalizeProductIR(validateProductIR(sparse));
     expect(ir.product.genome).toBe("tracker");
+    expect(ir.entities[0].primaryField).toBe("title"); // omitted primary falls back safely
     expect(ir.entities[0].fields[0]!.required).toBe(true); // primary is always required
     expect(ir.entities[0].fields[1]!.required).toBe(false); // omitted required defaults to false
     expect(ir.entities[0].fields[1]!.type).toBe("category"); // "select" coerced
@@ -211,6 +212,26 @@ describe("Product IR compiler", () => {
     expect(ir.capabilities.create).toBe(true);
     expect(Array.isArray(ir.customRequirements)).toBe(true);
     expect(classifyCapabilities(ir).route).toBe("compile");
+  });
+
+  it("compiles FIFO priority as a deterministic ordered queue", () => {
+    const waitlist = fixture({
+      entities: [{
+        name: "group", plural: "groups", primaryField: "name", fields: [
+          { id: "name", label: "Name", type: "text", required: true },
+          { id: "arrived_at", label: "Arrived at", type: "datetime", required: true },
+          { id: "status", label: "Status", type: "status", required: true, options: ["Waiting", "Seated", "Left"] },
+        ],
+      }],
+      priority: { label: "Next up", sortField: "arrived_at", direction: "asc", filter: { field: "status", operator: "equals", value: "Waiting" } },
+      customRequirements: [],
+    });
+    const ir = normalizeProductIR(validateProductIR(waitlist));
+    const config = compileConfig(ir);
+    expect(classifyCapabilities(ir).route).toBe("compile");
+    expect(config.priority).toEqual(waitlist.priority);
+    expect(config.sorts[0]).toMatchObject({ id: "priority", field: "arrived_at", direction: "asc", type: "datetime" });
+    expect(deriveJourneys(ir).map((journey) => journey.id)).toContain("priority");
   });
 
   it("normalizes duplicate identifiers and rejects malformed IR", () => {

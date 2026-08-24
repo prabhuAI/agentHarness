@@ -134,6 +134,20 @@ export interface ProductStandings {
   points: { win: number; draw: number; loss: number };
 }
 
+// A deterministic ordered subset with one prominently identified first record.
+// Covers FIFO waitlists, triage queues, dispatch lists, and any "who is next?"
+// workflow without model-authored UI code.
+export interface ProductPriority {
+  label: string;
+  sortField: string;
+  direction: "asc" | "desc";
+  filter?: {
+    field: string;
+    operator: FilterOperator;
+    value?: string;
+  };
+}
+
 export interface ProductFilter {
   id: string;
   label: string;
@@ -200,6 +214,7 @@ export interface ProductIR {
   charts: ProductChart[];
   quickActions: ProductQuickAction[];
   standings?: ProductStandings[];
+  priority?: ProductPriority;
   persistence: { strategy: "localStorage" };
   assumptions: string[];
   excluded: string[];

@@ -81,6 +81,13 @@ export interface SortOption {
   type?: FieldType;
 }
 
+export interface PriorityConfig {
+  label: string;
+  sortField: string;
+  direction: "asc" | "desc";
+  filter?: { field: string; operator: PredicateOperator; value?: string };
+}
+
 export interface DesignConfig {
   id: string;
   tone: "calm" | "playful" | "professional" | "bold" | "warm" | "technical";
@@ -151,6 +158,7 @@ export interface ProductConfig {
   capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean };
   entities?: EntityConfig[];
   standings?: StandingsConfig[];
+  priority?: PriorityConfig;
 }
 
 const DEFAULT_SORTS: SortOption[] = [

@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveDesign, type CompiledDesign } from "../design/catalog.js";
 import { genomeFor } from "../genomes/index.js";
-import type { NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductFilter, ProductQuickAction, ProductStandings, RouteDecision } from "../ir/types.js";
+import type { NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductFilter, ProductPriority, ProductQuickAction, ProductStandings, RouteDecision } from "../ir/types.js";
 import type { DerivedJourney } from "../qa/derive-journeys.js";
 
 interface CompiledConfig {
@@ -27,6 +27,7 @@ interface CompiledConfig {
   fields: Array<Record<string, unknown>>;
   entities?: CompiledEntityConfig[];
   standings?: ProductStandings[];
+  priority?: ProductPriority;
 }
 
 interface CompiledEntityConfig {
@@ -69,8 +70,15 @@ function compileEntity(entity: ProductEntity): CompiledEntityConfig {
 // plus one option per meaningful field — the primary label (A→Z), a date
 // (newest first), and a measure (highest first) — so a spend tracker can sort by
 // amount or date, not just by name. Derived from the fields, never model-authored.
-function compileSorts(entity: NormalizedProductIR["entities"][number]): CompiledConfig["sorts"] {
+function compileSorts(entity: NormalizedProductIR["entities"][number], priority?: ProductPriority): CompiledConfig["sorts"] {
   const sorts: CompiledConfig["sorts"] = [
+    ...(priority ? [{
+      id: "priority",
+      label: priority.label,
+      field: priority.sortField,
+      direction: priority.direction,
+      type: entity.fields.find((field) => field.id === priority.sortField)!.type,
+    }] : []),
     { id: "updated", label: "Recently updated" },
     { id: "created", label: "Oldest first" },
   ];
@@ -113,7 +121,7 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
     summaries,
     charts: ir.charts,
     quickActions: ir.quickActions,
-    sorts: compileSorts(entity),
+    sorts: compileSorts(entity, ir.priority),
     capabilities: {
       create: ir.capabilities.create,
       edit: ir.capabilities.edit,
@@ -125,6 +133,7 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
     fields: compileFields(entity),
     ...(ir.entities.length > 1 ? { entities: ir.entities.map(compileEntity) } : {}),
     ...(ir.standings.length > 0 ? { standings: ir.standings } : {}),
+    ...(ir.priority ? { priority: ir.priority } : {}),
   };
 }
 

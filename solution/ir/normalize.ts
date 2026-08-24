@@ -1,5 +1,5 @@
 import { analyzeFormula } from "./formula.js";
-import type { DateThresholdDerive, DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductField, ProductFilter, ProductIR, ProductQuickAction, ProductStandings } from "./types.js";
+import type { DateThresholdDerive, DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductField, ProductFilter, ProductIR, ProductPriority, ProductQuickAction, ProductStandings } from "./types.js";
 import { DATE_WINDOW_OPERATORS, DERIVED_FIELD_KINDS, FIELD_TYPES, FILTER_OPERATORS, GENOMES, type FieldType } from "./types.js";
 
 // Common field-type synonyms weaker models emit, mapped to the runtime's vocabulary.
@@ -27,8 +27,8 @@ function coerceFieldType(raw: unknown, hasOptions: boolean): FieldType {
 }
 
 const clean = (value: string): string => value.trim().replace(/\s+/gu, " ");
-const identifier = (value: string, fallback: string): string => {
-  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/gu, "_").replace(/^_+|_+$/gu, "");
+const identifier = (value: unknown, fallback: string): string => {
+  const normalized = String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/gu, "_").replace(/^_+|_+$/gu, "");
   return normalized || fallback;
 };
 const uniqueStrings = (values: string[]): string[] => [...new Set(values.map(clean).filter(Boolean))];
@@ -421,6 +421,27 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
       if (!field || field.derive) return false;
       return action.set === "clear" || field.type === "date" || field.type === "datetime";
     });
+  // A priority is a deterministic ordering over the primary entity. Invalid
+  // field references degrade to no priority rather than forcing a repair call.
+  // Its optional filter uses the exact same predicate contract as filter chips.
+  let priority: ProductPriority | undefined;
+  if (input.priority) {
+    const sortField = identifier(input.priority.sortField, "");
+    const sortTarget = primaryFieldMap.get(sortField);
+    if (sortTarget && !sortTarget.derive) {
+      const rawFilter = input.priority.filter;
+      const filterField = rawFilter ? identifier(rawFilter.field, "") : "";
+      const filter = rawFilter && predicateUsable(filterField, rawFilter.operator, rawFilter.value, primaryFieldMap)
+        ? { field: filterField, operator: rawFilter.operator, ...(rawFilter.value !== undefined ? { value: clean(rawFilter.value) } : {}) }
+        : undefined;
+      priority = {
+        label: clean(input.priority.label ?? "") || "Next up",
+        sortField,
+        direction: input.priority.direction === "desc" ? "desc" : "asc",
+        ...(filter ? { filter } : {}),
+      };
+    }
+  }
   const entityMap = new Map(entities.map((entity) => [identifier(entity.name, ""), entity]));
   const standings = (input.standings ?? []).map((table, index): ProductStandings | undefined => {
     const rowEntity = identifier(String(table?.rowEntity ?? ""), "");
@@ -478,6 +499,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     charts,
     quickActions,
     standings,
+    ...(priority ? { priority } : {}),
     persistence: { strategy: "localStorage" },
     assumptions: uniqueStrings(input.assumptions ?? []),
     excluded: uniqueStrings(input.excluded ?? []),

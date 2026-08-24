@@ -45,12 +45,18 @@ describe("multi-entity standings regression", () => {
       await cp(path.resolve("app-template"), appDirectory, { recursive: true, filter: (source) => !source.split(path.sep).includes("node_modules") && !source.endsWith(`${path.sep}dist`) });
       await symlink(path.resolve("app-template", "node_modules"), path.join(appDirectory, "node_modules"), "dir");
       await copyFile(path.resolve("test", "fixtures", "league-app.fixture.tsx"), path.join(appDirectory, "src", "League.test.tsx"));
-      const ir = normalizeProductIR(validateProductIR(LEAGUE_IR));
+      // The model-facing schema intentionally allows primaryField to be omitted.
+      // Replay that exact sparse shape on both related entities: normalization
+      // must infer stable identifiers instead of crashing before compilation.
+      const raw = structuredClone(LEAGUE_IR) as unknown as { entities: Array<Record<string, unknown>> };
+      for (const entity of raw.entities) delete entity.primaryField;
+      const ir = normalizeProductIR(validateProductIR(raw));
       const route = classifyCapabilities(ir);
       const config = compileConfig(ir);
       expect(route.route).toBe("compile");
       expect(route.unsupported).toEqual([]);
       expect(config.entities).toHaveLength(2);
+      expect(ir.entities.map((entity) => entity.primaryField)).toEqual(["name", "home_team"]);
       expect(config.standings?.[0]).toMatchObject({ rowEntity: "team", sourceEntity: "match", points: { win: 3, draw: 1, loss: 0 } });
       expect(deriveJourneys(ir).map((journey) => journey.id)).toEqual(expect.arrayContaining(["related_entities", "standings"]));
       await writeCompiledProduct(appDirectory, ir, route, deriveJourneys(ir));

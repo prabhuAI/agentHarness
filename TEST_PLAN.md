@@ -25,6 +25,8 @@
 | TC-019 | Preserve single-entity behavior after multi-entity support | Regression | P0 | `test/public-fixture.test.ts`, `test/furniture-fixture.test.ts`, `test/golden.test.ts` |
 | TC-020 | Select board/table/gallery/agenda/dashboard/standings from existing semantics with no UI field in Product IR | Unit/UI | P0 | `app-template/src/view-plan.test.ts`, `app-template/src/App.test.tsx` |
 | TC-021 | Expand omitted capabilities and empty optional sections deterministically | Unit | P0 | `test/product-compiler.test.ts` |
+| TC-022 | Infer omitted primary fields in related entities without crashing | Integration | P0 | `test/league-fixture.test.ts` |
+| TC-023 | Order an eligible FIFO queue, move the Next up marker after edit, persist, and build | UI/integration | P0 | `test/waitlist-fixture.test.ts`, `test/fixtures/waitlist-app.fixture.tsx` |
 
 ## Application-readiness rubric coverage
 

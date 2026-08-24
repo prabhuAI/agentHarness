@@ -4,4 +4,6 @@ Build the smallest useful MVP. Never omit an implied journey merely to simplify.
 
 Setting or clearing a field value is ordinary editing, never a `customRequirement`: writing a borrower's name when an item is lent and clearing it when returned is a plain edit to a text field. Omit optional sections when empty. For normal record apps also omit capabilities and persistence: deterministic normalization infers CRUD, search, sorting, facets, status editing, calculations, and browser-local storage. Emit only meaningful exceptions and requirements.
 
+For “who is next?”, FIFO, oldest-first, triage, or dispatch, use `priority` with a sort field and optional eligibility filter; never repeat that behavior in `customRequirements`.
+
 For compile-route success, `compile_product` terminates the run only after deterministic journeys, production build, live HTTP startup, and required-artifact validation. If it returns hybrid/custom requirements or a verification failure, inspect only relevant files, make the smallest focused patch, and call `finalize_product`. Maximum targeted repair attempts: two. Never rewrite the generic runtime, add dependencies, write `result.json`, or produce essays.

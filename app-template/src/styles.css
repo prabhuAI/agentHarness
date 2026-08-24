@@ -280,6 +280,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 }
 .card-top { display: flex; justify-content: space-between; gap: 14px; }
 .card h3 { overflow: hidden; margin: 0; font: 750 18px var(--font-display); letter-spacing: -.025em; text-overflow: ellipsis; }
+.card.is-priority { border-color: color-mix(in srgb, var(--accent) 64%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent), 0 9px 26px color-mix(in srgb, var(--accent) 10%, transparent); }
+.priority-badge { display: inline-flex; align-items: center; margin-right: 8px; border-radius: 999px; background: var(--accent); color: var(--accent-text); padding: 3px 8px; font: 800 10px var(--font-body); letter-spacing: .04em; text-transform: uppercase; vertical-align: 2px; }
 .actions { display: flex; gap: 4px; }
 .actions button { min-height: 34px; border: 1px solid transparent; border-radius: 7px; background: var(--surface-alt); color: var(--ink); padding: 6px 9px; font-size: 12px; font-weight: 700; }
 .actions button:hover { border-color: var(--border); }

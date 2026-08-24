@@ -113,10 +113,20 @@ const strictProductIRSchema = Type.Object({
       win: Type.Number(), draw: Type.Number(), loss: Type.Number(),
     }, { description: "Points awarded for each outcome; defaults to 3/1/0" })),
   }), { maxItems: 2, description: "Deterministic standings derived from scored records. Use for league tables, ladders, and two-participant rankings; never repeat it as a customRequirement." })),
+  priority: Type.Optional(Type.Object({
+    label: Type.Optional(Type.String({ description: "Badge for the first matching record, e.g. Next up" })),
+    sortField: Type.String({ description: "Field that determines priority order, e.g. arrived_at" }),
+    direction: Type.Optional(Type.String({ enum: ["asc", "desc"], description: "asc means earliest/smallest first; defaults to asc" })),
+    filter: Type.Optional(Type.Object({
+      field: Type.String(),
+      operator: Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy", "today", "thisWeek", "thisMonth"] }),
+      value: Type.Optional(Type.String()),
+    }, { description: "Optional subset eligible for priority, e.g. status equals Waiting" })),
+  }, { description: "Ordered queue with a highlighted first record. Use for who-is-next, FIFO, oldest-first, triage, or dispatch workflows; never use a customRequirement for these." })),
   persistence: Type.Optional(Type.Object({ strategy: Type.String({ enum: ["localStorage"] }) })),
   assumptions: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
   excluded: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
-  customRequirements: Type.Optional(Type.Array(Type.String(), { maxItems: 8, description: "Only core behavior not expressible as fields, CRUD, search, filters, states, calculations, multiple entities, or standings" })),
+  customRequirements: Type.Optional(Type.Array(Type.String(), { maxItems: 8, description: "Only core behavior not expressible as fields, CRUD, search, filters, states, calculations, multiple entities, standings, or priority queues" })),
 });
 
 // Weaker models sometimes emit a nested object/array argument as a JSON *string*
@@ -378,7 +388,7 @@ export function registerProductCompiler(
         await writeReport(appRoot, ir, route, journeys, emptyQa);
         await trace.record({ agent: "qa", action: "verify_journeys", status: "skipped", reason: "focused custom implementation required" });
         return {
-          content: [{ type: "text", text: `Base product compiled via ${route.route}. Implement only: ${route.unsupported.join("; ")}. Then call finalize_product.` }],
+          content: [{ type: "text", text: `Base product compiled via ${route.route}. Implement only: ${route.unsupported.join("; ")}. Relevant files: src/App.tsx, src/styles.css, and src/App.test.tsx. Read files directly; the read tool cannot list directories. Then call finalize_product.` }],
           details: { route, budget },
         };
       }
