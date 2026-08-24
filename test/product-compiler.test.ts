@@ -103,6 +103,21 @@ describe("Product IR compiler", () => {
     expect(normalized.calculations).toContainEqual(expect.objectContaining({ label: "On shelf", field: "status" }));
   });
 
+  it("deduplicates an entity-scoped explicit metric against the primary entity's derived facet metric", () => {
+    const hiring = fixture();
+    hiring.entities[0]!.name = "candidate";
+    hiring.entities[0]!.plural = "candidates";
+    hiring.entities[0]!.fields.find((field) => field.id === "status")!.options = ["New", "Hired"];
+    hiring.calculations = [
+      { id: "total_candidates", label: "Total candidates", entity: "candidate", operation: "count" },
+      { id: "hired", label: "Hired", entity: "candidate", operation: "countWhere", field: "status", operator: "equals", value: "Hired" },
+    ];
+    const normalized = normalizeProductIR(validateProductIR(hiring));
+    expect(normalized.calculations.filter((calculation) => calculation.label === "Hired")).toEqual([
+      expect.objectContaining({ id: "hired", entity: "candidate", value: "Hired" }),
+    ]);
+  });
+
   it("coerces option-bearing fields to a choice type so weaker models render a select", () => {
     // Weaker models (e.g. a small local model) often tag an enumerated field as
     // "text" while still supplying options; the runtime only renders a select for

@@ -3,6 +3,7 @@ import { type ChartConfig, FieldConfig, type PredicateOperator, productConfig, t
 import { evaluateFormula } from "./formula.js";
 import { createRepository, EntityRecord, RecordValue } from "./repository.js";
 import { RelatedWorkspace } from "./RelatedWorkspace.js";
+import { resolveViewPlan } from "./view-plan.js";
 import {
   loadThemePreference,
   nextPreference,
@@ -344,6 +345,7 @@ export function App() {
   const [systemDark, setSystemDark] = useState(systemPrefersDark);
   const dialog = useRef<HTMLDialogElement>(null);
   const resolvedTheme = resolveTheme(themePreference, systemDark);
+  const viewPlan = resolveViewPlan(productConfig);
 
   useEffect(() => { document.title = productConfig.name; }, []);
   useEffect(() => watchSystemTheme(setSystemDark), []);
@@ -513,6 +515,8 @@ export function App() {
     data-density={design.density}
     data-motion={design.motion}
     data-variant={design.variant}
+    data-view={viewPlan.primary}
+    data-navigation={viewPlan.navigation}
     style={designStyle}
   >
     <a className="skip-link" href="#main">Skip to content</a>

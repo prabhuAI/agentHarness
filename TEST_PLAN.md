@@ -23,6 +23,8 @@
 | TC-017 | Accept text and website-style idea JSON; fail fast on missing provider configuration | Contract | P0 | `test/run-challenge.test.ts` |
 | TC-018 | Create related teams/results, calculate standings, persist, and build | UI/integration | P0 | `test/league-fixture.test.ts`, `test/fixtures/league-app.fixture.tsx` |
 | TC-019 | Preserve single-entity behavior after multi-entity support | Regression | P0 | `test/public-fixture.test.ts`, `test/furniture-fixture.test.ts`, `test/golden.test.ts` |
+| TC-020 | Select board/table/gallery/agenda/dashboard/standings from existing semantics with no UI field in Product IR | Unit/UI | P0 | `app-template/src/view-plan.test.ts`, `app-template/src/App.test.tsx` |
+| TC-021 | Expand omitted capabilities and empty optional sections deterministically | Unit | P0 | `test/product-compiler.test.ts` |
 
 ## Application-readiness rubric coverage
 

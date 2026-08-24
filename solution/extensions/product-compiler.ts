@@ -347,7 +347,6 @@ export function registerProductCompiler(
       "Use product.design only when the idea clearly signals a tone, density, contrast, or motion preference; never generate colors, fonts, CSS, or layout instructions.",
       "Do not list one filter or one count per option: the compiler auto-derives an equals filter and a per-option metric for each option of the primary facet (the status field if present, otherwise one category). When the entity has a currency field, that per-option metric is the option's summed amount (spend breakdown); otherwise it is a count. Only add filters/calculations for logic beyond that: an overall total, cross-field conditions, or a totals count.",
       "For a date window like \"this month\", add a filter on the date field with operator today/thisWeek/thisMonth (no value) — never a value like \"thisMonth\". The runtime evaluates it against the current date.",
-      "When an entity has a category or status field with a fixed option set, enable filter, group, and calculate so the user can browse and break down by it — leaving them off strands the options with no way to use them.",
       "Omit product.tagline unless a short tagline adds real clarity beyond the product name.",
       "Keep assumptions and excluded entries short phrases, not full sentences.",
       "Add a field placeholder only when the field's purpose is not already obvious from its label and type.",

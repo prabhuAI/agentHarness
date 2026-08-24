@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App, chartSeries, compareRecordsBySort, computeDerivedValue, computeSummaryValue, matchesPredicate } from "./App.js";
 import { type ChartConfig, type FieldConfig, productConfig, type SortOption, type SummaryConfig } from "./product-config.js";
 import { createRepository, storageKeyFor } from "./repository.js";
+import { resolveViewPlan } from "./view-plan.js";
 
 beforeEach(() => { window.localStorage.clear(); vi.stubGlobal("confirm", vi.fn(() => true)); });
 afterEach(cleanup);
@@ -61,6 +62,7 @@ describe("compiled product runtime", () => {
     expect(app).toHaveAttribute("data-layout", productConfig.design.layout);
     expect(app).toHaveAttribute("data-tone", productConfig.design.tone);
     expect(app).toHaveAttribute("data-density", productConfig.design.density);
+    expect(app).toHaveAttribute("data-view", resolveViewPlan(productConfig).primary);
     expect(app).toHaveStyle(`--accent: ${productConfig.design.colors.accent}`);
     expect(screen.getByRole("link", { name: /skip to content/i })).toHaveAttribute("href", "#main");
   });

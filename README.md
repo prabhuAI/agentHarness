@@ -129,6 +129,8 @@ The “agents” in the trace are logical, specialized stages—product interpre
 
 The five supported interaction genomes are tracker, workflow, catalog, planner, and dashboard. Reusable behavior includes fields, CRUD, search, preset filters, sorting, category/status grouping, status transitions through editing, count/count-where/sum summaries, validation, and browser-local persistence. Product IR can also declare multiple editable entities and a deterministic two-participant standings table. Scored records then update played/won/drawn/lost, score-for/against, difference, points, and ranking without a custom model-authored patch.
 
+The runtime derives its information architecture from those existing semantics without adding model-facing UI tokens: scored entities lead with standings, status lifecycles become boards, planners become agendas, catalogs become galleries, metric-heavy products become dashboards, dense records become tables, and compact products retain cards. Optional Product IR sections, standard capabilities, and local persistence may be omitted from the model tool call because normalization expands those defaults deterministically.
+
 ## Result and telemetry ownership
 
 The deterministic compiler writes `report.partial.json`, containing the product summary, assumptions, features, and derived journeys. The runner writes `result.json` after parsing Pi's completed `message_end` events. This prevents the model from inventing headline token totals.

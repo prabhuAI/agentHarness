@@ -262,10 +262,10 @@ function deriveOptionCalculations(fields: ProductField[], calculations: ProductC
 // explicit model-authored metric over a later auto-derived facet metric when
 // both have the same label; rendering duplicates is confusing and used to make
 // configuration-driven UI tests ambiguous.
-function dedupeCalculationsByLabel(calculations: ProductCalculation[]): ProductCalculation[] {
+function dedupeCalculationsByLabel(calculations: ProductCalculation[], defaultEntity: string): ProductCalculation[] {
   const seen = new Set<string>();
   return calculations.filter((calculation) => {
-    const key = `${calculation.entity ?? ""}:${clean(calculation.label).toLowerCase()}`;
+    const key = `${calculation.entity ?? defaultEntity}:${clean(calculation.label).toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -332,6 +332,8 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
   // and calculate, even when the model under-scoped the idea and left them off
   // (which stranded the option list with no way to browse or break down by it).
   const hasFacet = Boolean(primaryFacetField(entities[0].fields));
+  const hasExplicitFilters = (input.filters?.length ?? 0) > 0;
+  const hasExplicitCalculations = (input.calculations?.length ?? 0) > 0;
   // Missing capabilities default to a sensible CRUD set rather than rejecting the IR;
   // an explicit false is preserved (?? only fills null/undefined) unless a facet forces it on.
   const capabilities = {
@@ -339,11 +341,11 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     edit: input.capabilities?.edit ?? true,
     delete: input.capabilities?.delete ?? true,
     search: input.capabilities?.search ?? true,
-    filter: (input.capabilities?.filter ?? false) || hasFacet,
-    sort: input.capabilities?.sort ?? false,
+    filter: (input.capabilities?.filter ?? hasExplicitFilters) || hasFacet,
+    sort: input.capabilities?.sort ?? true,
     group: (input.capabilities?.group ?? false) || hasFacet,
     transition: input.capabilities?.transition ?? false,
-    calculate: (input.capabilities?.calculate ?? false) || hasFacet,
+    calculate: (input.capabilities?.calculate ?? hasExplicitCalculations) || hasFacet,
   };
   const isNumeric = (fieldId: string | undefined): boolean => {
     const type = fieldId ? primaryFieldMap.get(fieldId)?.type : undefined;
@@ -386,7 +388,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
   if (capabilities.filter) filters = deriveOptionFilters(entities[0].fields, filters);
   filters = dedupeFiltersByLabel(filters);
   if (capabilities.calculate) calculations = deriveOptionCalculations(entities[0].fields, calculations);
-  calculations = dedupeCalculationsByLabel(calculations);
+  calculations = dedupeCalculationsByLabel(calculations, entities[0].name);
   // A chart is kept only when its axes resolve to a real date field (x) and a
   // real numeric field (y); anything else is dropped rather than rejected, so a
   // mis-specified chart never blocks a compile.
