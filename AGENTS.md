@@ -26,7 +26,7 @@ Idea → Product IR (1 model call) → normalize + validate → capability route
 
 | Command | Purpose |
 |---|---|
-| `npm run check` | Full gate: `typecheck` + `test` + `app:test` + `app:build`. Run before considering work done. |
+| `npm run check` | Repository gate: `typecheck` + `test` + `app:test` + `app:build`. A scored release additionally requires the challenge run, result validation, and frozen evidence. |
 | `npm run typecheck` | `tsc --noEmit` over `src/`, `solution/`, `benchmarks/`, `test/`. |
 | `npm test` | Vitest unit/integration suite. |
 | `npm run test:golden` | Golden-transcript replay tests (`test/golden/`). |

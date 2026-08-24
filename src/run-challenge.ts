@@ -109,6 +109,18 @@ async function runInherited(command: string, args: string[], cwd: string): Promi
   });
 }
 
+function providerErrorFromEventLine(line: string): ReturnType<typeof matchProviderError> {
+  try {
+    const event = JSON.parse(line) as Record<string, unknown>;
+    if (event.type !== "message_end") return null;
+    const message = event.message as Record<string, unknown> | undefined;
+    if (message?.role !== "assistant" || message.stopReason !== "error") return null;
+    return matchProviderError(String(message.errorMessage ?? ""));
+  } catch {
+    return null;
+  }
+}
+
 function summarizeEventLine(line: string): void {
   try {
     const event = JSON.parse(line) as Record<string, unknown>;
@@ -118,7 +130,7 @@ function summarizeEventLine(line: string): void {
     if (event.type === "message_end") {
       const message = event.message as Record<string, unknown> | undefined;
       const usage = message?.usage as Record<string, unknown> | undefined;
-      if (message?.role === "assistant" && usage) {
+      if (message?.role === "assistant" && usage && message.stopReason !== "error") {
         console.log(
           `[pi] model call completed: input=${String(usage.input ?? 0)} output=${String(usage.output ?? 0)}`,
         );
@@ -173,6 +185,7 @@ export async function runPi(
       piChild = child;
       let timedOut = false;
       let killTimer: NodeJS.Timeout | undefined;
+      let fatalProviderError = false;
       const scheduleForceKill = () => {
         if (!killTimer) killTimer = setTimeout(() => signalProcessTree(child, "SIGKILL"), 5_000);
       };
@@ -187,13 +200,21 @@ export async function runPi(
         lineBuffer += chunk.toString("utf8");
         const lines = lineBuffer.split(/\r?\n/u);
         lineBuffer = lines.pop() ?? "";
-        for (const line of lines) summarizeEventLine(line);
+        for (const line of lines) {
+          summarizeEventLine(line);
+          const provider = providerErrorFromEventLine(line);
+          if (provider && !fatalProviderError && !timedOut) {
+            fatalProviderError = true;
+            console.error(`Aborting run early: ${provider.summary}`);
+            signalProcessTree(child, "SIGTERM");
+            scheduleForceKill();
+          }
+        }
       });
       // Abort early on a fatal provider/transport error (bad key, quota/rate
       // limit, connection failure) instead of waiting out Pi's retries or the
       // wall-clock timeout. The full stderr still reaches the log and terminal.
       let stderrTail = "";
-      let fatalProviderError = false;
       child.stderr.on("data", (chunk: Buffer) => {
         if (fatalProviderError || timedOut) return;
         stderrTail = (stderrTail + chunk.toString("utf8")).slice(-8_192);
@@ -244,6 +265,8 @@ export function buildPiArguments(
     "--no-prompt-templates",
     "--no-themes",
     "--no-context-files",
+    "--tools",
+    "read,write,edit,compile_product,finalize_product",
     "--append-system-prompt",
     `${systemPrompt.trim()}\n\n${publicJourneys.trim()}\n\n${appContext.trim()}`,
     "--session-dir",
@@ -258,6 +281,42 @@ export function buildPiArguments(
   args.push("--thinking", process.env.CHALLENGE_THINKING ?? "off");
   args.push(`## Product idea\n\n${idea.trim()}\n`);
   return args;
+}
+
+export function parseIdeaInput(raw: string, sourcePath: string): string {
+  const trimmed = raw.trim();
+  const expectsJson = path.extname(sourcePath).toLowerCase() === ".json";
+  if (!expectsJson && !trimmed.startsWith("{")) return trimmed;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error("the JSON root must be an object");
+    }
+    const record = parsed as Record<string, unknown>;
+    const idea = [record.idea, record.description, record.prompt].find(
+      (value): value is string => typeof value === "string" && value.trim() !== "",
+    );
+    if (!idea) throw new Error('expected a non-empty "idea", "description", or "prompt" string');
+    return idea.trim();
+  } catch (error) {
+    if (!expectsJson) return trimmed;
+    throw new Error(`Invalid idea JSON in ${sourcePath}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+export function assertProviderConfiguration(environment: NodeJS.ProcessEnv = process.env): void {
+  const provider = environment.CHALLENGE_PROVIDER;
+  const model = environment.CHALLENGE_MODEL;
+  if (provider && model) return;
+  if (!provider && !model && environment.BERGET_API_KEY) {
+    environment.CHALLENGE_PROVIDER = "berget";
+    environment.CHALLENGE_MODEL = "zai-org/GLM-5.2";
+    return;
+  }
+  throw new Error(
+    "Set both CHALLENGE_PROVIDER and CHALLENGE_MODEL before a scored run (and provide that provider's API key). " +
+    "With BERGET_API_KEY set, the runner defaults to berget/zai-org/GLM-5.2.",
+  );
 }
 
 function timeoutFromEnvironment(): number {
@@ -300,7 +359,8 @@ export function assertSupportedNode(version: string = process.versions.node): vo
 async function main(): Promise<void> {
   assertSupportedNode();
   const args = parseArguments(process.argv.slice(2));
-  const idea = await readFile(args.ideaFile, "utf8");
+  if (!args.prepareOnly) assertProviderConfiguration();
+  const idea = parseIdeaInput(await readFile(args.ideaFile, "utf8"), args.ideaFile);
   const outputDirectory = await prepareOutput(REPOSITORY_ROOT, args.outputDirectory);
   console.log(`Prepared clean application workspace: ${outputDirectory}`);
 
@@ -342,7 +402,8 @@ async function main(): Promise<void> {
     else console.warn(message);
   }
 
-  const usage = collectUsageFromJsonLines(await readFile(eventFile, "utf8"));
+  const eventContent = await readFile(eventFile, "utf8");
+  const usage = collectUsageFromJsonLines(eventContent);
   const partial = await readPartialResult(outputDirectory);
   const canVerifyApp = pi.exitCode === 0 && usage.model_calls > 0;
   const startCommand = rootStartCommand(REPOSITORY_ROOT, outputDirectory);
@@ -350,7 +411,7 @@ async function main(): Promise<void> {
   // A written product report (partial.status other than "failed") means the model
   // did compile a verifiable Product IR — a clean exit then is success, not a
   // model_output failure, so the diagnosis must not misfire on it.
-  const diagnosis = classifyPiFailure(piStderr, pi.exitCode, usage.model_calls, partial.status !== "failed");
+  const diagnosis = classifyPiFailure(`${piStderr}\n${eventContent}`, pi.exitCode, usage.model_calls, partial.status !== "failed");
   const failureSummary = pi.timedOut
     ? "Run exceeded CHALLENGE_TIMEOUT_MS and was terminated before finishing."
     : diagnosis.summary;

@@ -130,4 +130,19 @@ describe("collectUsageFromJsonLines", () => {
       call_log: [],
     });
   });
+
+  it("does not count provider-error messages as completed model calls", () => {
+    const content = JSON.stringify({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        provider: "local",
+        model: "offline-model",
+        stopReason: "error",
+        errorMessage: "Connection error.",
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 },
+      },
+    });
+    expect(collectUsageFromJsonLines(content)).toMatchObject({ model_calls: 0, call_log: [] });
+  });
 });

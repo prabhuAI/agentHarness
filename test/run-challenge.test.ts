@@ -7,7 +7,14 @@ import {
   PI_DOCUMENTATION_HEADING,
   stripPiDocumentationBlock,
 } from "../solution/extensions/protected-paths.js";
-import { buildPiArguments, parseArguments, runPi, runRequiresFailureExit } from "../src/run-challenge.js";
+import {
+  assertProviderConfiguration,
+  buildPiArguments,
+  parseArguments,
+  parseIdeaInput,
+  runPi,
+  runRequiresFailureExit,
+} from "../src/run-challenge.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -41,6 +48,10 @@ describe("Pi launch", () => {
       );
       expect(args).toContain("--offline");
       expect(args).toContain("--no-context-files");
+      expect(args.slice(args.indexOf("--tools"), args.indexOf("--tools") + 2)).toEqual([
+        "--tools",
+        "read,write,edit,compile_product,finalize_product",
+      ]);
       expect(args).not.toContain("--print");
       expect(args).not.toContain("--approve");
       expect(args[args.indexOf("--thinking") + 1]).toBe("off");
@@ -56,6 +67,22 @@ describe("Pi launch", () => {
       if (previousThinking === undefined) delete process.env.CHALLENGE_THINKING;
       else process.env.CHALLENGE_THINKING = previousThinking;
     }
+  });
+
+  it("accepts both raw text and the website's idea.json envelope", () => {
+    expect(parseIdeaInput("Build a useful tracker", "/tmp/idea.txt")).toBe("Build a useful tracker");
+    expect(parseIdeaInput('{"idea":"Build a useful tracker"}', "/tmp/idea.json")).toBe("Build a useful tracker");
+    expect(parseIdeaInput('{"description":"Build a useful tracker"}', "/tmp/idea.json")).toBe("Build a useful tracker");
+    expect(() => parseIdeaInput('{"title":"Missing idea"}', "/tmp/idea.json")).toThrow(/non-empty/i);
+  });
+
+  it("requires an explicit provider/model or defaults from a Berget key", () => {
+    expect(() => assertProviderConfiguration({})).toThrow(/CHALLENGE_PROVIDER/);
+    const explicit = { CHALLENGE_PROVIDER: "custom", CHALLENGE_MODEL: "model" };
+    expect(() => assertProviderConfiguration(explicit)).not.toThrow();
+    const berget = { BERGET_API_KEY: "test-only" };
+    assertProviderConfiguration(berget);
+    expect(berget).toMatchObject({ CHALLENGE_PROVIDER: "berget", CHALLENGE_MODEL: "zai-org/GLM-5.2" });
   });
 
   it("appends structurally consistent public journey guidance to Pi's built-in system prompt", async () => {

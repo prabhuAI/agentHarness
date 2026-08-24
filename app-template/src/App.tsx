@@ -14,8 +14,6 @@ import {
   watchSystemTheme,
 } from "./theme.js";
 
-const { repository, recoveredFromInvalidData } = createRepository(productConfig.name);
-
 type Values = Record<string, RecordValue>;
 type Errors = Record<string, string>;
 const CUSTOM_OPTION_VALUE = "__agent_cofounder_custom_option__";
@@ -327,6 +325,10 @@ function SummaryIcon({ operation }: { operation: string }) {
 }
 
 export function App() {
+  // Bind persistence to this mounted application instance. This avoids stale
+  // in-memory state surviving a remount after storage was externally cleared,
+  // while a normal remount still rehydrates the same browser-local records.
+  const { repository, recoveredFromInvalidData } = useMemo(() => createRepository(productConfig.name), []);
   const [records, setRecords] = useState<EntityRecord[]>(repository.list());
   const [values, setValues] = useState<Values>(emptyValues);
   const [errors, setErrors] = useState<Errors>({});

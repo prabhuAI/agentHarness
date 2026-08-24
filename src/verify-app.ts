@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { signalProcessTree, usesDetachedProcessGroup } from "./process-tree.js";
 import type { AppVerification, TestRun } from "./types.js";
@@ -281,6 +282,24 @@ async function verifyDevelopmentServer(
   const portClosed = await waitForPortToClose(port, 2_000);
   await safeWriteLog(logPath, renderOutput(captured));
   return served && childClosed && portClosed;
+}
+
+export async function verifyAppStartup(
+  appDirectory: string,
+  options: Pick<VerificationOptions, "serverTimeoutMs" | "npmCommand" | "port"> = {},
+): Promise<boolean> {
+  const logDirectory = await mkdtemp(path.join(os.tmpdir(), "compilekit-startup-"));
+  try {
+    return await verifyDevelopmentServer(
+      appDirectory,
+      path.join(logDirectory, "app-dev.log"),
+      options.serverTimeoutMs ?? 20_000,
+      options.npmCommand ?? commandName("npm"),
+      options.port ?? 3000,
+    );
+  } finally {
+    await rm(logDirectory, { recursive: true, force: true });
+  }
 }
 
 function testRun(command: string, journey: string, result: TestRun["result"]): TestRun {

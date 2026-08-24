@@ -21,23 +21,34 @@ const sampleValue = (field: { type: string; min?: number; max?: number }) => {
   return String(n);
 };
 
-async function createRecord() {
+async function fillField(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement, field: FieldConfig, value: string | boolean) {
+  const control = dialog.querySelector<HTMLElement>(`#field-${field.key}`);
+  if (!control) return;
+  if (field.type === "boolean") {
+    if (Boolean(value) !== (control as HTMLInputElement).checked) await user.click(control);
+  } else if (field.options?.length) {
+    if (field.options.includes(String(value))) await user.selectOptions(control, String(value));
+    else if (field.allowCustom) {
+      await user.selectOptions(control, "__custom__");
+      await user.type(within(dialog).getByRole("textbox", { name: `Custom ${field.label}` }), String(value));
+    }
+  } else {
+    await user.clear(control);
+    if (String(value) !== "") await user.type(control, String(value));
+  }
+}
+
+async function createRecord(overrides: Record<string, string | boolean> = {}) {
   const user = userEvent.setup();
   const created: Record<string, string | boolean> = {};
   await user.click(screen.getAllByRole("button", { name: new RegExp(`add ${productConfig.entityName}`, "i") })[0]);
   const dialog = screen.getByRole("dialog");
-  for (const field of productConfig.fields.filter((candidate) => candidate.required || candidate.key === productConfig.primaryField)) {
+  for (const field of productConfig.fields.filter((candidate) => !candidate.derive)) {
     // Query by the runtime's deterministic control id: label-based regex queries
     // throw when one product label is a substring of another.
-    const control = dialog.querySelector<HTMLElement>(`#field-${field.key}`);
-    if (!control) continue;
-    if (field.type === "boolean") { await user.click(control); created[field.key] = true; }
-    else {
-      const value = field.options?.[0] ?? sampleValue(field);
-      if (field.options?.length) await user.selectOptions(control, value);
-      else await user.type(control, value);
-      created[field.key] = value;
-    }
+    const value = overrides[field.key] ?? field.options?.[0] ?? sampleValue(field);
+    await fillField(user, dialog, field, value);
+    created[field.key] = value;
   }
   await user.click(within(dialog).getByRole("button", { name: new RegExp(`add ${productConfig.entityName}`, "i") }));
   return created;
@@ -64,6 +75,36 @@ describe("compiled product runtime", () => {
     const rehydrated = createRepository("Integration Ready Product");
     expect(rehydrated.repository.list().map((record) => record.id)).toContain(created.id);
     expect(rehydrated.recoveredFromInvalidData).toBe(false);
+  });
+
+  it("recovers from corrupt storage and keeps mutations atomic when persistence fails", () => {
+    const key = storageKeyFor("Corrupt Product");
+    window.localStorage.setItem(key, "{not-json");
+    const recovered = createRepository("Corrupt Product");
+    expect(recovered.recoveredFromInvalidData).toBe(true);
+    expect(recovered.repository.list()).toEqual([]);
+
+    const failingStorage = {
+      get length() { return 0; }, clear: vi.fn(), getItem: vi.fn(() => null), key: vi.fn(() => null), removeItem: vi.fn(),
+      setItem: vi.fn(() => { throw new DOMException("quota", "QuotaExceededError"); }),
+    } satisfies Storage;
+    const unavailable = createRepository("Atomic Product", failingStorage);
+    expect(() => unavailable.repository.create({ title: "Unsaved" })).toThrow(/quota/i);
+    expect(unavailable.repository.list()).toEqual([]);
+  });
+
+  it("honours the full repository update, remove, restore, and clear contract", () => {
+    const { repository } = createRepository("Repository Contract");
+    const created = repository.create({ title: "First" });
+    expect(repository.update(created.id, { title: "Updated" }).values.title).toBe("Updated");
+    repository.remove(created.id);
+    expect(repository.list()).toEqual([]);
+    repository.restore(created);
+    repository.restore(created);
+    expect(repository.list()).toHaveLength(1);
+    expect(() => repository.update("missing", { title: "Nope" })).toThrow(/no longer exists/i);
+    repository.clear();
+    expect(repository.list()).toEqual([]);
   });
 
   it("lets the user switch to a dark theme and remembers the choice", async () => {
@@ -99,6 +140,15 @@ describe("compiled product runtime", () => {
     const custom = within(screen.getByRole("dialog")).getByRole("textbox", { name: `Custom ${configurable!.label}` });
     await user.type(custom, "Custom choice");
     expect(custom).toHaveValue("Custom choice");
+    for (const field of productConfig.fields.filter((candidate) => candidate.required && candidate.key !== configurable.key)) {
+      await fillField(user, screen.getByRole("dialog"), field, field.options?.[0] ?? sampleValue(field));
+    }
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: new RegExp(`add ${productConfig.entityName}`, "i") }));
+    const stored = JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]");
+    expect(stored[0].values[configurable.key]).toBe("Custom choice");
+    cleanup();
+    render(<App />);
+    expect(JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]")[0].values[configurable.key]).toBe("Custom choice");
   });
 
   it("focuses the first invalid field after a blocked submission", async () => {
@@ -249,10 +299,34 @@ describe("compiled product runtime", () => {
     expect(screen.getAllByText(/is required/i).length).toBeGreaterThan(0);
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /close/i }));
 
-    const created = await createRecord();
+    const firstFilter = productConfig.filters[0];
+    const filterOverrides: Record<string, string | boolean> = {};
+    if (firstFilter) {
+      const field = productConfig.fields.find((candidate) => candidate.key === firstFilter.field);
+      if (firstFilter.operator === "equals") filterOverrides[firstFilter.field] = firstFilter.value ?? field?.options?.[0] ?? "Matched";
+      else if (firstFilter.operator === "nonEmpty") filterOverrides[firstFilter.field] = field?.options?.[0] ?? "Matched";
+      else if (firstFilter.operator === "truthy") filterOverrides[firstFilter.field] = true;
+      else if (["today", "thisWeek", "thisMonth"].includes(firstFilter.operator)) {
+        const now = new Date();
+        filterOverrides[firstFilter.field] = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      }
+    }
+    const created = await createRecord(filterOverrides);
     const primaryValue = String(created[productConfig.primaryField]);
     expect(screen.getAllByText(primaryValue).length).toBeGreaterThan(0);
-    expect(JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]")).toHaveLength(1);
+    const storedAfterCreate = JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]");
+    expect(storedAfterCreate).toHaveLength(1);
+    const summaryRegion = screen.getByLabelText("Summary");
+    for (const summary of productConfig.summaries) {
+      const tile = within(summaryRegion).getByText(summary.label).closest(".stat-tile")!;
+      const rendered = tile.querySelector("strong")!.textContent ?? "";
+      const expected = computeSummaryValue(summary, storedAfterCreate);
+      if (summary.operation === "count" || summary.operation === "countWhere") expect(rendered).toBe(String(expected));
+      else expect(Number(rendered.replace(/[^0-9.-]/gu, ""))).toBe(expected);
+    }
+    for (const chart of productConfig.charts) {
+      expect(screen.getByRole("img", { name: `${chart.label} line chart with 1 points` })).toBeInTheDocument();
+    }
     const groupField = productConfig.fields.find((field) => !field.derive && (field.type === "category" || field.type === "status"));
     if (productConfig.capabilities.group && groupField) {
       const groupLabel = String(created[groupField.key] ?? "Uncategorized");
@@ -277,15 +351,40 @@ describe("compiled product runtime", () => {
       // operators (today/thisWeek/thisMonth), so a product whose first filter was a
       // date window was wrongly expected to still show the record and failed here.
       const matches = matchesPredicate(created[preset.field] as string | boolean | undefined, preset.operator, preset.value);
-      if (matches) expect(screen.getAllByText(primaryValue).length).toBeGreaterThan(0);
-      else expect(screen.getByText(/nothing matches/i)).toBeInTheDocument();
+      expect(matches).toBe(true);
+      expect(screen.getAllByText(primaryValue).length).toBeGreaterThan(0);
       await user.click(filterGroup.getByRole("button", { name: new RegExp(`^all ${escape(productConfig.entityNamePlural)}`, "i") }));
     }
     await user.click(screen.getByRole("button", { name: /edit/i }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /close/i }));
+    const editDialog = screen.getByRole("dialog");
+    const primaryField = productConfig.fields.find((field) => field.key === productConfig.primaryField)!;
+    const editedValue = primaryField.options?.find((option) => option !== primaryValue) ?? (primaryField.allowCustom ? "Edited custom value" : "Edited sample value");
+    await fillField(user, editDialog, primaryField, editedValue);
+    let editedFilterValue: string | boolean | undefined;
+    if (firstFilter && firstFilter.field !== primaryField.key) {
+      const filterField = productConfig.fields.find((field) => field.key === firstFilter.field)!;
+      if (firstFilter.operator === "equals") editedFilterValue = filterField.options?.find((option) => option !== firstFilter.value) ?? "Different value";
+      else if (firstFilter.operator === "nonEmpty") editedFilterValue = "";
+      else if (firstFilter.operator === "empty") editedFilterValue = "Now filled";
+      else if (firstFilter.operator === "truthy") editedFilterValue = false;
+      else if (firstFilter.operator === "falsy") editedFilterValue = true;
+      else editedFilterValue = "2000-01-01";
+      await fillField(user, editDialog, filterField, editedFilterValue);
+    }
+    await user.click(within(editDialog).getByRole("button", { name: /save changes/i }));
+    expect(screen.getAllByText(editedValue).length).toBeGreaterThan(0);
+    const updatedStored = JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]");
+    expect(updatedStored[0].values[productConfig.primaryField]).toBe(editedValue);
+    if (firstFilter && editedFilterValue !== undefined) {
+      expect(matchesPredicate(updatedStored[0].values[firstFilter.field], firstFilter.operator, firstFilter.value)).toBe(false);
+    }
+    cleanup();
+    render(<App />);
+    expect(screen.getAllByText(editedValue).length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: /delete/i }));
     expect(screen.getByText(new RegExp(`no ${productConfig.entityNamePlural}`, "i"))).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /undo/i }));
+    expect(screen.getAllByText(editedValue).length).toBeGreaterThan(0);
   });
 
   it("runs a configured quick action and persists the field change", async () => {

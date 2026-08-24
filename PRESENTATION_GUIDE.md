@@ -139,9 +139,9 @@ The public idea asks for a personal book tracker. The model converted it into:
 
 That became a tracker genome with four fields, nine supported capabilities, two filters, one live calculation, and ten derived journeys. No book vocabulary exists in the reusable compiler or runtime; the public fixture is isolated under `benchmarks/public-fixture.ts`.
 
-## Verified result
+## Historical measured result (replace from frozen final evidence)
 
-The final public run used Berget `zai-org/GLM-5.2` inside the pinned Node.js 22.19.0 Docker image.
+The figures below came from an earlier public run using Berget `zai-org/GLM-5.2` inside the pinned Node.js 22.19.0 Docker image. They are provenance for the optimization story, not the current submission claim. Before presenting, replace this table from `submission/verification/result.json`; if no frozen bundle exists, describe these values only as historical.
 
 | Measure | Result |
 |---|---:|
@@ -156,7 +156,7 @@ The final public run used Berget `zai-org/GLM-5.2` inside the pinned Node.js 22.
 | Derived journeys | 10/10 passed |
 | Outer harness checks | 4/4 passed |
 
-The first provider configuration consumed 24,643.4 weighted tokens. Explicit thinking control plus one-call compilation reduced that to 2,516.4, approximately a 90% reduction, while preserving the same successful product outcome.
+An earlier provider configuration consumed 24,643.4 weighted tokens. Explicit thinking control plus one-call compilation reduced that measured run to 2,516.4, approximately a 90% reduction. The frozen final bundle is the authority for the submitted run.
 
 ## Five-minute talk track
 
@@ -182,7 +182,7 @@ The first provider configuration consumed 24,643.4 weighted tokens. Explicit thi
 
 ### 4:15–5:00 — Result
 
-> The final public run completed in one model call: 185 input tokens, 679 output tokens, no reasoning tokens, and 2,516.4 weighted expenditure. All ten product journeys and all four outer checks passed. That is about a 90% reduction from our initial provider run. CompileKit is not trying to be a better typist; it is turning the coding agent into a product compiler.
+> In the historical measured run, one model call used 185 input tokens, 679 output tokens, no reasoning tokens, and 2,516.4 weighted expenditure; all ten product journeys and all four outer checks passed. I will use the frozen submission result for the final numbers. CompileKit is not trying to be a better typist; it is turning the coding agent into a product compiler.
 
 ## Demo sequence
 

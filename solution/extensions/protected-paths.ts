@@ -32,7 +32,7 @@ export default function protectedPaths(pi: ExtensionAPI) {
   }));
 
   pi.on("tool_call", async (event, context) => {
-    if (event.toolName !== "write" && event.toolName !== "edit") return undefined;
+    if (event.toolName !== "read" && event.toolName !== "write" && event.toolName !== "edit") return undefined;
     const candidate = String((event.input as Record<string, unknown>).path ?? "");
     const absolute = path.resolve(appRoot, candidate);
     const relative = path.relative(appRoot, absolute);
@@ -48,7 +48,7 @@ export default function protectedPaths(pi: ExtensionAPI) {
       basename.startsWith(".env.");
     if (!protectedPath) return undefined;
 
-    if (context.hasUI) context.ui.notify(`Blocked write to protected path: ${candidate}`, "warning");
+    if (context.hasUI) context.ui.notify(`Blocked ${event.toolName} of protected path: ${candidate}`, "warning");
     return { block: true, reason: "Path is outside the app workspace or is runner-owned" };
   });
 }

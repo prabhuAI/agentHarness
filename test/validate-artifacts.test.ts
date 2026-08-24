@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { verifyRequiredArtifacts } from "../src/validate-artifacts.js";
-import { TraceWriter } from "../solution/telemetry/trace.js";
+import { sha256File, TraceWriter } from "../solution/telemetry/trace.js";
 
 describe("required artifact verification", () => {
   it("accepts a complete auditable artifact set and rejects missing output", async () => {
@@ -13,13 +13,19 @@ describe("required artifact verification", () => {
       await Promise.all([
         writeFile(path.join(directory, "idea_spec.json"), JSON.stringify({ target_user: "User", core_utility: "Utility", included_features: [], excluded_features: [], assumptions: [] })),
         writeFile(path.join(directory, "product-ir.json"), JSON.stringify({ version: "1", product: {}, entities: [] })),
-        writeFile(path.join(directory, "summary.md"), "# Product\n"),
+        writeFile(path.join(directory, "summary.md"), "# Product\n\n## Verified journeys\n"),
+        writeFile(path.join(directory, "report.partial.json"), JSON.stringify({ status: "success" })),
       ]);
       const trace = new TraceWriter(directory);
       await trace.reset();
-      for (const action of ["interpret", "scope", "route", "compile", "verify"]) {
-        await trace.record({ agent: "product", action, status: "success" });
-      }
+      await trace.record({ agent: "product", action: "interpret_idea", status: "success" });
+      await trace.record({ agent: "product", action: "select_scope", status: "success" });
+      await trace.record({ agent: "router", action: "select_strategy", status: "success" });
+      await trace.record({ agent: "compiler", action: "generate_application", status: "success" });
+      await trace.record({ agent: "qa", action: "verify_journeys", status: "success" });
+      const names = ["idea_spec.json", "product-ir.json", "summary.md", "report.partial.json"];
+      const artifacts = Object.fromEntries(await Promise.all(names.map(async (name) => [name, await sha256File(path.join(directory, name))])));
+      await trace.record({ agent: "delivery", action: "finalize", status: "success", artifacts });
       expect((await verifyRequiredArtifacts(directory)).result).toBe("passed");
     } finally { await rm(directory, { recursive: true }); }
   });

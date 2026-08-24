@@ -13,7 +13,7 @@ description: Turn a non-technical product idea into a small, tested browser appl
 6. Keep components focused, separate concerns, and avoid duplication so another developer or agent can extend the app without a rewrite.
 7. Use only the dependencies already installed from the committed lockfile. Do not add packages or run dependency-install commands.
 8. Test every applicable observable user behavior with the included Vitest, jsdom, and Testing Library setup. Startup and assumptions reporting are runner obligations, not UI test journeys. Every committed test must run and pass; do not leave skipped or todo tests.
-9. Run the tests and production build before reporting success.
+9. Run the journeys, production build, live HTTP startup probe, and artifact validation before reporting success.
 10. The compiler writes `idea_spec.json`, `summary.md`, compact `trace.jsonl`, and `report.partial.json`. For a focused custom route, call `finalize_product` after the patch; do not rewrite these artifacts manually. `report.partial.json` uses this exact shape:
 
 ```json

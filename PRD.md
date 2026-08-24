@@ -300,6 +300,8 @@ Cache reads are only weighted at `0.1×`, encouraging effective prompt caching.
 
 # 10. Optimization Objective
 
+> Implementation note: this PRD describes both shipped behavior and strategy. Current executable coverage and release evidence are tracked in `TEST_PLAN.md` and `SUBMISSION.md`; a claim is not considered verified merely because it appears in this document.
+
 The real optimization objective is:
 
 ```text

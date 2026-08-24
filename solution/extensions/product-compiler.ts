@@ -3,7 +3,7 @@ import path from "node:path";
 import { defineTool, type ExecResult, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type, IsOptional, RemoveOptional, type TObject, type TSchema } from "typebox";
 import { classifyCapabilities } from "../compiler/capability-map.js";
-import { writeCompiledProduct } from "../compiler/compile.js";
+import { writeCompiledProduct, writeJourneySummary } from "../compiler/compile.js";
 import { normalizeProductIR } from "../ir/normalize.js";
 import { validateProductIR } from "../ir/schema.js";
 import type { NormalizedProductIR, RouteDecision } from "../ir/types.js";
@@ -12,7 +12,9 @@ import { TokenGovernor } from "../orchestrator/budget.js";
 import { deriveJourneys, type DerivedJourney } from "../qa/derive-journeys.js";
 import { classifyFailure, type ClassifiedFailure } from "../qa/classify.js";
 import { deterministicRepair } from "../repair/deterministic.js";
-import { TraceWriter } from "../telemetry/trace.js";
+import { sha256File, sha256Text, TraceWriter } from "../telemetry/trace.js";
+import { verifyRequiredArtifacts } from "../../src/validate-artifacts.js";
+import { verifyAppStartup } from "../../src/verify-app.js";
 
 const fieldSchema = Type.Object({
   id: Type.String({ description: "short snake_case semantic key" }),
@@ -197,27 +199,44 @@ interface QaResult {
   passed: boolean;
   test: ExecResult;
   build: ExecResult;
+  startup: ExecResult;
   failure?: ClassifiedFailure;
   repaired: boolean;
 }
 
-async function runQa(pi: ExtensionAPI, appRoot: string, signal: AbortSignal | undefined): Promise<QaResult> {
+interface CompilerDependencies {
+  verifyStartup: (appRoot: string) => Promise<boolean>;
+}
+
+const skipped = (message: string): ExecResult => ({ stdout: "", stderr: message, code: 1, killed: false });
+
+async function runQa(pi: ExtensionAPI, appRoot: string, signal: AbortSignal | undefined, dependencies: CompilerDependencies): Promise<QaResult> {
   const options = { cwd: appRoot, timeout: 120_000, ...(signal ? { signal } : {}) };
   let test = await pi.exec("npm", ["test"], options);
   let build = test.code === 0
     ? await pi.exec("npm", ["run", "build"], options)
-    : { stdout: "", stderr: "Build skipped because tests failed.", code: 1, killed: false };
-  if (test.code === 0 && build.code === 0) return { passed: true, test, build, repaired: false };
+    : skipped("Build skipped because tests failed.");
+  let startup = test.code === 0 && build.code === 0 && await dependencies.verifyStartup(appRoot)
+    ? { stdout: "HTTP startup probe passed.", stderr: "", code: 0, killed: false }
+    : skipped(test.code === 0 && build.code === 0 ? "HTTP startup probe failed." : "Startup skipped because tests or build failed.");
+  if (test.code === 0 && build.code === 0 && startup.code === 0) return { passed: true, test, build, startup, repaired: false };
+  if (startup.code !== 0 && test.code === 0 && build.code === 0) {
+    return { passed: false, test, build, startup, failure: classifyFailure("startup", startup.stderr), repaired: false };
+  }
   const command = test.code === 0 ? "build" : "test";
   const failed = command === "test" ? test : build;
   const failure = classifyFailure(command, `${failed.stdout}\n${failed.stderr}`);
   const repair = await deterministicRepair(appRoot, failure);
-  if (!repair.applied) return { passed: false, test, build, failure, repaired: false };
+  if (!repair.applied) return { passed: false, test, build, startup, failure, repaired: false };
   test = await pi.exec("npm", ["test"], options);
   build = test.code === 0
     ? await pi.exec("npm", ["run", "build"], options)
-    : { stdout: "", stderr: "Build skipped because repaired tests failed.", code: 1, killed: false };
-  return { passed: test.code === 0 && build.code === 0, test, build, failure, repaired: true };
+    : skipped("Build skipped because repaired tests failed.");
+  startup = test.code === 0 && build.code === 0 && await dependencies.verifyStartup(appRoot)
+    ? { stdout: "HTTP startup probe passed.", stderr: "", code: 0, killed: false }
+    : skipped(test.code === 0 && build.code === 0 ? "HTTP startup probe failed." : "Startup skipped because repaired tests or build failed.");
+  const passed = test.code === 0 && build.code === 0 && startup.code === 0;
+  return { passed, test, build, startup, failure: passed ? failure : (startup.code !== 0 ? classifyFailure("startup", startup.stderr) : failure), repaired: true };
 }
 
 async function writeReport(appRoot: string, ir: NormalizedProductIR, route: RouteDecision, journeys: DerivedJourney[], qa: QaResult): Promise<void> {
@@ -229,9 +248,39 @@ async function writeReport(appRoot: string, ir: NormalizedProductIR, route: Rout
     summary: qa.passed ? `${ir.product.name} was compiled and verified.` : `${ir.product.name} was compiled but product verification failed.`,
     implemented_features: [...new Set(implemented)],
     assumptions: ir.assumptions,
-    tests_run: journeys.map((journey) => ({ command: "npm test", journey: journey.description, result: qa.passed ? "passed" : "failed" })),
+    tests_run: [
+      ...journeys.map((journey) => ({ command: "npm test (compiled journey suite)", journey: journey.description, result: qa.test.code === 0 ? "passed" : "failed" })),
+      { command: "npm run build", journey: "The generated application completes a production build", result: qa.build.code === 0 ? "passed" : "failed" },
+      { command: "npm run dev + HTTP probe", journey: "The generated application starts on port 3000 and answers an HTTP request", result: qa.startup.code === 0 ? "passed" : "failed" },
+    ],
   };
   await writeFile(path.join(appRoot, "report.partial.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+}
+
+async function artifactHashes(appRoot: string): Promise<Record<string, string>> {
+  const names = ["idea_spec.json", "product-ir.json", "summary.md", "report.partial.json"];
+  return Object.fromEntries(await Promise.all(names.map(async (name) => [name, await sha256File(path.join(appRoot, name))])));
+}
+
+async function recordFinalEvidence(
+  appRoot: string,
+  trace: TraceWriter,
+  ir: NormalizedProductIR,
+  route: RouteDecision,
+  journeys: DerivedJourney[],
+  qa: QaResult,
+): Promise<QaResult> {
+  await writeJourneySummary(appRoot, ir, route, journeys, qa.passed);
+  await writeReport(appRoot, ir, route, journeys, qa);
+  await trace.record({ agent: "delivery", action: "finalize", status: qa.passed ? "success" : "failed", artifacts: await artifactHashes(appRoot) });
+  if (!qa.passed || (await verifyRequiredArtifacts(appRoot)).result === "passed") return qa;
+
+  const failed = { ...qa, passed: false, failure: classifyFailure("artifacts", "Required artifact validation failed.") };
+  await writeJourneySummary(appRoot, ir, route, journeys, false);
+  await writeReport(appRoot, ir, route, journeys, failed);
+  await trace.record({ agent: "qa", action: "validate_artifacts", status: "failed", category: "validation" });
+  await trace.record({ agent: "delivery", action: "finalize", status: "failed", artifacts: await artifactHashes(appRoot) });
+  return failed;
 }
 
 async function readState(appRoot: string): Promise<{ ir: NormalizedProductIR; state: CompilerState }> {
@@ -242,7 +291,11 @@ async function readState(appRoot: string): Promise<{ ir: NormalizedProductIR; st
   return { ir: normalizeProductIR(validateProductIR(JSON.parse(irRaw))), state: JSON.parse(stateRaw) as CompilerState };
 }
 
-export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
+export function registerProductCompiler(
+  pi: ExtensionAPI,
+  appRoot: string,
+  dependencies: CompilerDependencies = { verifyStartup: verifyAppStartup },
+) {
   const configuredBudget = Number(process.env.CHALLENGE_WEIGHTED_TOKEN_BUDGET ?? 18_000);
   const configuredRepairs = Number(process.env.MAX_LLM_REPAIR_ATTEMPTS ?? 2);
   const maximumWeightedTokens = Number.isFinite(configuredBudget) && configuredBudget > 0 ? configuredBudget : 18_000;
@@ -282,7 +335,7 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
       const trace = new TraceWriter(appRoot);
       await trace.reset();
       const ir = normalizeProductIR(validateProductIR(coerceStringifiedIR(params)));
-      await trace.record({ agent: "product", action: "interpret_idea", status: "success", genome: ir.product.genome, entities: ir.entities.length });
+      await trace.record({ agent: "product", action: "interpret_idea", status: "success", genome: ir.product.genome, entities: ir.entities.length, ir_sha256: sha256Text(JSON.stringify(ir)) });
       await trace.record({ agent: "product", action: "select_scope", status: "success", included: Object.values(ir.capabilities).filter(Boolean).length, excluded: ir.excluded.length });
       const route = classifyCapabilities(ir);
       const budget = governor.snapshot(route.route);
@@ -296,6 +349,7 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
           passed: false,
           test: { stdout: "", stderr: "Custom implementation required.", code: 1, killed: false },
           build: { stdout: "", stderr: "Custom implementation required.", code: 1, killed: false },
+          startup: { stdout: "", stderr: "Custom implementation required.", code: 1, killed: false },
           repaired: false,
         };
         await writeReport(appRoot, ir, route, journeys, emptyQa);
@@ -307,11 +361,10 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
       }
 
       onUpdate?.({ content: [{ type: "text", text: "Running deterministic product journeys and production build…" }], details: {} });
-      const qa = await runQa(pi, appRoot, signal);
-      await writeReport(appRoot, ir, route, journeys, qa);
+      let qa = await runQa(pi, appRoot, signal, dependencies);
       await trace.record({ agent: "qa", action: "verify_journeys", status: qa.passed ? "success" : "failed", passed: qa.passed ? journeys.length : 0, failed: qa.passed ? 0 : journeys.length, category: qa.failure?.category });
       if (qa.repaired) await trace.record({ agent: "repair", action: "deterministic_repair", status: qa.passed ? "success" : "failed", category: qa.failure?.category });
-      await trace.record({ agent: "delivery", action: "finalize", status: qa.passed ? "success" : "failed" });
+      qa = await recordFinalEvidence(appRoot, trace, ir, route, journeys, qa);
       if (qa.passed && process.env.CHALLENGE_LAUNCH_MODE === "1") await generateLaunchKit(appRoot, ir);
       return {
         content: [{ type: "text", text: qa.passed ? `VERIFIED_PASS: ${ir.product.name}` : `Verification failed (${qa.failure?.category ?? "unknown"}). Apply a minimal targeted patch, then call finalize_product.` }],
@@ -332,8 +385,7 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
       const { ir, state } = await readState(appRoot);
       const attempts = state.llmRepairAttempts ?? 0;
       onUpdate?.({ content: [{ type: "text", text: `Verifying focused patch (attempt ${attempts + 1})…` }], details: {} });
-      const qa = await runQa(pi, appRoot, signal);
-      await writeReport(appRoot, ir, state.route, state.journeys, qa);
+      let qa = await runQa(pi, appRoot, signal, dependencies);
       const trace = new TraceWriter(appRoot);
       await trace.resume();
       await trace.record({ agent: "qa", action: "verify_after_custom_patch", status: qa.passed ? "success" : "failed", attempt: attempts + 1, category: qa.failure?.category });
@@ -341,12 +393,13 @@ export function registerProductCompiler(pi: ExtensionAPI, appRoot: string) {
       await writeFile(path.join(appRoot, ".compiler-state.json"), `${JSON.stringify({ ...state, llmRepairAttempts: nextAttempts }, null, 2)}\n`, "utf8");
       if (qa.passed) {
         if (process.env.CHALLENGE_LAUNCH_MODE === "1") await generateLaunchKit(appRoot, ir);
-        await trace.record({ agent: "delivery", action: "finalize", status: "success" });
-        return { content: [{ type: "text", text: `VERIFIED_PASS: ${ir.product.name}` }], details: { passed: true }, terminate: true };
+        qa = await recordFinalEvidence(appRoot, trace, ir, state.route, state.journeys, qa);
+        if (qa.passed) return { content: [{ type: "text", text: `VERIFIED_PASS: ${ir.product.name}` }], details: { passed: true }, terminate: true };
       }
       governor.recordLlmRepair();
       const canRetry = nextAttempts < maximumRepairAttempts && governor.canUseLlmRepair(state.route.route);
       await trace.record({ agent: "repair", action: "targeted_llm_repair", status: canRetry ? "started" : "failed", attempt: nextAttempts, category: qa.failure?.category });
+      if (!canRetry) qa = await recordFinalEvidence(appRoot, trace, ir, state.route, state.journeys, qa);
       return {
         content: [{ type: "text", text: canRetry ? `${qa.failure?.summary} Fix only the relevant failure and call finalize_product once more.\n${qa.failure?.relevantOutput}` : `Repair budget exhausted. Final status is partial.\n${qa.failure?.relevantOutput}` }],
         details: { passed: false, failure: qa.failure, attempts: nextAttempts },

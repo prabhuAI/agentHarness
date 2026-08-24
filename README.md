@@ -17,7 +17,7 @@ This repository installs Pi as a local dependency at exactly `@earendil-works/pi
 
 Official hidden prompts, hidden tests, model credentials, and final scoring code must remain outside participant repositories.
 
-> **Organizer release requirement:** `contract-public/development-idea.txt` is a development placeholder. Replace it with the finalized public prompt before sharing this repository with participants. Never place hidden judging material in this file.
+`contract-public/development-idea.txt` contains the finalized published book-lending prompt. Hidden judging ideas remain outside this repository and are supplied with `--idea-file`; `.json` inputs with an `idea`, `description`, or `prompt` field are also accepted.
 
 ## Prerequisites
 
@@ -83,7 +83,7 @@ The Docker build runs the full check suite, including short-lived Vite servers o
 
 ## Run the public challenge
 
-The runner uses `contract-public/development-idea.txt` by default. During template development it contains a placeholder; organizers must replace that file with the finalized public prompt before participant distribution.
+The runner uses the finalized public prompt in `contract-public/development-idea.txt` by default.
 
 ```bash
 npm run challenge
@@ -123,6 +123,8 @@ raw idea → Product IR → validate → normalize → capability route
 ```
 
 The compiler writes `product.config.json`, `product-ir.json`, `idea_spec.json`, `summary.md`, `trace.jsonl`, and `report.partial.json`. The domain-neutral runtime interprets the configuration. Supported routes terminate after the initial tool call, avoiding a paid follow-up response. Hybrid and custom routes permit at most two focused repair turns.
+
+The “agents” in the trace are logical, specialized stages—product interpretation, routing, compilation, QA, repair, and delivery—coordinated inside one Pi session. This preserves multi-agent separation of responsibilities without paying for six independent model conversations; only stages facing genuine ambiguity use the model.
 
 The five supported interaction genomes are tracker, workflow, catalog, planner, and dashboard. Reusable behavior includes fields, CRUD, search, preset filters, sorting, category/status grouping, status transitions through editing, count/count-where/sum summaries, validation, and browser-local persistence.
 
@@ -174,17 +176,16 @@ Novel core interactions can still take the fallback path: the same Pi session ma
 |---|---|
 | `npm run challenge` | Execute the public idea through Pi and the product compiler |
 | `npm run challenge -- --prepare-only` | Reset the generated workspace without a model call |
-| `npm run check` | Run type checks, harness tests, runtime journeys, and build |
+| `npm run check` | Run the repository gate: type checks, harness tests, runtime journeys, and template build |
 | `npm run benchmark -- --limit 20` | Run an audited multi-idea benchmark; use `--limit 120` for the full suite |
 | `npm run validate:result -- output/app/result.json` | Validate schema and telemetry reconciliation |
+| `npm run submission:freeze` | Freeze a sanitized bundle from a fully successful scored run |
 | `npm --prefix output/app run dev` | Serve the generated product on port 3000 |
 
 Set `CHALLENGE_LAUNCH_MODE=1` to generate the optional post-verification `launch-kit.md`. Keep it disabled for scored runs.
 
-See [PRESENTATION_GUIDE.md](PRESENTATION_GUIDE.md) for the architecture, demo, and judge Q&A; [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for the PRD completion matrix; and [TEST_PLAN.md](TEST_PLAN.md) for acceptance coverage.
+See [PRESENTATION_GUIDE.md](PRESENTATION_GUIDE.md) for the architecture, demo, and judge Q&A; [TEST_PLAN.md](TEST_PLAN.md) for acceptance coverage; and [SUBMISSION.md](SUBMISSION.md) for the final evidence workflow.
 
 ## Security
 
-Pi and participant extensions execute with the permissions of the current process. The included extension rejects direct `write` and `edit` calls outside the generated app, but shell commands and symlink tricks can bypass an in-process guard. It is not a sandbox. Official evaluation must run each frozen submission in an isolated container or VM with a read-only harness mount and bounded CPU, memory, disk, time, and network access.
-
-See `docs/organizer-checklist.md` before publishing the template or running a judged submission.
+Pi and participant extensions execute with the permissions of the current process. Scored runs expose only the bounded `read`, `write`, `edit`, `compile_product`, and `finalize_product` tools; the protected-path extension confines file operations to the generated app and blocks credentials and runner-owned paths. This is defense in depth, not an OS sandbox, so evaluation should still use an isolated container or VM with bounded resources and network access.

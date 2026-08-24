@@ -85,8 +85,9 @@ export class LocalStorageRepository implements Repository {
   create(values: EntityRecord["values"]) {
     const now = new Date().toISOString();
     const record = { id: crypto.randomUUID(), values, createdAt: now, updatedAt: now };
-    this.records = [record, ...this.records];
-    this.persist();
+    const next = [record, ...this.records];
+    this.persist(next);
+    this.records = next;
     return record;
   }
 
@@ -94,30 +95,33 @@ export class LocalStorageRepository implements Repository {
     const existing = this.records.find((record) => record.id === id);
     if (!existing) throw new Error("That item no longer exists.");
     const updated = { ...existing, values, updatedAt: new Date().toISOString() };
-    this.records = this.records.map((record) => record.id === id ? updated : record);
-    this.persist();
+    const next = this.records.map((record) => record.id === id ? updated : record);
+    this.persist(next);
+    this.records = next;
     return updated;
   }
 
   remove(id: string) {
-    this.records = this.records.filter((record) => record.id !== id);
-    this.persist();
+    const next = this.records.filter((record) => record.id !== id);
+    this.persist(next);
+    this.records = next;
   }
 
   /** Re-insert a previously removed record with its original id and timestamps, powering undo. */
   restore(record: EntityRecord) {
     if (this.records.some((existing) => existing.id === record.id)) return;
-    this.records = [record, ...this.records];
-    this.persist();
+    const next = [record, ...this.records];
+    this.persist(next);
+    this.records = next;
   }
 
   clear() {
+    this.persist([]);
     this.records = [];
-    this.persist();
   }
 
-  private persist() {
+  private persist(records: EntityRecord[]) {
     if (!this.storage) throw new Error("Browser storage is unavailable. Your change was not saved.");
-    this.storage.setItem(this.key, JSON.stringify(this.records));
+    this.storage.setItem(this.key, JSON.stringify(records));
   }
 }

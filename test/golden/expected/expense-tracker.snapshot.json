@@ -362,7 +362,7 @@
       ],
       "tagline": ""
     },
-    "summary.md": "# Expense Tracker\n\nLog expenses and see total spend this month broken down by category.\n\n- **Target user:** A single person tracking personal spending on one laptop\n- **Build route:** compile\n- **Genome:** tracker\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Verified journeys\n\n- Application loads and shows a useful empty state\n- Invalid expense input shows validation without crashing\n- User can add a complete expense and see it in expenses\n- expenses survive a page refresh\n- User can edit an existing expense\n- User can search expenses\n- User can narrow expenses with a meaningful filter\n- expenses are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing expense\n"
+    "summary.md": "# Expense Tracker\n\nLog expenses and see total spend this month broken down by category.\n\n- **Target user:** A single person tracking personal spending on one laptop\n- **Build route:** compile\n- **Genome:** tracker\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Planned verification journeys\n\n- Application loads and shows a useful empty state\n- Invalid expense input shows validation without crashing\n- User can add a complete expense and see it in expenses\n- expenses survive a page refresh\n- User can edit an existing expense\n- User can search expenses\n- User can narrow expenses with a meaningful filter\n- expenses are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing expense\n"
   },
   "journeys": [
     {

@@ -63,6 +63,10 @@ function callFromEvent(event: unknown, index: number): CallLogEntry | undefined 
   if (!isUsage(completed.usage)) return undefined;
 
   if (completed.role === "assistant") {
+    // Transport/auth failures are emitted as assistant-shaped messages with
+    // zero usage. They are attempts, not completed model calls, and counting
+    // them produces misleading efficiency telemetry.
+    if (completed.stopReason === "error") return undefined;
     const provider = typeof completed.provider === "string" ? `${completed.provider}/` : "";
     const rawModel = completed.responseModel ?? completed.model;
     const model = typeof rawModel === "string" ? `${provider}${rawModel}` : `${provider}unknown`;
