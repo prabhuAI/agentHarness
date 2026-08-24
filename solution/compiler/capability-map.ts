@@ -5,7 +5,6 @@ const RUNTIME_CAPABILITIES = new Set(["create", "edit", "delete", "search", "fil
 export function classifyCapabilities(ir: NormalizedProductIR): RouteDecision {
   const requested = Object.entries(ir.capabilities).filter(([, enabled]) => enabled).map(([name]) => name);
   const unsupported = requested.filter((name) => !RUNTIME_CAPABILITIES.has(name));
-  if (ir.entities.length > 1) unsupported.push("multiple editable entities");
   unsupported.push(...ir.customRequirements);
   const supported = requested.filter((name) => RUNTIME_CAPABILITIES.has(name));
   // Trend charts are a deterministic runtime feature, not a custom requirement,
@@ -15,7 +14,7 @@ export function classifyCapabilities(ir: NormalizedProductIR): RouteDecision {
     route: "compile", genome: ir.product.genome, supported, unsupported: [],
     reason: "Every required behavior maps to the deterministic runtime.",
   };
-  const coreIsNovel = ir.customRequirements.length > 2 || (ir.entities.length > 1 && supported.length < 2);
+  const coreIsNovel = ir.customRequirements.length > 2;
   return {
     route: coreIsNovel ? "custom" : "hybrid",
     genome: ir.product.genome,

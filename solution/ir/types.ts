@@ -119,6 +119,21 @@ export interface ProductEntity {
   fields: ProductField[];
 }
 
+// A deterministic table derived from scored records involving two participants.
+// The vocabulary is deliberately domain-neutral: the same structure can power a
+// sports league, classroom competition, sales contest, or tournament ladder.
+export interface ProductStandings {
+  id: string;
+  label: string;
+  rowEntity: string;
+  sourceEntity: string;
+  participants: [
+    { entityField: string; scoreForField: string; scoreAgainstField: string },
+    { entityField: string; scoreForField: string; scoreAgainstField: string },
+  ];
+  points: { win: number; draw: number; loss: number };
+}
+
 export interface ProductFilter {
   id: string;
   label: string;
@@ -131,6 +146,9 @@ export interface ProductCalculation {
   id: string;
   label: string;
   operation: CalculationOperation;
+  // Entity whose records this metric summarizes. Optional for legacy
+  // single-entity products; normalized/inferred for multi-entity products.
+  entity?: string;
   // For countWhere/sumWhere: the field the predicate tests. For sum: the numeric
   // field to total.
   field?: string;
@@ -181,6 +199,7 @@ export interface ProductIR {
   calculations: ProductCalculation[];
   charts: ProductChart[];
   quickActions: ProductQuickAction[];
+  standings?: ProductStandings[];
   persistence: { strategy: "localStorage" };
   assumptions: string[];
   excluded: string[];
@@ -190,6 +209,7 @@ export interface ProductIR {
 export interface NormalizedProductIR extends ProductIR {
   product: ProductIR["product"] & { design: DesignIntent; tagline: string };
   entities: [ProductEntity, ...ProductEntity[]];
+  standings: ProductStandings[];
 }
 
 export type BuildRoute = "compile" | "hybrid" | "custom";

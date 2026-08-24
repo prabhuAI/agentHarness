@@ -1,5 +1,5 @@
 import { analyzeFormula } from "./formula.js";
-import type { DateThresholdDerive, DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductField, ProductFilter, ProductIR, ProductQuickAction } from "./types.js";
+import type { DateThresholdDerive, DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductField, ProductFilter, ProductIR, ProductQuickAction, ProductStandings } from "./types.js";
 import { DATE_WINDOW_OPERATORS, DERIVED_FIELD_KINDS, FIELD_TYPES, FILTER_OPERATORS, GENOMES, type FieldType } from "./types.js";
 
 // Common field-type synonyms weaker models emit, mapped to the runtime's vocabulary.
@@ -233,8 +233,8 @@ function measureField(fields: ProductField[]): ProductField | undefined {
   return fields.find((field) => field.type === "currency");
 }
 
-const calcKey = (calculation: Pick<ProductCalculation, "field" | "operation" | "operator" | "value" | "sumField">): string =>
-  `${calculation.field ?? ""}:${calculation.operation}:${calculation.operator ?? ""}:${calculation.value ?? ""}:${calculation.sumField ?? ""}`;
+const calcKey = (calculation: Pick<ProductCalculation, "entity" | "field" | "operation" | "operator" | "value" | "sumField">): string =>
+  `${calculation.entity ?? ""}:${calculation.field ?? ""}:${calculation.operation}:${calculation.operator ?? ""}:${calculation.value ?? ""}:${calculation.sumField ?? ""}`;
 
 // Per facet option, derive one summary metric. When the entity has a currency
 // measure, that metric is the option's summed spend (sumWhere) — the "total
@@ -265,7 +265,7 @@ function deriveOptionCalculations(fields: ProductField[], calculations: ProductC
 function dedupeCalculationsByLabel(calculations: ProductCalculation[]): ProductCalculation[] {
   const seen = new Set<string>();
   return calculations.filter((calculation) => {
-    const key = clean(calculation.label).toLowerCase();
+    const key = `${calculation.entity ?? ""}:${clean(calculation.label).toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -362,7 +362,20 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     })
     .filter((filter) => predicateUsable(filter.field, filter.operator, filter.value, primaryFieldMap));
   let calculations = (input.calculations ?? [])
-    .map((calculation, index) => ({ ...calculation, id: identifier(calculation.id, `metric_${index + 1}`), label: clean(calculation.label), ...(calculation.field ? { field: identifier(calculation.field, "") } : {}), ...(calculation.sumField ? { sumField: identifier(calculation.sumField, "") } : {}) }))
+    .map((calculation, index) => {
+      const id = identifier(calculation.id, `metric_${index + 1}`);
+      const label = clean(calculation.label);
+      const explicitEntity = calculation.entity ? identifier(calculation.entity, "") : "";
+      const searchableName = identifier(`${id} ${label}`, "");
+      // Weak models often write "Total matches" without an entity property.
+      // In a multi-entity IR, infer scope only when the metric's id/label names
+      // one entity; single-entity artifacts remain byte-stable.
+      const inferredEntity = entities.length > 1
+        ? entities.find((entity) => searchableName.includes(identifier(entity.plural, "")) || searchableName.includes(identifier(entity.name, "")))?.name
+        : undefined;
+      const entity = entities.some((candidate) => candidate.name === explicitEntity) ? explicitEntity : inferredEntity;
+      return { ...calculation, id, label, ...(entity ? { entity } : {}), ...(calculation.field ? { field: identifier(calculation.field, "") } : {}), ...(calculation.sumField ? { sumField: identifier(calculation.sumField, "") } : {}) };
+    })
     .filter((calculation) => {
       if (calculation.operation === "count") return true;
       if (calculation.operation === "sum") return isNumeric(calculation.field);
@@ -406,6 +419,42 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
       if (!field || field.derive) return false;
       return action.set === "clear" || field.type === "date" || field.type === "datetime";
     });
+  const entityMap = new Map(entities.map((entity) => [identifier(entity.name, ""), entity]));
+  const standings = (input.standings ?? []).map((table, index): ProductStandings | undefined => {
+    const rowEntity = identifier(String(table?.rowEntity ?? ""), "");
+    const sourceEntity = identifier(String(table?.sourceEntity ?? ""), "");
+    const rows = entityMap.get(rowEntity);
+    const source = entityMap.get(sourceEntity);
+    if (!rows || !source || rows === source || !Array.isArray(table?.participants) || table.participants.length !== 2) return undefined;
+    const sourceFields = new Map(source.fields.map((field) => [field.id, field]));
+    const participants = table.participants.map((participant) => ({
+      entityField: identifier(String(participant.entityField ?? ""), ""),
+      scoreForField: identifier(String(participant.scoreForField ?? ""), ""),
+      scoreAgainstField: identifier(String(participant.scoreAgainstField ?? ""), ""),
+    })) as ProductStandings["participants"];
+    const valid = participants.every((participant) => {
+      const entityField = sourceFields.get(participant.entityField);
+      const forField = sourceFields.get(participant.scoreForField);
+      const againstField = sourceFields.get(participant.scoreAgainstField);
+      return Boolean(entityField && forField && againstField &&
+        (forField.type === "number" || forField.type === "currency") &&
+        (againstField.type === "number" || againstField.type === "currency"));
+    });
+    if (!valid) return undefined;
+    const points = table.points ?? { win: 3, draw: 1, loss: 0 };
+    return {
+      id: identifier(String(table.id ?? ""), `standings_${index + 1}`),
+      label: clean(String(table.label ?? "")) || "Standings",
+      rowEntity,
+      sourceEntity,
+      participants,
+      points: {
+        win: Number.isFinite(points.win) ? points.win : 3,
+        draw: Number.isFinite(points.draw) ? points.draw : 1,
+        loss: Number.isFinite(points.loss) ? points.loss : 0,
+      },
+    };
+  }).filter((table): table is ProductStandings => Boolean(table));
   const name = clean(input.product?.name ?? "") || "Untitled";
   return {
     ...input,
@@ -426,6 +475,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     calculations,
     charts,
     quickActions,
+    standings,
     persistence: { strategy: "localStorage" },
     assumptions: uniqueStrings(input.assumptions ?? []),
     excluded: uniqueStrings(input.excluded ?? []),

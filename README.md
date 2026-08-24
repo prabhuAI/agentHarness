@@ -127,7 +127,7 @@ The compiler writes `product.config.json`, `product-ir.json`, `idea_spec.json`, 
 
 The “agents” in the trace are logical, specialized stages—product interpretation, routing, compilation, QA, repair, and delivery—coordinated inside one Pi session. This preserves multi-agent separation of responsibilities without paying for six independent model conversations; only stages facing genuine ambiguity use the model.
 
-The five supported interaction genomes are tracker, workflow, catalog, planner, and dashboard. Reusable behavior includes fields, CRUD, search, preset filters, sorting, category/status grouping, status transitions through editing, count/count-where/sum summaries, validation, and browser-local persistence.
+The five supported interaction genomes are tracker, workflow, catalog, planner, and dashboard. Reusable behavior includes fields, CRUD, search, preset filters, sorting, category/status grouping, status transitions through editing, count/count-where/sum summaries, validation, and browser-local persistence. Product IR can also declare multiple editable entities and a deterministic two-participant standings table. Scored records then update played/won/drawn/lost, score-for/against, difference, points, and ranking without a custom model-authored patch.
 
 ## Result and telemetry ownership
 

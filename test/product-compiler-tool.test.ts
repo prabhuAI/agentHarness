@@ -56,6 +56,32 @@ describe("terminating product compiler tool", () => {
     } finally { await rm(appRoot, { recursive: true }); }
   });
 
+  it("terminates a compile-route invariant failure without spending model repair turns", async () => {
+    const appRoot = await mkdtemp(path.join(os.tmpdir(), "agent-cofounder-compile-failure-"));
+    const tools: CapturedTool[] = [];
+    const failure: ExecResult = { stdout: "one compiled journey failed", stderr: "", code: 1, killed: false };
+    const fakePi = {
+      registerTool: (tool: CapturedTool) => { tools.push(tool); },
+      exec: async () => failure,
+    } as unknown as ExtensionAPI;
+    try {
+      registerProductCompiler(fakePi, appRoot, { verifyStartup: async () => true });
+      const compiled = await tools[0]!.execute("call-1", PUBLIC_BOOK_LENDING_IR, undefined, undefined, {});
+      expect(compiled.terminate).toBe(true);
+      expect(compiled.content[0]?.text).toContain("Deterministic compile invariant failed");
+      const report = JSON.parse(await readFile(path.join(appRoot, "report.partial.json"), "utf8")) as {
+        status: string;
+        tests_run: Array<{ command: string; journey: string; result: string }>;
+      };
+      expect(report.status).toBe("partial");
+      expect(report.tests_run).toEqual([{
+        command: "npm test (compiled journey suite)",
+        journey: "The compiled product journey suite completes without failures",
+        result: "failed",
+      }]);
+    } finally { await rm(appRoot, { recursive: true }); }
+  });
+
   it("terminates a failing hybrid run when its bounded repair budget is exhausted", async () => {
     const appRoot = await mkdtemp(path.join(os.tmpdir(), "agent-cofounder-hybrid-budget-"));
     const tools: CapturedTool[] = [];

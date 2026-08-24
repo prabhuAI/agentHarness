@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveDesign, type CompiledDesign } from "../design/catalog.js";
 import { genomeFor } from "../genomes/index.js";
-import type { NormalizedProductIR, ProductCalculation, ProductChart, ProductFilter, ProductQuickAction, RouteDecision } from "../ir/types.js";
+import type { NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductFilter, ProductQuickAction, ProductStandings, RouteDecision } from "../ir/types.js";
 import type { DerivedJourney } from "../qa/derive-journeys.js";
 
 interface CompiledConfig {
@@ -25,6 +25,44 @@ interface CompiledConfig {
   sorts: Array<{ id: string; label: string; field?: string; direction?: "asc" | "desc"; type?: string }>;
   capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean };
   fields: Array<Record<string, unknown>>;
+  entities?: CompiledEntityConfig[];
+  standings?: ProductStandings[];
+}
+
+interface CompiledEntityConfig {
+  name: string;
+  plural: string;
+  primaryField: string;
+  secondaryFields: string[];
+  searchableFields: string[];
+  fields: Array<Record<string, unknown>>;
+}
+
+function compileFields(entity: ProductEntity): Array<Record<string, unknown>> {
+  return entity.fields.map((field) => ({
+    key: field.id,
+    label: field.label,
+    type: field.type,
+    required: field.required,
+    ...(field.placeholder ? { placeholder: field.placeholder } : {}),
+    ...(field.options ? { options: field.options } : {}),
+    ...(field.allowCustom !== undefined ? { allowCustom: field.allowCustom } : {}),
+    ...(field.min !== undefined ? { min: field.min } : {}),
+    ...(field.max !== undefined ? { max: field.max } : {}),
+    ...(field.visibleWhen ? { visibleWhen: field.visibleWhen } : {}),
+    ...(field.derive ? { derive: field.derive } : {}),
+  }));
+}
+
+function compileEntity(entity: ProductEntity): CompiledEntityConfig {
+  return {
+    name: entity.name,
+    plural: entity.plural,
+    primaryField: entity.primaryField,
+    secondaryFields: entity.fields.filter((field) => field.id !== entity.primaryField).slice(0, 4).map((field) => field.id),
+    searchableFields: entity.fields.filter((field) => ["text", "longText", "category", "status", "email", "url"].includes(field.type)).map((field) => field.id),
+    fields: compileFields(entity),
+  };
 }
 
 // Sort options offered by the list control: the two built-in time orderings
@@ -53,7 +91,8 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
   const searchableFields = entity.fields.filter((field) => ["text", "longText", "category", "status", "email", "url"].includes(field.type)).map((field) => field.id);
   const hasGroupableField = entity.fields.some((field) => field.type === "category" || field.type === "status");
   const secondaryFields = entity.fields.filter((field) => field.id !== entity.primaryField).slice(0, 4).map((field) => field.id);
-  const summaries = ir.calculations.length > 0 ? ir.calculations : [{ id: "total", label: `Total ${entity.plural}`, operation: "count" as const }];
+  const primaryCalculations = ir.calculations.filter((calculation) => !calculation.entity || calculation.entity === entity.name);
+  const summaries = primaryCalculations.length > 0 ? primaryCalculations : [{ id: "total", label: `Total ${entity.plural}`, operation: "count" as const }];
   // Seed on name + target user so even same-concept products for different audiences
   // resolve to distinct looks, while identical products stay identical.
   const design = resolveDesign(ir.product.genome, ir.product.design, `${ir.product.name}\0${ir.product.targetUser}`);
@@ -83,19 +122,9 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
       sort: ir.capabilities.sort,
       group: ir.capabilities.group && hasGroupableField,
     },
-    fields: entity.fields.map((field) => ({
-      key: field.id,
-      label: field.label,
-      type: field.type,
-      required: field.required,
-      ...(field.placeholder ? { placeholder: field.placeholder } : {}),
-      ...(field.options ? { options: field.options } : {}),
-      ...(field.allowCustom !== undefined ? { allowCustom: field.allowCustom } : {}),
-      ...(field.min !== undefined ? { min: field.min } : {}),
-      ...(field.max !== undefined ? { max: field.max } : {}),
-      ...(field.visibleWhen ? { visibleWhen: field.visibleWhen } : {}),
-      ...(field.derive ? { derive: field.derive } : {}),
-    })),
+    fields: compileFields(entity),
+    ...(ir.entities.length > 1 ? { entities: ir.entities.map(compileEntity) } : {}),
+    ...(ir.standings.length > 0 ? { standings: ir.standings } : {}),
   };
 }
 
@@ -106,6 +135,10 @@ export async function writeCompiledProduct(
   journeys: DerivedJourney[],
 ): Promise<void> {
   const config = compileConfig(ir);
+  // Keep legacy single-entity Product IR artifacts byte-stable. The normalized
+  // empty array is an internal convenience and carries no product meaning.
+  const { standings, ...legacyIr } = ir;
+  const serializedIr = standings.length > 0 ? ir : legacyIr;
   const ideaSpec = {
     target_user: ir.product.targetUser,
     core_utility: ir.product.description,
@@ -131,7 +164,7 @@ export async function writeCompiledProduct(
   ].join("\n");
   await Promise.all([
     writeFile(path.join(appRoot, "product.config.json"), `${JSON.stringify(config, null, 2)}\n`, "utf8"),
-    writeFile(path.join(appRoot, "product-ir.json"), `${JSON.stringify(ir, null, 2)}\n`, "utf8"),
+    writeFile(path.join(appRoot, "product-ir.json"), `${JSON.stringify(serializedIr, null, 2)}\n`, "utf8"),
     writeFile(path.join(appRoot, "idea_spec.json"), `${JSON.stringify(ideaSpec, null, 2)}\n`, "utf8"),
     writeFile(path.join(appRoot, "summary.md"), summary, "utf8"),
     writeFile(path.join(appRoot, ".compiler-state.json"), `${JSON.stringify({ route, journeys }, null, 2)}\n`, "utf8"),

@@ -102,6 +102,7 @@ export function validateProductIR(value: unknown): ProductIR {
     if (!isRecord(calculation) || typeof calculation.id !== "string" || typeof calculation.label !== "string") issues.push(`calculations[${index}] is invalid`);
     else if (!CALCULATION_OPERATIONS.includes(calculation.operation as never)) issues.push(`calculations[${index}].operation is unsupported`);
     else if (calculation.sumField !== undefined && typeof calculation.sumField !== "string") issues.push(`calculations[${index}].sumField must be a string`);
+    else if (calculation.entity !== undefined && typeof calculation.entity !== "string") issues.push(`calculations[${index}].entity must be a string`);
   });
   // A malformed chart is not fatal: normalizeProductIR drops any chart whose
   // axes do not resolve to a date and a numeric field, so validate only rejects
@@ -114,6 +115,25 @@ export function validateProductIR(value: unknown): ProductIR {
   else if (Array.isArray(value.quickActions)) value.quickActions.forEach((action, index) => {
     if (!isRecord(action) || typeof action.id !== "string" || typeof action.label !== "string" || typeof action.field !== "string") issues.push(`quickActions[${index}] is invalid`);
     else if (action.set !== "today" && action.set !== "clear") issues.push(`quickActions[${index}].set must be today or clear`);
+  });
+  if (value.standings !== undefined && !Array.isArray(value.standings)) issues.push("standings must be an array");
+  else if (Array.isArray(value.standings)) value.standings.forEach((table, index) => {
+    if (!isRecord(table) || typeof table.id !== "string" || typeof table.label !== "string" ||
+      typeof table.rowEntity !== "string" || typeof table.sourceEntity !== "string") {
+      issues.push(`standings[${index}] is invalid`);
+      return;
+    }
+    if (!Array.isArray(table.participants) || table.participants.length !== 2) issues.push(`standings[${index}].participants must contain exactly two sides`);
+    else table.participants.forEach((participant, participantIndex) => {
+      if (!isRecord(participant) || typeof participant.entityField !== "string" ||
+        typeof participant.scoreForField !== "string" || typeof participant.scoreAgainstField !== "string") {
+        issues.push(`standings[${index}].participants[${participantIndex}] is invalid`);
+      }
+    });
+    if (table.points !== undefined && (!isRecord(table.points) ||
+      ![table.points.win, table.points.draw, table.points.loss].every((point) => typeof point === "number" && Number.isFinite(point)))) {
+      issues.push(`standings[${index}].points is invalid`);
+    }
   });
   for (const key of ["assumptions", "excluded", "customRequirements"] as const) {
     if (value[key] !== undefined && !strings(value[key])) issues.push(`${key} must be an array of strings`);

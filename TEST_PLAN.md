@@ -21,6 +21,8 @@
 | TC-015 | Complete and exhaust the bounded hybrid/custom finalization lifecycle | Integration | P0 | `test/product-compiler-tool.test.ts` |
 | TC-016 | Recover corrupt storage and keep failed writes atomic | UI/repository | P1 | `app-template/src/App.test.tsx` |
 | TC-017 | Accept text and website-style idea JSON; fail fast on missing provider configuration | Contract | P0 | `test/run-challenge.test.ts` |
+| TC-018 | Create related teams/results, calculate standings, persist, and build | UI/integration | P0 | `test/league-fixture.test.ts`, `test/fixtures/league-app.fixture.tsx` |
+| TC-019 | Preserve single-entity behavior after multi-entity support | Regression | P0 | `test/public-fixture.test.ts`, `test/furniture-fixture.test.ts`, `test/golden.test.ts` |
 
 ## Application-readiness rubric coverage
 

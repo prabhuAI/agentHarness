@@ -99,8 +99,8 @@ const TYPOGRAPHY: Record<DesignTone, Typography[]> = {
     { body: "'Helvetica Neue', Helvetica, Arial, sans-serif", display: "'Helvetica Neue', Helvetica, Arial, sans-serif" },
   ],
   bold: [
-    { body: "Arial, ui-sans-serif, system-ui, sans-serif", display: "'Arial Black', Arial, sans-serif" },
-    { body: "'Helvetica Neue', Arial, sans-serif", display: "Impact, 'Arial Narrow Bold', 'Arial Black', sans-serif" },
+    { body: "Arial, ui-sans-serif, system-ui, sans-serif", display: "Arial, ui-sans-serif, system-ui, sans-serif" },
+    { body: "'Helvetica Neue', Arial, sans-serif", display: "'Helvetica Neue', Arial, sans-serif" },
   ],
   warm: [
     { body: "'Avenir Next', ui-sans-serif, system-ui, sans-serif", display: "Georgia, ui-serif, serif" },

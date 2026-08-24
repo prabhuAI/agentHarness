@@ -305,7 +305,9 @@ describe("compiled product runtime", () => {
       const field = productConfig.fields.find((candidate) => candidate.key === firstFilter.field);
       if (firstFilter.operator === "equals") filterOverrides[firstFilter.field] = firstFilter.value ?? field?.options?.[0] ?? "Matched";
       else if (firstFilter.operator === "nonEmpty") filterOverrides[firstFilter.field] = field?.options?.[0] ?? "Matched";
+      else if (firstFilter.operator === "empty") filterOverrides[firstFilter.field] = "";
       else if (firstFilter.operator === "truthy") filterOverrides[firstFilter.field] = true;
+      else if (firstFilter.operator === "falsy") filterOverrides[firstFilter.field] = false;
       else if (["today", "thisWeek", "thisMonth"].includes(firstFilter.operator)) {
         const now = new Date();
         filterOverrides[firstFilter.field] = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;

@@ -108,6 +108,27 @@ export interface QuickActionConfig {
   set: "today" | "clear";
 }
 
+export interface EntityConfig {
+  name: string;
+  plural: string;
+  primaryField: string;
+  secondaryFields: string[];
+  searchableFields: string[];
+  fields: FieldConfig[];
+}
+
+export interface StandingsConfig {
+  id: string;
+  label: string;
+  rowEntity: string;
+  sourceEntity: string;
+  participants: [
+    { entityField: string; scoreForField: string; scoreAgainstField: string },
+    { entityField: string; scoreForField: string; scoreAgainstField: string },
+  ];
+  points: { win: number; draw: number; loss: number };
+}
+
 export interface ProductConfig {
   name: string;
   tagline: string;
@@ -128,6 +149,8 @@ export interface ProductConfig {
   quickActions: QuickActionConfig[];
   sorts: SortOption[];
   capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean };
+  entities?: EntityConfig[];
+  standings?: StandingsConfig[];
 }
 
 const DEFAULT_SORTS: SortOption[] = [
@@ -135,7 +158,9 @@ const DEFAULT_SORTS: SortOption[] = [
   { id: "created", label: "Oldest first" },
 ];
 
-const parsedConfig = rawConfig as Omit<ProductConfig, "design"> & { design?: DesignConfig };
+// JSON imports infer ordinary arrays rather than fixed tuples. The compiler and
+// IR validator enforce the runtime shape before writing this file.
+const parsedConfig = rawConfig as unknown as Omit<ProductConfig, "design"> & { design?: DesignConfig };
 const fallbackDesign: DesignConfig = {
   id: "progress-workbench-professional",
   tone: "professional",
@@ -161,4 +186,6 @@ export const productConfig: ProductConfig = {
   charts: parsedConfig.charts ?? [],
   quickActions: parsedConfig.quickActions ?? [],
   sorts: parsedConfig.sorts && parsedConfig.sorts.length > 0 ? parsedConfig.sorts : DEFAULT_SORTS,
+  entities: parsedConfig.entities ?? [],
+  standings: parsedConfig.standings ?? [],
 };

@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } f
 import { type ChartConfig, FieldConfig, type PredicateOperator, productConfig, type QuickActionConfig, type SummaryConfig } from "./product-config.js";
 import { evaluateFormula } from "./formula.js";
 import { createRepository, EntityRecord, RecordValue } from "./repository.js";
+import { RelatedWorkspace } from "./RelatedWorkspace.js";
 import {
   loadThemePreference,
   nextPreference,
@@ -528,6 +529,7 @@ export function App() {
         {productConfig.capabilities.create && <button className="primary hero-action" onClick={openCreate}><span aria-hidden="true">+</span> Add {productConfig.entityName}</button>}
       </section>
       {notice && <div className="notice" role="status"><span>{notice}</span><div className="notice-actions">{undo && <button type="button" className="notice-undo" onClick={undoDelete}>Undo</button>}<button className="icon-button notice-dismiss" aria-label="Dismiss message" onClick={dismissNotice}>×</button></div></div>}
+      {(productConfig.entities?.length ?? 0) > 1 && <RelatedWorkspace primaryRecords={records} />}
       <section className="collection" aria-labelledby="collection-title">
         <h2 id="collection-title" className="sr-only">{productConfig.entityNamePlural}</h2>
         {summaries.length > 0 && <div className="stat-strip" aria-label="Summary">

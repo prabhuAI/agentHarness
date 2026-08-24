@@ -79,6 +79,7 @@ const strictProductIRSchema = Type.Object({
   filters: Type.Optional(Type.Array(Type.Object(predicateSchema), { maxItems: 6, description: "Only filters that are not a simple equals check on one category/status field option — those are derived automatically" })),
   calculations: Type.Optional(Type.Array(Type.Object({
     id: Type.String(), label: Type.String(),
+    entity: Type.Optional(Type.String({ description: "Entity whose records this metric summarizes; important when the product has multiple entities" })),
     operation: Type.String({ enum: ["count", "countWhere", "sum", "sumWhere"], description: "count = all records; sum = total of a number/currency field; countWhere/sumWhere = over records matching a predicate" }),
     field: Type.Optional(Type.String({ description: "For sum: the number/currency field to total. For countWhere/sumWhere: the field the predicate tests." })),
     operator: Type.Optional(Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy", "today", "thisWeek", "thisMonth"] })),
@@ -98,10 +99,24 @@ const strictProductIRSchema = Type.Object({
     field: Type.String({ description: "id of the field this action mutates" }),
     set: Type.String({ enum: ["today", "clear"], description: "today = stamp a date field to the current date; clear = empty the field" }),
   }), { maxItems: 4, description: "One-tap per-record buttons that set a field to a computed value. Use this — never a customRequirement — for a \"mark done today\" / \"mark paid\" / \"returned\" button that stamps a date field to today or clears a field." })),
+  standings: Type.Optional(Type.Array(Type.Object({
+    id: Type.String(),
+    label: Type.String({ description: "Visible table heading, e.g. League table or Standings" }),
+    rowEntity: Type.String({ description: "Entity whose records form the table rows, e.g. team" }),
+    sourceEntity: Type.String({ description: "Entity containing the scored events, e.g. match" }),
+    participants: Type.Array(Type.Object({
+      entityField: Type.String({ description: "Field on the source entity selecting this participant" }),
+      scoreForField: Type.String({ description: "Numeric score credited to this participant" }),
+      scoreAgainstField: Type.String({ description: "Numeric opposing score for this participant" }),
+    }), { minItems: 2, maxItems: 2, description: "Exactly two participant sides, such as home and away" }),
+    points: Type.Optional(Type.Object({
+      win: Type.Number(), draw: Type.Number(), loss: Type.Number(),
+    }, { description: "Points awarded for each outcome; defaults to 3/1/0" })),
+  }), { maxItems: 2, description: "Deterministic standings derived from scored records. Use for league tables, ladders, and two-participant rankings; never repeat it as a customRequirement." })),
   persistence: Type.Optional(Type.Object({ strategy: Type.String({ enum: ["localStorage"] }) })),
   assumptions: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
   excluded: Type.Optional(Type.Array(Type.String({ description: "short phrase, not a full sentence" }), { maxItems: 12 })),
-  customRequirements: Type.Optional(Type.Array(Type.String(), { maxItems: 8, description: "Only core behavior not expressible as fields, CRUD, search, filters, states, or calculations" })),
+  customRequirements: Type.Optional(Type.Array(Type.String(), { maxItems: 8, description: "Only core behavior not expressible as fields, CRUD, search, filters, states, calculations, multiple entities, or standings" })),
 });
 
 // Weaker models sometimes emit a nested object/array argument as a JSON *string*
@@ -241,6 +256,17 @@ async function runQa(pi: ExtensionAPI, appRoot: string, signal: AbortSignal | un
 
 async function writeReport(appRoot: string, ir: NormalizedProductIR, route: RouteDecision, journeys: DerivedJourney[], qa: QaResult): Promise<void> {
   const implemented = [...route.supported, ...(qa.passed ? ir.customRequirements : [])];
+  const testsRun = qa.test.code !== 0
+    ? [{ command: "npm test (compiled journey suite)", journey: "The compiled product journey suite completes without failures", result: "failed" as const }]
+    : [
+        ...journeys.map((journey) => ({ command: "npm test (compiled journey suite)", journey: journey.description, result: "passed" as const })),
+        ...(qa.build.code !== 0
+          ? [{ command: "npm run build", journey: "The generated application completes a production build", result: "failed" as const }]
+          : [
+              { command: "npm run build", journey: "The generated application completes a production build", result: "passed" as const },
+              { command: "npm run dev + HTTP probe", journey: "The generated application starts on port 3000 and answers an HTTP request", result: qa.startup.code === 0 ? "passed" as const : "failed" as const },
+            ]),
+      ];
   const report = {
     status: qa.passed ? "success" : "partial",
     app_url: "http://localhost:3000",
@@ -248,11 +274,7 @@ async function writeReport(appRoot: string, ir: NormalizedProductIR, route: Rout
     summary: qa.passed ? `${ir.product.name} was compiled and verified.` : `${ir.product.name} was compiled but product verification failed.`,
     implemented_features: [...new Set(implemented)],
     assumptions: ir.assumptions,
-    tests_run: [
-      ...journeys.map((journey) => ({ command: "npm test (compiled journey suite)", journey: journey.description, result: qa.test.code === 0 ? "passed" : "failed" })),
-      { command: "npm run build", journey: "The generated application completes a production build", result: qa.build.code === 0 ? "passed" : "failed" },
-      { command: "npm run dev + HTTP probe", journey: "The generated application starts on port 3000 and answers an HTTP request", result: qa.startup.code === 0 ? "passed" : "failed" },
-    ],
+    tests_run: testsRun,
   };
   await writeFile(path.join(appRoot, "report.partial.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
 }
@@ -313,6 +335,8 @@ export function registerProductCompiler(
     promptGuidelines: [
       "Call compile_product exactly once after interpreting the idea; do not read or edit application files first.",
       "Use customRequirements only for essential interactions that cannot be represented by fields, CRUD, search, filters, state transitions, or count/sum calculations.",
+      "Multiple editable entities are supported deterministically. When scored records involve two participants and the user wants a league table, ladder, or ranking, add both entities plus a standings entry. The two participant fields live on sourceEntity and select records from rowEntity; provide each side's score-for and score-against fields and the win/draw/loss points. Never describe this again in customRequirements.",
+      "When a product has multiple entities, set calculation.entity so a metric is counted from the correct record collection (for example, a total of matches must use entity match).",
       "For a status that is a date-based lifecycle (e.g. overdue / due soon / fine from a last-done date and a frequency), add a status field with those options and set its `derive` (kind dateThreshold) instead of a customRequirement — the runtime computes it live and auto-derives its per-band filters and counts.",
       "A status the user sets by hand (marking an item Lent then Returned, a bill Paid, a task Done) is a plain status field with `transition` enabled — the user edits it directly. Never add a customRequirement to auto-flip a status from whether another field is filled in or cleared; that coupling is ordinary editing, and a manually-set status field with its options covers it.",
       "When the idea asks to see a number graphed or tracked over time (a weight chart, spend trend, progress over dates), add a `charts` entry (type line) with the date field as xField and the number/currency field as yField — never a customRequirement. The runtime renders it deterministically.",
@@ -366,10 +390,19 @@ export function registerProductCompiler(
       if (qa.repaired) await trace.record({ agent: "repair", action: "deterministic_repair", status: qa.passed ? "success" : "failed", category: qa.failure?.category });
       qa = await recordFinalEvidence(appRoot, trace, ir, route, journeys, qa);
       if (qa.passed && process.env.CHALLENGE_LAUNCH_MODE === "1") await generateLaunchKit(appRoot, ir);
+      // A compile-route product contains no model-authored implementation to repair.
+      // If its deterministic runtime still fails after known repairs, that is a
+      // compiler invariant failure for us to fix centrally, not an invitation for
+      // the model to inspect and rewrite the generated seed over several paid turns.
+      const compileInvariantFailed = route.route === "compile" && !qa.passed;
       return {
-        content: [{ type: "text", text: qa.passed ? `VERIFIED_PASS: ${ir.product.name}` : `Verification failed (${qa.failure?.category ?? "unknown"}). Apply a minimal targeted patch, then call finalize_product.` }],
+        content: [{ type: "text", text: qa.passed
+          ? `VERIFIED_PASS: ${ir.product.name}`
+          : compileInvariantFailed
+            ? `Deterministic compile invariant failed (${qa.failure?.category ?? "unknown"}); final status is partial.\n${qa.failure?.relevantOutput ?? ""}`
+            : `Verification failed (${qa.failure?.category ?? "unknown"}). Apply a minimal targeted patch, then call finalize_product.` }],
         details: { route, budget, passed: qa.passed, failure: qa.failure },
-        terminate: qa.passed,
+        terminate: qa.passed || compileInvariantFailed,
       };
     },
   }));
