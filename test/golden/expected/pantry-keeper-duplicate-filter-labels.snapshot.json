@@ -77,14 +77,6 @@
           "operation": "countWhere",
           "operator": "equals",
           "value": "Expiring soon"
-        },
-        {
-          "field": "status",
-          "id": "status_expired_count",
-          "label": "Expired",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Expired"
         }
       ],
       "capabilities": {
@@ -533,14 +525,6 @@
           "operation": "countWhere",
           "operator": "equals",
           "value": "Expiring soon"
-        },
-        {
-          "field": "status",
-          "id": "status_expired_count",
-          "label": "Expired",
-          "operation": "countWhere",
-          "operator": "equals",
-          "value": "Expired"
         }
       ],
       "tagline": "Know what's in your pantry before you shop"

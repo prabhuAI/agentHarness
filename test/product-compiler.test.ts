@@ -88,6 +88,21 @@ describe("Product IR compiler", () => {
     expect(normalized.calculations).toHaveLength(3);
   });
 
+  it("keeps the explicit metric when an auto-derived status metric repeats its label", () => {
+    const collision = fixture();
+    collision.entities[0]!.fields.push({ id: "borrower", label: "Borrowed by", type: "text", required: false });
+    collision.entities[0]!.fields.find((field) => field.id === "status")!.options = ["On shelf", "Lent out"];
+    collision.calculations = [
+      { id: "total", label: "Total books", operation: "count" },
+      { id: "lent", label: "Lent out", operation: "countWhere", field: "borrower", operator: "nonEmpty" },
+    ];
+    const normalized = normalizeProductIR(validateProductIR(collision));
+    expect(normalized.calculations.filter((calculation) => calculation.label === "Lent out")).toEqual([
+      expect.objectContaining({ id: "lent", field: "borrower", operator: "nonEmpty" }),
+    ]);
+    expect(normalized.calculations).toContainEqual(expect.objectContaining({ label: "On shelf", field: "status" }));
+  });
+
   it("coerces option-bearing fields to a choice type so weaker models render a select", () => {
     // Weaker models (e.g. a small local model) often tag an enumerated field as
     // "text" while still supplying options; the runtime only renders a select for

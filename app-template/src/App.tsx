@@ -531,7 +531,7 @@ export function App() {
       <section className="collection" aria-labelledby="collection-title">
         <h2 id="collection-title" className="sr-only">{productConfig.entityNamePlural}</h2>
         {summaries.length > 0 && <div className="stat-strip" aria-label="Summary">
-          {summaries.map((summary) => <div className={`stat-tile tone-${toneForLabel(summary.label)}`} key={summary.id}>
+          {summaries.map((summary) => <div className={`stat-tile tone-${toneForLabel(summary.label)}`} data-summary-id={summary.id} key={summary.id}>
             <span className="stat-icon" aria-hidden="true"><SummaryIcon operation={summary.operation} /></span>
             <span className="stat-body"><strong>{formatSummaryValue(summary.operation, summary.operation === "sumWhere" ? summary.sumField : summary.field, summary.value)}</strong><span>{summary.label}</span></span>
           </div>)}

@@ -10,6 +10,7 @@ import {
 import {
   assertProviderConfiguration,
   buildPiArguments,
+  completedModelUsageFromEventLine,
   parseArguments,
   parseIdeaInput,
   runPi,
@@ -83,6 +84,18 @@ describe("Pi launch", () => {
     const berget = { BERGET_API_KEY: "test-only" };
     assertProviderConfiguration(berget);
     expect(berget).toMatchObject({ CHALLENGE_PROVIDER: "berget", CHALLENGE_MODEL: "zai-org/GLM-5.2" });
+  });
+
+  it("computes completed-call expenditure for the hard runtime budget", () => {
+    const line = JSON.stringify({
+      type: "message_end",
+      message: { role: "assistant", stopReason: "toolUse", usage: { input: 100, output: 20, cacheRead: 50 } },
+    });
+    expect(completedModelUsageFromEventLine(line)).toEqual({ weighted: 165 });
+    expect(completedModelUsageFromEventLine(JSON.stringify({
+      type: "message_end",
+      message: { role: "assistant", stopReason: "error", usage: { input: 1000, output: 1000 } },
+    }))).toBeUndefined();
   });
 
   it("appends structurally consistent public journey guidance to Pi's built-in system prompt", async () => {

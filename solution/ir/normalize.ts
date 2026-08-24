@@ -258,6 +258,20 @@ function deriveOptionCalculations(fields: ProductField[], calculations: ProductC
   return derived;
 }
 
+// Metric labels are the user-facing identity in the summary strip. Prefer an
+// explicit model-authored metric over a later auto-derived facet metric when
+// both have the same label; rendering duplicates is confusing and used to make
+// configuration-driven UI tests ambiguous.
+function dedupeCalculationsByLabel(calculations: ProductCalculation[]): ProductCalculation[] {
+  const seen = new Set<string>();
+  return calculations.filter((calculation) => {
+    const key = clean(calculation.label).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // A predicate is usable only if its field exists, an `equals` carries a value,
 // and a date-window operator targets an actual date field. Dropping the rest
 // stops a model's malformed filter/metric (e.g. countWhere on a field with no
@@ -359,6 +373,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
   if (capabilities.filter) filters = deriveOptionFilters(entities[0].fields, filters);
   filters = dedupeFiltersByLabel(filters);
   if (capabilities.calculate) calculations = deriveOptionCalculations(entities[0].fields, calculations);
+  calculations = dedupeCalculationsByLabel(calculations);
   // A chart is kept only when its axes resolve to a real date field (x) and a
   // real numeric field (y); anything else is dropped rather than rejected, so a
   // mis-specified chart never blocks a compile.

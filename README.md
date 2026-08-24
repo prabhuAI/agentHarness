@@ -69,6 +69,7 @@ export BERGET_API_KEY="your-key-from-the-Berget-dashboard"
 export CHALLENGE_PROVIDER="berget"
 export CHALLENGE_MODEL="zai-org/GLM-5.2"
 export CHALLENGE_THINKING="off"
+export CHALLENGE_MAX_MODEL_CALLS="4"
 ```
 
 The checked-in `solution/provider-config/models.json` contains only the public endpoint and model metadata. For each run, the runner copies it into an isolated audit directory and Pi resolves the key from `BERGET_API_KEY`; the secret is never written into the repository configuration.

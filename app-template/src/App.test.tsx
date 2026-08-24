@@ -318,7 +318,10 @@ describe("compiled product runtime", () => {
     expect(storedAfterCreate).toHaveLength(1);
     const summaryRegion = screen.getByLabelText("Summary");
     for (const summary of productConfig.summaries) {
-      const tile = within(summaryRegion).getByText(summary.label).closest(".stat-tile")!;
+      // Visible labels may legitimately repeat (two different predicates can
+      // share user-facing wording), so identity comes from the normalized IR id.
+      const tile = summaryRegion.querySelector<HTMLElement>(`[data-summary-id="${summary.id}"]`)!;
+      expect(tile).toBeInTheDocument();
       const rendered = tile.querySelector("strong")!.textContent ?? "";
       const expected = computeSummaryValue(summary, storedAfterCreate);
       if (summary.operation === "count" || summary.operation === "countWhere") expect(rendered).toBe(String(expected));

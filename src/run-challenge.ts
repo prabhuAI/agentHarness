@@ -59,6 +59,8 @@ Environment:
   CHALLENGE_MODEL         Optional Pi model override
   CHALLENGE_THINKING      Optional Pi thinking level (default: off)
   CHALLENGE_TIMEOUT_MS    Wall-clock limit for Pi (default: 900000)
+  CHALLENGE_MAX_MODEL_CALLS Hard completed-call limit (default: 4)
+  CHALLENGE_WEIGHTED_TOKEN_BUDGET Hard weighted-token limit (default: 18000)
 `);
 }
 
@@ -118,6 +120,20 @@ function providerErrorFromEventLine(line: string): ReturnType<typeof matchProvid
     return matchProviderError(String(message.errorMessage ?? ""));
   } catch {
     return null;
+  }
+}
+
+export function completedModelUsageFromEventLine(line: string): { weighted: number } | undefined {
+  try {
+    const event = JSON.parse(line) as Record<string, unknown>;
+    if (event.type !== "message_end") return undefined;
+    const message = event.message as Record<string, unknown> | undefined;
+    const usage = message?.usage as Record<string, unknown> | undefined;
+    if (message?.role !== "assistant" || message.stopReason === "error" || !usage) return undefined;
+    const number = (value: unknown): number => typeof value === "number" && Number.isFinite(value) ? value : 0;
+    return { weighted: number(usage.input) + number(usage.output) * 3 + number(usage.cacheRead) * 0.1 };
+  } catch {
+    return undefined;
   }
 }
 
@@ -186,6 +202,14 @@ export async function runPi(
       let timedOut = false;
       let killTimer: NodeJS.Timeout | undefined;
       let fatalProviderError = false;
+      let guardAborted = false;
+      let guardPending = false;
+      let completedModelCalls = 0;
+      let weightedTokenExpenditure = 0;
+      const configuredCallLimit = Number(process.env.CHALLENGE_MAX_MODEL_CALLS ?? 4);
+      const maximumModelCalls = Number.isSafeInteger(configuredCallLimit) && configuredCallLimit > 0 ? configuredCallLimit : 4;
+      const configuredTokenBudget = Number(process.env.CHALLENGE_WEIGHTED_TOKEN_BUDGET ?? 18_000);
+      const maximumWeightedTokens = Number.isFinite(configuredTokenBudget) && configuredTokenBudget > 0 ? configuredTokenBudget : 18_000;
       const scheduleForceKill = () => {
         if (!killTimer) killTimer = setTimeout(() => signalProcessTree(child, "SIGKILL"), 5_000);
       };
@@ -202,12 +226,32 @@ export async function runPi(
         lineBuffer = lines.pop() ?? "";
         for (const line of lines) {
           summarizeEventLine(line);
+          let eventType = "";
+          try { eventType = String((JSON.parse(line) as Record<string, unknown>).type ?? ""); } catch { /* retain raw event */ }
+          // A limit reached by a tool-using model call must still allow that tool
+          // to execute (it may be compile_product/finalize_product terminating
+          // successfully). Stop only when Pi attempts the next model turn.
+          if (guardPending && eventType === "turn_start" && !fatalProviderError && !timedOut && !guardAborted) {
+            guardAborted = true;
+            console.error(
+              `Aborting run before another model call: hard budget reached (${completedModelCalls}/${maximumModelCalls} calls, ` +
+              `${weightedTokenExpenditure.toFixed(1)}/${maximumWeightedTokens} weighted tokens).`,
+            );
+            signalProcessTree(child, "SIGTERM");
+            scheduleForceKill();
+          }
           const provider = providerErrorFromEventLine(line);
           if (provider && !fatalProviderError && !timedOut) {
             fatalProviderError = true;
             console.error(`Aborting run early: ${provider.summary}`);
             signalProcessTree(child, "SIGTERM");
             scheduleForceKill();
+          }
+          const completed = completedModelUsageFromEventLine(line);
+          if (completed) {
+            completedModelCalls += 1;
+            weightedTokenExpenditure += completed.weighted;
+            if (completedModelCalls >= maximumModelCalls || weightedTokenExpenditure >= maximumWeightedTokens) guardPending = true;
           }
         }
       });
@@ -216,7 +260,7 @@ export async function runPi(
       // wall-clock timeout. The full stderr still reaches the log and terminal.
       let stderrTail = "";
       child.stderr.on("data", (chunk: Buffer) => {
-        if (fatalProviderError || timedOut) return;
+        if (fatalProviderError || guardAborted || timedOut) return;
         stderrTail = (stderrTail + chunk.toString("utf8")).slice(-8_192);
         const provider = matchProviderError(stderrTail);
         if (provider) {
