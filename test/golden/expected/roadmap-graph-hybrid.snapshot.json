@@ -252,6 +252,13 @@
       ],
       "genome": "workflow",
       "name": "Roadmap",
+      "presentation": {
+        "groupField": "stage",
+        "navigation": "single",
+        "primary": "board",
+        "reason": "workflow grouped by stage",
+        "variant": "pipeline"
+      },
       "primaryField": "title",
       "quickActions": [],
       "searchableFields": [
@@ -313,7 +320,7 @@
       ],
       "tagline": ""
     },
-    "summary.md": "# Roadmap\n\nTrack initiatives and their dependencies.\n\n- **Target user:** Product teams\n- **Build route:** hybrid\n- **Genome:** workflow\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Planned verification journeys\n\n- Application loads and shows a useful empty state\n- Invalid initiative input shows validation without crashing\n- User can add a complete initiative and see it in initiatives\n- initiatives survive a page refresh\n- User can edit an existing initiative\n- User can search initiatives\n- User can narrow initiatives with a meaningful filter\n- initiatives are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing initiative\n"
+    "summary.md": "# Roadmap\n\nTrack initiatives and their dependencies.\n\n- **Target user:** Product teams\n- **Build route:** hybrid\n- **Genome:** workflow\n- **Presentation:** board / pipeline\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Planned verification journeys\n\n- Application loads and shows a useful empty state\n- Invalid initiative input shows validation without crashing\n- User can add a complete initiative and see it in initiatives\n- initiatives survive a page refresh\n- User can edit an existing initiative\n- User can search initiatives\n- User can narrow initiatives with a meaningful filter\n- initiatives are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing initiative\n"
   },
   "journeys": [
     {

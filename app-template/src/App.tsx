@@ -3,6 +3,7 @@ import { type ChartConfig, FieldConfig, type PredicateOperator, productConfig, t
 import { evaluateFormula } from "./formula.js";
 import { createRepository, EntityRecord, RecordValue } from "./repository.js";
 import { RelatedWorkspace } from "./RelatedWorkspace.js";
+import { CollectionView } from "./CollectionView.js";
 import { resolveViewPlan } from "./view-plan.js";
 import {
   loadThemePreference,
@@ -337,7 +338,11 @@ export function App() {
   const [editingId, setEditingId] = useState<string>();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
-  const [sort, setSort] = useState(productConfig.priority ? "priority" : "updated");
+  const [sort, setSort] = useState(productConfig.priority
+    ? "priority"
+    : productConfig.presentation.primary === "agenda" && productConfig.presentation.dateField
+      ? `by_${productConfig.presentation.dateField}`
+      : "updated");
   const [notice, setNotice] = useState(recoveredFromInvalidData ? "Saved data was damaged, so a clean workspace was restored." : "");
   const [undo, setUndo] = useState<EntityRecord | null>(null);
   const entityLabel = productConfig.entityName.charAt(0).toUpperCase() + productConfig.entityName.slice(1);
@@ -396,27 +401,6 @@ export function App() {
       && String(summary.value ?? "") === String(preset.value ?? ""));
     return match ? summaryValueById[match.id] : undefined;
   };
-  // Group only by a field the user actually sets. Derived fields are computed at
-  // read time and never stored, so grouping by one would bucket every record as
-  // "Uncategorized" on the stored value; those bands belong in filters/summaries.
-  const groupField = productConfig.capabilities.group
-    ? productConfig.fields.find((field) => !field.derive && (field.type === "category" || field.type === "status"))
-    : undefined;
-  const groupedVisible = useMemo(() => {
-    if (!groupField) return [];
-    const groups = new Map<string, EntityRecord[]>();
-    for (const record of visible) {
-      const label = String(record.values[groupField.key] ?? "").trim() || "Uncategorized";
-      groups.set(label, [...(groups.get(label) ?? []), record]);
-    }
-    // `visible` is already ordered by the chosen sort, and Map keeps insertion
-    // order, so groups appear in the order their first record does under that
-    // sort. Re-sorting alphabetically here would override the sort control and
-    // make it look like sorting does nothing whenever grouping is on.
-    return [...groups.entries()]
-      .map(([label, groupedRecords]) => ({ label, records: groupedRecords }));
-  }, [groupField, visible]);
-
   const openCreate = () => { setEditingId(undefined); setValues(emptyValues()); setErrors({}); dialog.current?.showModal(); };
   const openEdit = (record: EntityRecord) => { setEditingId(record.id); setValues({ ...emptyValues(), ...record.values }); setErrors({}); dialog.current?.showModal(); };
   const close = () => dialog.current?.close();
@@ -517,7 +501,7 @@ export function App() {
     "--layout-gap": `${design.spacing.gap}px`,
   } as CSSProperties;
 
-  const recordCard = (record: EntityRecord) => <article className={`card${record.id === priorityRecordId ? " is-priority" : ""}`} key={record.id}>
+  const recordCard = (record: EntityRecord, view = viewPlan.primary) => <article className={`card record-${view}${record.id === priorityRecordId ? " is-priority" : ""}`} key={record.id}>
     <div className="card-top"><h3>{record.id === priorityRecordId && <span className="priority-badge">{productConfig.priority?.label}</span>}<span>{displayValue(productConfig.fields.find((field) => field.key === productConfig.primaryField)!, record.values[productConfig.primaryField])}</span></h3>
       <div className="actions">{productConfig.quickActions.map((action) => <button key={action.id} type="button" className="quick-action" onClick={() => runQuickAction(record, action)}>{action.label}</button>)}{productConfig.capabilities.edit && <button onClick={() => openEdit(record)}>Edit</button>}{productConfig.capabilities.delete && <button className="danger" onClick={() => remove(record)}>Delete</button>}</div></div>
     <dl>{productConfig.secondaryFields.map((key) => { const field = productConfig.fields.find((candidate) => candidate.key === key); return field && isFieldVisible(field, record.values) ? <div key={key}><dt>{field.label}</dt><dd className={field.type === "status" ? "badge" : ""}>{displayValue(field, record.values[key])}</dd></div> : null; })}</dl>
@@ -532,6 +516,7 @@ export function App() {
     data-variant={design.variant}
     data-view={viewPlan.primary}
     data-navigation={viewPlan.navigation}
+    data-presentation-variant={viewPlan.variant}
     style={designStyle}
   >
     <a className="skip-link" href="#main">Skip to content</a>
@@ -576,12 +561,7 @@ export function App() {
         </div>}
         <div className="result-count" aria-live="polite">{visible.length === records.length ? `${records.length} ${records.length === 1 ? productConfig.entityName : productConfig.entityNamePlural}` : `${visible.length} of ${records.length} shown`}</div>
         {visible.length === 0 ? <div className="empty"><span className="empty-icon">◇</span><h3>{records.length ? "Nothing matches that view" : `No ${productConfig.entityNamePlural} yet`}</h3><p>{records.length ? "Try another search or filter." : `Add your first ${productConfig.entityName} to get started.`}</p>{!records.length && productConfig.capabilities.create && <button className="secondary" onClick={openCreate}>Add {productConfig.entityName}</button>}</div>
-          : groupField ? <div className="group-list" aria-label={`${productConfig.entityNamePlural} grouped by ${groupField.label}`}>
-            {groupedVisible.map((group) => <section className="record-group" key={group.label} aria-labelledby={`group-${group.label.toLowerCase().replace(/[^a-z0-9]+/gu, "-")}`}>
-              <div className="group-heading"><h3 id={`group-${group.label.toLowerCase().replace(/[^a-z0-9]+/gu, "-")}`}>{group.label}</h3><span>{group.records.length}</span></div>
-              <div className="grid">{group.records.map(recordCard)}</div>
-            </section>)}
-          </div> : <div className="grid">{visible.map(recordCard)}</div>}
+          : <CollectionView records={visible} renderRecord={recordCard} />}
       </section>
     </main>
     <dialog ref={dialog} onCancel={close}><form onSubmit={submit} noValidate><div className="dialog-head"><div><p className="eyebrow">{editingId ? "Update" : "New entry"}</p><h2>{editingId ? `Edit ${productConfig.entityName}` : `Add ${productConfig.entityName}`}</h2></div><button type="button" className="icon-button" aria-label="Close" onClick={close}>×</button></div>

@@ -237,6 +237,13 @@
       ],
       "genome": "workflow",
       "name": "Decision Log",
+      "presentation": {
+        "groupField": "status",
+        "navigation": "single",
+        "primary": "board",
+        "reason": "workflow grouped by status",
+        "variant": "pipeline"
+      },
       "primaryField": "title",
       "quickActions": [],
       "searchableFields": [
@@ -292,7 +299,7 @@
       ],
       "tagline": "Decide, record, revisit."
     },
-    "summary.md": "# Decision Log\n\nKeep lightweight decisions retrievable.\n\n- **Target user:** Small project teams\n- **Build route:** compile\n- **Genome:** workflow\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Planned verification journeys\n\n- Application loads and shows a useful empty state\n- Invalid decision input shows validation without crashing\n- User can add a complete decision and see it in decisions\n- decisions survive a page refresh\n- User can edit an existing decision\n- User can search decisions\n- User can narrow decisions with a meaningful filter\n- decisions are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing decision\n"
+    "summary.md": "# Decision Log\n\nKeep lightweight decisions retrievable.\n\n- **Target user:** Small project teams\n- **Build route:** compile\n- **Genome:** workflow\n- **Presentation:** board / pipeline\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Planned verification journeys\n\n- Application loads and shows a useful empty state\n- Invalid decision input shows validation without crashing\n- User can add a complete decision and see it in decisions\n- decisions survive a page refresh\n- User can edit an existing decision\n- User can search decisions\n- User can narrow decisions with a meaningful filter\n- decisions are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing decision\n"
   },
   "journeys": [
     {

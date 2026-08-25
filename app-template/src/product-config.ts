@@ -106,6 +106,16 @@ export interface DesignConfig {
   spacing: { page: number; panel: number; gap: number };
 }
 
+export type PrimaryView = "tracker" | "table" | "board" | "gallery" | "agenda" | "dashboard" | "standings";
+export interface PresentationConfig {
+  primary: PrimaryView;
+  navigation: "single" | "sections";
+  variant: string;
+  reason: string;
+  groupField?: string;
+  dateField?: string;
+}
+
 // A one-tap per-record button that mutates one field to a computed value:
 // "today" stamps a date field to the current date; "clear" empties the field.
 export interface QuickActionConfig {
@@ -146,6 +156,7 @@ export interface ProductConfig {
   collectionLabel: string;
   accent: string;
   design: DesignConfig;
+  presentation: PresentationConfig;
   fields: FieldConfig[];
   primaryField: string;
   secondaryFields: string[];
@@ -168,7 +179,7 @@ const DEFAULT_SORTS: SortOption[] = [
 
 // JSON imports infer ordinary arrays rather than fixed tuples. The compiler and
 // IR validator enforce the runtime shape before writing this file.
-const parsedConfig = rawConfig as unknown as Omit<ProductConfig, "design"> & { design?: DesignConfig };
+const parsedConfig = rawConfig as unknown as Omit<ProductConfig, "design" | "presentation"> & { design?: DesignConfig; presentation?: PresentationConfig };
 const fallbackDesign: DesignConfig = {
   id: "progress-workbench-professional",
   tone: "professional",
@@ -191,6 +202,15 @@ const fallbackDesign: DesignConfig = {
 export const productConfig: ProductConfig = {
   ...parsedConfig,
   design: parsedConfig.design ?? fallbackDesign,
+  presentation: parsedConfig.presentation ?? {
+    primary: parsedConfig.genome === "workflow" ? "board"
+      : parsedConfig.genome === "catalog" ? "gallery"
+        : parsedConfig.genome === "planner" ? "agenda"
+          : parsedConfig.genome === "dashboard" ? "dashboard" : "tracker",
+    navigation: (parsedConfig.entities?.length ?? 0) > 1 ? "sections" : "single",
+    variant: "default",
+    reason: "legacy genome fallback",
+  },
   charts: parsedConfig.charts ?? [],
   quickActions: parsedConfig.quickActions ?? [],
   sorts: parsedConfig.sorts && parsedConfig.sorts.length > 0 ? parsedConfig.sorts : DEFAULT_SORTS,

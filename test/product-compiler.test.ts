@@ -6,6 +6,7 @@ import { BENCHMARK_IDEAS } from "../benchmarks/suite.js";
 import { classifyCapabilities } from "../solution/compiler/capability-map.js";
 import { compileConfig, writeCompiledProduct } from "../solution/compiler/compile.js";
 import { resolveDesign } from "../solution/design/catalog.js";
+import { resolvePresentation } from "../solution/design/presentation.js";
 import { normalizeProductIR } from "../solution/ir/normalize.js";
 import { ProductIRValidationError, validateProductIR } from "../solution/ir/schema.js";
 import type { ProductIR } from "../solution/ir/types.js";
@@ -13,6 +14,7 @@ import { TokenGovernor, weightedTokens } from "../solution/orchestrator/budget.j
 import { deriveJourneys } from "../solution/qa/derive-journeys.js";
 import { classifyFailure } from "../solution/qa/classify.js";
 import { deterministicRepair } from "../solution/repair/deterministic.js";
+import { coerceStringifiedIR } from "../solution/extensions/product-compiler.js";
 
 const temporaryDirectories: string[] = [];
 afterEach(async () => { await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true }))); });
@@ -52,6 +54,23 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe("Product IR compiler", () => {
+  it("repairs one impossible closing brace inside a stringified container", () => {
+    const entities = JSON.stringify(fixture().entities);
+    const fieldsEnd = entities.lastIndexOf("]}");
+    const malformed = `${entities.slice(0, fieldsEnd)}}${entities.slice(fieldsEnd)}`;
+
+    const coerced = coerceStringifiedIR({ ...fixture(), entities: malformed }) as ProductIR;
+
+    expect(coerced.entities).toEqual(fixture().entities);
+  });
+
+  it("does not guess when malformed stringified JSON needs more than removing one impossible closer", () => {
+    const malformed = '[{"name":"decision","fields":[{"id":"title"}}}}]}]';
+    const coerced = coerceStringifiedIR({ ...fixture(), entities: malformed }) as { entities: unknown };
+
+    expect(coerced.entities).toBe(malformed);
+  });
+
   it("validates, normalizes, routes, and compiles supported ideas deterministically", () => {
     const ir = normalizeProductIR(validateProductIR(fixture()));
     const route = classifyCapabilities(ir);
@@ -60,6 +79,7 @@ describe("Product IR compiler", () => {
     expect(config).toMatchObject({
       name: "Decision Log",
       genome: "workflow",
+      presentation: { primary: "board", groupField: "status" },
       primaryField: "title",
       design: { layout: "stage-board", tone: "professional", density: "compact" },
     });
@@ -259,6 +279,53 @@ describe("Product IR compiler", () => {
     const layouts = (["tracker", "workflow", "catalog", "planner", "dashboard"] as const)
       .map((genome) => resolveDesign(genome, normalized.product.design).layout);
     expect(new Set(layouts).size).toBe(5);
+  });
+
+  it("compiles one authoritative presentation and corrects obvious generic-genome mismatches", () => {
+    const simpleFields: ProductIR["entities"][number]["fields"] = [
+      { id: "title", label: "Title", type: "text" as const, required: true },
+      { id: "owner", label: "Owner", type: "text" as const, required: false },
+    ];
+    const make = (product: ProductIR["product"], fields = simpleFields, calculations: ProductIR["calculations"] = []) => normalizeProductIR(validateProductIR(fixture({
+      product,
+      entities: [{ name: "item", plural: "items", primaryField: "title", fields }],
+      capabilities: { create: true, edit: true, delete: true, search: true, filter: false, sort: true, group: false, transition: false, calculate: calculations.length > 0 },
+      filters: [], calculations, charts: [],
+    })));
+
+    const products = [
+      make({ name: "Simple Tracker", description: "Track a short list.", tagline: "", targetUser: "One person", genome: "tracker" }),
+      make({ name: "Dense Registry", description: "Maintain detailed records.", tagline: "", targetUser: "Operations", genome: "tracker" }, Array.from({ length: 7 }, (_, index) => ({ id: index === 0 ? "title" : `field_${index}`, label: `Field ${index}`, type: "text" as const, required: index === 0 }))),
+      make({ name: "Community Center Activities", description: "Plan upcoming activities, classes, and events.", tagline: "", targetUser: "Coordinator", genome: "tracker" }, [...simpleFields, { id: "date", label: "Date", type: "date" as const, required: true }]),
+      make({ name: "Recipe Library", description: "Browse saved recipes.", tagline: "", targetUser: "Home cooks", genome: "catalog" }),
+      make({ name: "Operations Pulse", description: "Monitor business performance.", tagline: "", targetUser: "Managers", genome: "dashboard" }, simpleFields, [{ id: "total", label: "Total", operation: "count" }]),
+    ];
+    const presentations = products.map((ir) => compileConfig(ir));
+    expect(presentations.map((config) => config.presentation.primary)).toEqual(["tracker", "table", "agenda", "gallery", "dashboard"]);
+    expect(presentations[2]!.presentation).toMatchObject({ dateField: "date", reason: "date-centered planning by date" });
+    expect(presentations[2]!.sorts.find((sort) => sort.id === "by_date")).toMatchObject({ direction: "asc" });
+    expect(new Set(presentations.map((config) => config.design.layout)).size).toBe(5);
+    for (const config of presentations) expect(config.design.layout).not.toBe("");
+  });
+
+  it("selects presentation variants deterministically without model calls", () => {
+    const variants = Array.from({ length: 40 }, (_, index) => {
+      const raw = fixture({
+        product: { name: `Focus Log ${index}`, description: "Track a short list.", tagline: "", targetUser: "One person", genome: "tracker" },
+        entities: [{ name: "item", plural: "items", primaryField: "title", fields: [{ id: "title", label: "Title", type: "text", required: true }] }],
+        capabilities: { create: true, edit: true, delete: true, search: true, filter: false, sort: true, group: false, transition: false, calculate: false },
+        filters: [], calculations: [], charts: [],
+      });
+      return resolvePresentation(normalizeProductIR(validateProductIR(raw))).variant;
+    });
+    expect(new Set(variants)).toEqual(new Set(["timeline", "checklist", "milestones"]));
+    const repeated = fixture({
+      product: { name: "Focus Log 0", description: "Track a short list.", tagline: "", targetUser: "One person", genome: "tracker" },
+      entities: [{ name: "item", plural: "items", primaryField: "title", fields: [{ id: "title", label: "Title", type: "text", required: true }] }],
+      capabilities: { create: true, edit: true, delete: true, search: true, filter: false, sort: true, group: false, transition: false, calculate: false },
+      filters: [], calculations: [], charts: [],
+    });
+    expect(resolvePresentation(normalizeProductIR(validateProductIR(repeated))).variant).toBe(variants[0]);
   });
 
   it("accepts explicit design enums and rejects unbounded visual instructions", () => {

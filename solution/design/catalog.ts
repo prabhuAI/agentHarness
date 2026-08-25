@@ -1,4 +1,5 @@
 import type { DesignDensity, DesignIntent, DesignTone, Genome } from "../ir/types.js";
+import type { PrimaryView } from "./presentation.js";
 
 // Curated from UI/UX Pro Max's MIT-licensed design-system workflow. The scored
 // runtime uses only these reviewed tokens; it never loads the skill or runs Python.
@@ -112,12 +113,14 @@ const TYPOGRAPHY: Record<DesignTone, Typography[]> = {
   ],
 };
 
-const LAYOUTS: Record<Genome, LayoutProfile> = {
+const LAYOUTS: Record<PrimaryView, LayoutProfile> = {
   tracker: { id: "progress-workbench", label: "Progress workbench", cardRadius: 14, panelRadius: 18 },
-  workflow: { id: "stage-board", label: "Stage board", cardRadius: 10, panelRadius: 14 },
-  catalog: { id: "editorial-gallery", label: "Editorial gallery", cardRadius: 20, panelRadius: 24 },
-  planner: { id: "agenda-canvas", label: "Agenda canvas", cardRadius: 12, panelRadius: 18 },
+  table: { id: "data-ledger", label: "Data ledger", cardRadius: 6, panelRadius: 10 },
+  board: { id: "stage-board", label: "Stage board", cardRadius: 10, panelRadius: 14 },
+  gallery: { id: "editorial-gallery", label: "Editorial gallery", cardRadius: 20, panelRadius: 24 },
+  agenda: { id: "agenda-canvas", label: "Agenda canvas", cardRadius: 12, panelRadius: 18 },
   dashboard: { id: "command-center", label: "Command center", cardRadius: 8, panelRadius: 12 },
+  standings: { id: "league-center", label: "League center", cardRadius: 8, panelRadius: 12 },
 };
 
 // Shape treatments applied on top of the genome's base radii: soft (base), sharp, pill.
@@ -150,8 +153,9 @@ function choose<T>(items: T[], seed: number, salt: number): T {
   return items[((seed ^ salt) >>> 0) % items.length]!;
 }
 
-export function resolveDesign(genome: Genome, intent: DesignIntent, seed = ""): CompiledDesign {
-  const layout = LAYOUTS[genome];
+export function resolveDesign(view: PrimaryView | Genome, intent: DesignIntent, seed = ""): CompiledDesign {
+  const primary: PrimaryView = view === "workflow" ? "board" : view === "catalog" ? "gallery" : view === "planner" ? "agenda" : view;
+  const layout = LAYOUTS[primary];
   const hash = seedFrom(seed);
   const basePalette = choose(PALETTES[intent.tone], hash, 0x9e3779b1);
   const palette = intent.contrast === "high" ? { ...basePalette, muted: basePalette.ink, border: basePalette.muted } : basePalette;

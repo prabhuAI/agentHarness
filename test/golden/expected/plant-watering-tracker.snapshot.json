@@ -222,13 +222,13 @@
         },
         "contrast": "balanced",
         "density": "comfortable",
-        "id": "progress-workbench-calm-a",
-        "layout": "progress-workbench",
-        "layoutLabel": "Progress workbench",
+        "id": "command-center-calm-a",
+        "layout": "command-center",
+        "layoutLabel": "Command center",
         "motion": "subtle",
         "shape": {
-          "cardRadius": 22,
-          "panelRadius": 28
+          "cardRadius": 16,
+          "panelRadius": 22
         },
         "spacing": {
           "gap": 14,
@@ -337,6 +337,13 @@
       ],
       "genome": "tracker",
       "name": "Plant Pal",
+      "presentation": {
+        "groupField": "room",
+        "navigation": "single",
+        "primary": "dashboard",
+        "reason": "metrics-led monitoring",
+        "variant": "scorecard"
+      },
       "primaryField": "name",
       "quickActions": [],
       "searchableFields": [
@@ -415,7 +422,7 @@
       ],
       "tagline": ""
     },
-    "summary.md": "# Plant Pal\n\nA personal houseplant watering tracker that shows which plants are overdue, due soon, or fine, with a count of overdue plants at a glance.\n\n- **Target user:** Solo plant owner tracking watering on their own laptop\n- **Build route:** compile\n- **Genome:** tracker\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Planned verification journeys\n\n- Application loads and shows a useful empty state\n- Invalid plant input shows validation without crashing\n- User can add a complete plant and see it in plants\n- plants survive a page refresh\n- User can edit an existing plant\n- User can search plants\n- User can narrow plants with a meaningful filter\n- plants are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing plant\n"
+    "summary.md": "# Plant Pal\n\nA personal houseplant watering tracker that shows which plants are overdue, due soon, or fine, with a count of overdue plants at a glance.\n\n- **Target user:** Solo plant owner tracking watering on their own laptop\n- **Build route:** compile\n- **Genome:** tracker\n- **Presentation:** dashboard / scorecard\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Planned verification journeys\n\n- Application loads and shows a useful empty state\n- Invalid plant input shows validation without crashing\n- User can add a complete plant and see it in plants\n- plants survive a page refresh\n- User can edit an existing plant\n- User can search plants\n- User can narrow plants with a meaningful filter\n- plants are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing plant\n"
   },
   "journeys": [
     {

@@ -43,6 +43,13 @@
       "gap": 14
     }
   },
+  "presentation": {
+    "primary": "tracker",
+    "navigation": "single",
+    "variant": "timeline",
+    "reason": "focused record tracking",
+    "groupField": "status"
+  },
   "primaryField": "title",
   "secondaryFields": [
     "category",

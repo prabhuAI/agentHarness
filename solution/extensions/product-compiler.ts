@@ -177,6 +177,32 @@ function balancedPrefixEnd(s: string): number {
   return -1;
 }
 
+// Locate a closing bracket/brace that cannot match the currently open JSON
+// container. This catches a narrowly defined model typo such as `...}}}}]}]`,
+// where the extra `}` appears inside an otherwise valid stringified array.
+// The caller still requires the complete repaired string to pass JSON.parse.
+function unexpectedClosingIndex(s: string): number {
+  const stack: string[] = [];
+  let inString = false, escaped = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "[" || ch === "{") stack.push(ch);
+    else if (ch === "]" || ch === "}") {
+      const expected = ch === "]" ? "[" : "{";
+      if (stack.at(-1) !== expected) return i;
+      stack.pop();
+    }
+  }
+  return -1;
+}
+
 // Parse a value that arrived as a JSON string back into JSON. Only strings that
 // look like a JSON object/array are touched, so a genuine text value is left
 // alone. Falls back to the first balanced prefix when a model appends trailing
@@ -186,6 +212,11 @@ function parseIfJsonString(value: unknown): unknown {
   const trimmed = value.trim();
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
   try { return JSON.parse(trimmed); } catch { /* fall through to best-effort repair */ }
+  const unexpected = unexpectedClosingIndex(trimmed);
+  if (unexpected >= 0) {
+    const repaired = trimmed.slice(0, unexpected) + trimmed.slice(unexpected + 1);
+    try { return JSON.parse(repaired); } catch { /* fall through to prefix repair */ }
+  }
   const end = balancedPrefixEnd(trimmed);
   if (end > 0) { try { return JSON.parse(trimmed.slice(0, end)); } catch { /* give up */ } }
   return value;

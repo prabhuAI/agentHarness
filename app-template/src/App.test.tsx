@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, chartSeries, compareRecordsBySort, computeDerivedValue, computeSummaryValue, matchesPredicate } from "./App.js";
+import { App, chartSeries, compareRecordsBySort, computeDerivedValue, computeSummaryValue, matchesPredicate, withDerivedValues } from "./App.js";
 import { type ChartConfig, type FieldConfig, productConfig, type SortOption, type SummaryConfig } from "./product-config.js";
 import { createRepository, storageKeyFor } from "./repository.js";
 import { resolveViewPlan } from "./view-plan.js";
@@ -63,8 +63,20 @@ describe("compiled product runtime", () => {
     expect(app).toHaveAttribute("data-tone", productConfig.design.tone);
     expect(app).toHaveAttribute("data-density", productConfig.design.density);
     expect(app).toHaveAttribute("data-view", resolveViewPlan(productConfig).primary);
+    expect(app).toHaveAttribute("data-presentation-variant", productConfig.presentation.variant);
     expect(app).toHaveStyle(`--accent: ${productConfig.design.colors.accent}`);
     expect(screen.getByRole("link", { name: /skip to content/i })).toHaveAttribute("href", "#main");
+  });
+
+  it("renders the compiled presentation with its own structural collection", async () => {
+    const { container } = render(<App />);
+    await createRecord();
+    const structuralClass = {
+      tracker: ".tracker-view", table: ".table-view", board: ".board-view",
+      gallery: ".gallery-view", agenda: ".agenda-view", dashboard: ".dashboard-view",
+      standings: ".standings-roster",
+    }[productConfig.presentation.primary];
+    expect(container.querySelector(structuralClass)).not.toBeNull();
   });
 
   it("exposes storage through a swappable repository factory", () => {
@@ -320,6 +332,10 @@ describe("compiled product runtime", () => {
     expect(screen.getAllByText(primaryValue).length).toBeGreaterThan(0);
     const storedAfterCreate = JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]");
     expect(storedAfterCreate).toHaveLength(1);
+    const projectedAfterCreate = storedAfterCreate.map((record: { values: Record<string, string | boolean> }) => ({
+      ...record,
+      values: withDerivedValues(record.values),
+    }));
     const summaryRegion = screen.getByLabelText("Summary");
     for (const summary of productConfig.summaries) {
       // Visible labels may legitimately repeat (two different predicates can
@@ -327,15 +343,15 @@ describe("compiled product runtime", () => {
       const tile = summaryRegion.querySelector<HTMLElement>(`[data-summary-id="${summary.id}"]`)!;
       expect(tile).toBeInTheDocument();
       const rendered = tile.querySelector("strong")!.textContent ?? "";
-      const expected = computeSummaryValue(summary, storedAfterCreate);
+      const expected = computeSummaryValue(summary, projectedAfterCreate);
       if (summary.operation === "count" || summary.operation === "countWhere") expect(rendered).toBe(String(expected));
       else expect(Number(rendered.replace(/[^0-9.-]/gu, ""))).toBe(expected);
     }
     for (const chart of productConfig.charts) {
       expect(screen.getByRole("img", { name: `${chart.label} line chart with 1 points` })).toBeInTheDocument();
     }
-    const groupField = productConfig.fields.find((field) => !field.derive && (field.type === "category" || field.type === "status"));
-    if (productConfig.capabilities.group && groupField) {
+    const groupField = productConfig.fields.find((field) => field.key === productConfig.presentation.groupField);
+    if (groupField) {
       const groupLabel = String(created[groupField.key] ?? "Uncategorized");
       expect(screen.getAllByRole("heading", { name: groupLabel }).length).toBeGreaterThan(0);
     }

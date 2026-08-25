@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveDesign, type CompiledDesign } from "../design/catalog.js";
+import { resolvePresentation, type PresentationPlan } from "../design/presentation.js";
 import { genomeFor } from "../genomes/index.js";
 import type { NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductFilter, ProductPriority, ProductQuickAction, ProductStandings, RouteDecision } from "../ir/types.js";
 import type { DerivedJourney } from "../qa/derive-journeys.js";
@@ -15,6 +16,7 @@ interface CompiledConfig {
   collectionLabel: string;
   accent: string;
   design: CompiledDesign;
+  presentation: PresentationPlan;
   primaryField: string;
   secondaryFields: string[];
   searchableFields: string[];
@@ -70,7 +72,7 @@ function compileEntity(entity: ProductEntity): CompiledEntityConfig {
 // plus one option per meaningful field — the primary label (A→Z), a date
 // (newest first), and a measure (highest first) — so a spend tracker can sort by
 // amount or date, not just by name. Derived from the fields, never model-authored.
-function compileSorts(entity: NormalizedProductIR["entities"][number], priority?: ProductPriority): CompiledConfig["sorts"] {
+function compileSorts(entity: NormalizedProductIR["entities"][number], presentation: PresentationPlan, priority?: ProductPriority): CompiledConfig["sorts"] {
   const sorts: CompiledConfig["sorts"] = [
     ...(priority ? [{
       id: "priority",
@@ -88,7 +90,7 @@ function compileSorts(entity: NormalizedProductIR["entities"][number], priority?
   };
   const primary = entity.fields.find((field) => field.id === entity.primaryField);
   if (primary && ["text", "longText", "email", "url", "category", "status"].includes(primary.type)) add(primary, "asc");
-  add(entity.fields.find((field) => field.type === "date" || field.type === "datetime"), "desc");
+  add(entity.fields.find((field) => field.type === "date" || field.type === "datetime"), presentation.primary === "agenda" ? "asc" : "desc");
   add(entity.fields.find((field) => field.type === "currency") ?? entity.fields.find((field) => field.type === "number"), "desc");
   return sorts;
 }
@@ -101,9 +103,10 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
   const secondaryFields = entity.fields.filter((field) => field.id !== entity.primaryField).slice(0, 4).map((field) => field.id);
   const primaryCalculations = ir.calculations.filter((calculation) => !calculation.entity || calculation.entity === entity.name);
   const summaries = primaryCalculations.length > 0 ? primaryCalculations : [{ id: "total", label: `Total ${entity.plural}`, operation: "count" as const }];
+  const presentation = resolvePresentation(ir);
   // Seed on name + target user so even same-concept products for different audiences
   // resolve to distinct looks, while identical products stay identical.
-  const design = resolveDesign(ir.product.genome, ir.product.design, `${ir.product.name}\0${ir.product.targetUser}`);
+  const design = resolveDesign(presentation.primary, ir.product.design, `${ir.product.name}\0${ir.product.targetUser}`);
   return {
     name: ir.product.name,
     tagline: ir.product.tagline,
@@ -114,6 +117,7 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
     collectionLabel: genome.collectionLabel,
     accent: design.colors.accent,
     design,
+    presentation,
     primaryField: entity.primaryField,
     secondaryFields,
     searchableFields,
@@ -121,7 +125,7 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
     summaries,
     charts: ir.charts,
     quickActions: ir.quickActions,
-    sorts: compileSorts(entity, ir.priority),
+    sorts: compileSorts(entity, presentation, ir.priority),
     capabilities: {
       create: ir.capabilities.create,
       edit: ir.capabilities.edit,
@@ -163,6 +167,7 @@ export async function writeCompiledProduct(
     `- **Target user:** ${ir.product.targetUser}`,
     `- **Build route:** ${route.route}`,
     `- **Genome:** ${route.genome}`,
+    `- **Presentation:** ${config.presentation.primary} / ${config.presentation.variant}`,
     `- **Persistence:** browser-local storage`,
     `- **Start:** \`npm run dev\` → http://localhost:3000`,
     "",
