@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App, chartSeries, compareRecordsBySort, computeDerivedValue, computeSummaryValue, matchesPredicate, withDerivedValues } from "./App.js";
-import { type ChartConfig, type FieldConfig, productConfig, type SortOption, type SummaryConfig } from "./product-config.js";
+import { type ChartConfig, type FieldConfig, type FilterPreset, productConfig, type SortOption, type SummaryConfig } from "./product-config.js";
 import { createRepository, storageKeyFor } from "./repository.js";
 import { resolveViewPlan } from "./view-plan.js";
 
@@ -53,6 +53,10 @@ async function createRecord(overrides: Record<string, string | boolean> = {}) {
   }
   await user.click(within(dialog).getByRole("button", { name: new RegExp(`add ${productConfig.entityName}`, "i") }));
   return created;
+}
+
+function findMatchingFilter(filters: FilterPreset[], values: Record<string, string | boolean>): FilterPreset | undefined {
+  return filters.find((preset) => matchesPredicate(values[preset.field], preset.operator, preset.value));
 }
 
 describe("compiled product runtime", () => {
@@ -246,6 +250,14 @@ describe("compiled product runtime", () => {
     expect(matchesPredicate("", "thisMonth", undefined, now)).toBe(false);
   });
 
+  it("selects a filter from projected values instead of assuming the first filter matches", () => {
+    const filters: FilterPreset[] = [
+      { id: "on_shelf", label: "On shelf", field: "status", operator: "equals", value: "On shelf" },
+      { id: "lent_out", label: "Lent out", field: "status", operator: "equals", value: "Lent out" },
+    ];
+    expect(findMatchingFilter(filters, { status: "Lent out" })?.id).toBe("lent_out");
+  });
+
   it("totals a per-category spend breakdown as a grouped sum (sumWhere)", () => {
     const records = [
       { values: { amount: "120", category: "Food", date: "2026-08-10" } },
@@ -313,18 +325,18 @@ describe("compiled product runtime", () => {
     expect(screen.getAllByText(/is required/i).length).toBeGreaterThan(0);
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /close/i }));
 
-    const firstFilter = productConfig.filters[0];
+    const editableFilter = productConfig.filters.find((preset) => !productConfig.fields.find((field) => field.key === preset.field)?.derive);
     const filterOverrides: Record<string, string | boolean> = {};
-    if (firstFilter) {
-      const field = productConfig.fields.find((candidate) => candidate.key === firstFilter.field);
-      if (firstFilter.operator === "equals") filterOverrides[firstFilter.field] = firstFilter.value ?? field?.options?.[0] ?? "Matched";
-      else if (firstFilter.operator === "nonEmpty") filterOverrides[firstFilter.field] = field?.options?.[0] ?? "Matched";
-      else if (firstFilter.operator === "empty") filterOverrides[firstFilter.field] = "";
-      else if (firstFilter.operator === "truthy") filterOverrides[firstFilter.field] = true;
-      else if (firstFilter.operator === "falsy") filterOverrides[firstFilter.field] = false;
-      else if (["today", "thisWeek", "thisMonth"].includes(firstFilter.operator)) {
+    if (editableFilter) {
+      const field = productConfig.fields.find((candidate) => candidate.key === editableFilter.field);
+      if (editableFilter.operator === "equals") filterOverrides[editableFilter.field] = editableFilter.value ?? field?.options?.[0] ?? "Matched";
+      else if (editableFilter.operator === "nonEmpty") filterOverrides[editableFilter.field] = field?.options?.[0] ?? "Matched";
+      else if (editableFilter.operator === "empty") filterOverrides[editableFilter.field] = "";
+      else if (editableFilter.operator === "truthy") filterOverrides[editableFilter.field] = true;
+      else if (editableFilter.operator === "falsy") filterOverrides[editableFilter.field] = false;
+      else if (["today", "thisWeek", "thisMonth"].includes(editableFilter.operator)) {
         const now = new Date();
-        filterOverrides[firstFilter.field] = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        filterOverrides[editableFilter.field] = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       }
     }
     const created = await createRecord(filterOverrides);
@@ -336,6 +348,7 @@ describe("compiled product runtime", () => {
       ...record,
       values: withDerivedValues(record.values),
     }));
+    const projectedCreated = projectedAfterCreate[0]!.values;
     const summaryRegion = screen.getByLabelText("Summary");
     for (const summary of productConfig.summaries) {
       // Visible labels may legitimately repeat (two different predicates can
@@ -352,7 +365,7 @@ describe("compiled product runtime", () => {
     }
     const groupField = productConfig.fields.find((field) => field.key === productConfig.presentation.groupField);
     if (groupField) {
-      const groupLabel = String(created[groupField.key] ?? "Uncategorized");
+      const groupLabel = String(projectedCreated[groupField.key] ?? "Uncategorized");
       expect(screen.getAllByRole("heading", { name: groupLabel }).length).toBeGreaterThan(0);
     }
 
@@ -365,16 +378,11 @@ describe("compiled product runtime", () => {
       await user.clear(screen.getByRole("searchbox"));
     }
     if (productConfig.filters.length > 0) {
-      const preset = productConfig.filters[0];
+      const preset = findMatchingFilter(productConfig.filters, projectedCreated);
+      expect(preset, "At least one configured filter should match the projected record").toBeDefined();
       const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
       const filterGroup = within(screen.getByRole("group", { name: new RegExp(`filter ${escape(productConfig.entityNamePlural)}`, "i") }));
-      await user.click(filterGroup.getByRole("button", { name: new RegExp(escape(preset.label), "i"), pressed: false }));
-      // Predict the filter's effect with the runtime's own predicate rather than a
-      // re-implementation: a hand-rolled version could not reason about date-window
-      // operators (today/thisWeek/thisMonth), so a product whose first filter was a
-      // date window was wrongly expected to still show the record and failed here.
-      const matches = matchesPredicate(created[preset.field] as string | boolean | undefined, preset.operator, preset.value);
-      expect(matches).toBe(true);
+      await user.click(filterGroup.getByRole("button", { name: new RegExp(escape(preset!.label), "i"), pressed: false }));
       expect(screen.getAllByText(primaryValue).length).toBeGreaterThan(0);
       await user.click(filterGroup.getByRole("button", { name: new RegExp(`^all ${escape(productConfig.entityNamePlural)}`, "i") }));
     }
@@ -384,13 +392,13 @@ describe("compiled product runtime", () => {
     const editedValue = primaryField.options?.find((option) => option !== primaryValue) ?? (primaryField.allowCustom ? "Edited custom value" : "Edited sample value");
     await fillField(user, editDialog, primaryField, editedValue);
     let editedFilterValue: string | boolean | undefined;
-    if (firstFilter && firstFilter.field !== primaryField.key) {
-      const filterField = productConfig.fields.find((field) => field.key === firstFilter.field)!;
-      if (firstFilter.operator === "equals") editedFilterValue = filterField.options?.find((option) => option !== firstFilter.value) ?? "Different value";
-      else if (firstFilter.operator === "nonEmpty") editedFilterValue = "";
-      else if (firstFilter.operator === "empty") editedFilterValue = "Now filled";
-      else if (firstFilter.operator === "truthy") editedFilterValue = false;
-      else if (firstFilter.operator === "falsy") editedFilterValue = true;
+    if (editableFilter && editableFilter.field !== primaryField.key) {
+      const filterField = productConfig.fields.find((field) => field.key === editableFilter.field)!;
+      if (editableFilter.operator === "equals") editedFilterValue = filterField.options?.find((option) => option !== editableFilter.value) ?? "Different value";
+      else if (editableFilter.operator === "nonEmpty") editedFilterValue = "";
+      else if (editableFilter.operator === "empty") editedFilterValue = "Now filled";
+      else if (editableFilter.operator === "truthy") editedFilterValue = false;
+      else if (editableFilter.operator === "falsy") editedFilterValue = true;
       else editedFilterValue = "2000-01-01";
       await fillField(user, editDialog, filterField, editedFilterValue);
     }
@@ -398,8 +406,8 @@ describe("compiled product runtime", () => {
     expect(screen.getAllByText(editedValue).length).toBeGreaterThan(0);
     const updatedStored = JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]");
     expect(updatedStored[0].values[productConfig.primaryField]).toBe(editedValue);
-    if (firstFilter && editedFilterValue !== undefined) {
-      expect(matchesPredicate(updatedStored[0].values[firstFilter.field], firstFilter.operator, firstFilter.value)).toBe(false);
+    if (editableFilter && editedFilterValue !== undefined) {
+      expect(matchesPredicate(updatedStored[0].values[editableFilter.field], editableFilter.operator, editableFilter.value)).toBe(false);
     }
     cleanup();
     render(<App />);
