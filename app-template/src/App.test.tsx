@@ -227,6 +227,17 @@ describe("compiled product runtime", () => {
     expect(computeDerivedValue(fixed, { qa_last: "2026-06-01" }, now)).toBe("Overdue"); // long past a fixed 30-day span
   });
 
+  it("derives a two-state status from whether another field is present", () => {
+    const field: FieldConfig = {
+      key: "status", label: "Status", type: "status",
+      derive: { kind: "presence", sourceField: "borrower", empty: "On shelf", nonEmpty: "Lent out" },
+    };
+    const now = new Date(Date.UTC(2026, 7, 22));
+    expect(computeDerivedValue(field, { borrower: "" }, now)).toBe("On shelf");
+    expect(computeDerivedValue(field, { borrower: "  " }, now)).toBe("On shelf");
+    expect(computeDerivedValue(field, { borrower: "Alex" }, now)).toBe("Lent out");
+  });
+
   it("computes a formula derived field with arithmetic over other numeric fields", () => {
     const now = new Date(Date.UTC(2026, 7, 22));
     const remaining: FieldConfig = { key: "remaining", label: "Remaining", type: "currency", derive: { kind: "formula", expression: "target - current" } };

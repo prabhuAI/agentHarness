@@ -68,7 +68,7 @@ function inferDesignIntent(input: ProductIR): DesignIntent {
 // through `identifier` so they match the normalized ids exactly.
 function normalizeDerive(raw: unknown, fieldId: string, fieldIds: Set<string>, numericIds: Set<string>): DerivedFieldSpec | undefined {
   if (!raw || typeof raw !== "object") return undefined;
-  const spec = raw as { kind?: unknown; dateField?: unknown; thresholdField?: unknown; thresholdDays?: unknown; soonWithinDays?: unknown; buckets?: Partial<DateThresholdDerive["buckets"]>; expression?: unknown };
+  const spec = raw as { kind?: unknown; dateField?: unknown; thresholdField?: unknown; thresholdDays?: unknown; soonWithinDays?: unknown; buckets?: Partial<DateThresholdDerive["buckets"]>; expression?: unknown; sourceField?: unknown; nonEmpty?: unknown; empty?: unknown };
   const kind = String(spec.kind);
   if (!(DERIVED_FIELD_KINDS as readonly string[]).includes(kind)) return undefined;
   if (kind === "formula") {
@@ -80,6 +80,13 @@ function normalizeDerive(raw: unknown, fieldId: string, fieldIds: Set<string>, n
     if (!analyzed || analyzed.ids.length === 0) return undefined;
     if (analyzed.ids.some((id) => id === fieldId || !numericIds.has(id))) return undefined;
     return { kind: "formula", expression };
+  }
+  if (kind === "presence") {
+    const sourceField = identifier(spec.sourceField, "");
+    const nonEmpty = clean(String(spec.nonEmpty ?? ""));
+    const empty = clean(String(spec.empty ?? ""));
+    if (!fieldIds.has(sourceField) || sourceField === fieldId || !nonEmpty || !empty || nonEmpty === empty) return undefined;
+    return { kind: "presence", sourceField, nonEmpty, empty };
   }
   const dateField = identifier(String(spec.dateField ?? ""), "");
   if (!fieldIds.has(dateField) || dateField === fieldId) return undefined;
@@ -115,14 +122,20 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     // and so a model that omitted options still gets a usable choice set.
     const rawDerive = (field as ProductField).derive;
     const deriveKind = rawDerive && typeof rawDerive === "object" ? String((rawDerive as { kind?: unknown }).kind) : "";
-    const buckets = (rawDerive as { buckets?: Partial<DateThresholdDerive["buckets"]> } | undefined)?.buckets;
+    const deriveShape = rawDerive as { buckets?: Partial<DateThresholdDerive["buckets"]>; nonEmpty?: unknown; empty?: unknown } | undefined;
+    const buckets = deriveShape?.buckets;
     // Only a date-threshold lifecycle folds its bucket labels into options (so the
     // facet machinery derives per-band filters and counts); a formula stays numeric.
-    const isDateThresholdDerive = deriveKind === "dateThreshold" || (deriveKind !== "formula" && Boolean(buckets));
+    const isDateThresholdDerive = deriveKind === "dateThreshold" || (!deriveKind && Boolean(buckets));
     const isFormulaDerive = deriveKind === "formula";
+    const isPresenceDerive = deriveKind === "presence";
     if (isDateThresholdDerive && buckets) {
       const bands = [buckets.overdue, buckets.soon, buckets.ok].filter((value): value is string => typeof value === "string");
       options = uniqueStrings([...(options ?? []), ...bands]);
+    }
+    if (isPresenceDerive) {
+      const states = [deriveShape?.nonEmpty, deriveShape?.empty].filter((value): value is string => typeof value === "string");
+      options = uniqueStrings([...(options ?? []), ...states]);
     }
     // A field carrying an enumerated option list is a choice control regardless of
     // the type the model tagged it with. Weaker models often emit `text` with
@@ -133,7 +146,7 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     // A date-threshold field is a computed lifecycle: force `status` so it groups,
     // filters, and badges like one. A formula field is a computed number: force a
     // numeric type so it renders and sums as a number, never a free-text input.
-    if (isDateThresholdDerive) type = "status";
+    if (isDateThresholdDerive || isPresenceDerive) type = "status";
     else if (isFormulaDerive) type = field.type === "currency" ? "currency" : "number";
     // A category dropdown defaults to accepting custom input when the model didn't say
     // otherwise: it matches the "prefer suggestions with custom input" guidance and keeps
@@ -300,8 +313,70 @@ const DATE_WINDOW_KEYWORDS: Record<string, DateWindowOperator> = {
 const windowKeyword = (value: string | undefined): DateWindowOperator | undefined =>
   value ? DATE_WINDOW_KEYWORDS[value.toLowerCase().replace(/[^a-z]/gu, "")] : undefined;
 
+const regexEscape = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+function nearestCueBefore(text: string, option: string, cue: RegExp): number {
+  const optionPattern = new RegExp(`\\b${regexEscape(option.toLowerCase()).replace(/\\ /gu, "\\s+")}\\b`, "gu");
+  let best = Number.POSITIVE_INFINITY;
+  for (const match of text.matchAll(optionPattern)) {
+    const prefix = text.slice(Math.max(0, match.index - 140), match.index);
+    const matches = [...prefix.matchAll(cue)];
+    const latest = matches.at(-1);
+    if (latest?.index !== undefined) best = Math.min(best, prefix.length - latest.index);
+  }
+  return best;
+}
+
+// Models occasionally restate a common two-state field dependency as prose in
+// customRequirements even though the rest of the IR contains enough structure
+// to compile it. Promote only a narrowly proven pattern: a two-option status, a
+// clear quick action on a mentioned source field, and explicit empty/non-empty
+// cues immediately before the two option labels. Anything ambiguous remains a
+// genuine custom requirement and keeps the bounded hybrid route.
+function promotePresenceCouplings(
+  entities: [ProductEntity, ...ProductEntity[]],
+  rawActions: ProductIR["quickActions"] | undefined,
+  rawRequirements: ProductIR["customRequirements"] | undefined,
+): { entities: [ProductEntity, ...ProductEntity[]]; customRequirements: string[] } {
+  const requirements = uniqueStrings(rawRequirements ?? []);
+  if (requirements.length === 0) return { entities, customRequirements: [] };
+  const primary = entities[0];
+  const clearFields = new Set((rawActions ?? []).filter((action) => action?.set === "clear").map((action) => identifier(action.field, "")));
+  const sourceFields = primary.fields.filter((field) => clearFields.has(field.id) && !field.derive);
+  const statusFields = primary.fields.filter((field) => field.type === "status" && !field.derive && field.options?.length === 2);
+  const consumed = new Set<number>();
+  let fields = primary.fields;
+
+  requirements.forEach((requirement, index) => {
+    const text = requirement.toLowerCase();
+    for (const status of statusFields) {
+      const options = status.options!;
+      const statusMentioned = [status.id.replace(/_/gu, " "), status.label.toLowerCase()].some((term) => term && text.includes(term));
+      if (!statusMentioned || !options.every((option) => text.includes(option.toLowerCase()))) continue;
+      for (const source of sourceFields) {
+        const sourceMentioned = [source.id.replace(/_/gu, " "), source.label.toLowerCase()].some((term) => term && text.includes(term));
+        if (!sourceMentioned) continue;
+        const emptyCue = /\b(?:clear(?:ed|ing)?|empt(?:y|ied)|return(?:ed|ing)?|remov(?:ed|ing)?|without)\b/gu;
+        const nonEmptyCue = /\b(?:enter(?:ed|ing)?|fill(?:ed|ing)?|non[- ]?empty|present|assign(?:ed|ing)?|borrow(?:ed|ing)?|select(?:ed|ing)?|check(?:ed|ing)?)\b/gu;
+        const direct = nearestCueBefore(text, options[0]!, emptyCue) + nearestCueBefore(text, options[1]!, nonEmptyCue);
+        const reverse = nearestCueBefore(text, options[1]!, emptyCue) + nearestCueBefore(text, options[0]!, nonEmptyCue);
+        if (!Number.isFinite(Math.min(direct, reverse))) continue;
+        const [empty, nonEmpty] = direct <= reverse ? [options[0]!, options[1]!] : [options[1]!, options[0]!];
+        fields = fields.map((field) => field.id === status.id
+          ? { ...field, required: false, derive: { kind: "presence", sourceField: source.id, nonEmpty, empty } }
+          : field);
+        consumed.add(index);
+        return;
+      }
+    }
+  });
+
+  const promotedEntities = [{ ...primary, fields }, ...entities.slice(1)] as [ProductEntity, ...ProductEntity[]];
+  return { entities: promotedEntities, customRequirements: requirements.filter((_, index) => !consumed.has(index)) };
+}
+
 export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
-  const entities = input.entities.map((entity, index) => {
+  let entities = input.entities.map((entity, index) => {
     const fields = normalizeFields(entity);
     // A derived field is computed, never entered, so it can never identify a record.
     const enterable = fields.filter((field) => !field.derive);
@@ -324,6 +399,8 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
       fields: requiredFields,
     };
   }) as [ProductEntity, ...ProductEntity[]];
+  const promoted = promotePresenceCouplings(entities, input.quickActions, input.customRequirements);
+  entities = promoted.entities;
   const primaryFieldMap = new Map(entities[0].fields.map((field) => [field.id, field]));
   const primaryFields = new Set(primaryFieldMap.keys());
   // A category/status field with a small fixed option set is, by construction, a
@@ -503,6 +580,6 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     persistence: { strategy: "localStorage" },
     assumptions: uniqueStrings(input.assumptions ?? []),
     excluded: uniqueStrings(input.excluded ?? []),
-    customRequirements: uniqueStrings(input.customRequirements ?? []),
+    customRequirements: promoted.customRequirements,
   };
 }

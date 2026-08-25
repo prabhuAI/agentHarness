@@ -37,7 +37,7 @@ export type DateWindowOperator = (typeof DATE_WINDOW_OPERATORS)[number];
 export const CALCULATION_OPERATIONS = ["count", "countWhere", "sum", "sumWhere"] as const;
 export type CalculationOperation = (typeof CALCULATION_OPERATIONS)[number];
 
-export const DERIVED_FIELD_KINDS = ["dateThreshold", "formula"] as const;
+export const DERIVED_FIELD_KINDS = ["dateThreshold", "formula", "presence"] as const;
 export type DerivedFieldKind = (typeof DERIVED_FIELD_KINDS)[number];
 
 export const CHART_TYPES = ["line"] as const;
@@ -93,7 +93,17 @@ export interface FormulaDerive {
   expression: string;
 }
 
-export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive;
+// A two-state lifecycle derived from whether another field has a value. This
+// covers availability/assignment semantics such as borrower present => Lent out
+// and borrower empty => On shelf without a custom implementation turn.
+export interface PresenceDerive {
+  kind: "presence";
+  sourceField: string;
+  nonEmpty: string;
+  empty: string;
+}
+
+export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive | PresenceDerive;
 
 export interface ProductField {
   id: string;

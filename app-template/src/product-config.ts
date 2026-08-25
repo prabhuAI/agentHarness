@@ -22,7 +22,13 @@ export interface FormulaDerive {
   kind: "formula";
   expression: string;
 }
-export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive;
+export interface PresenceDerive {
+  kind: "presence";
+  sourceField: string;
+  nonEmpty: string;
+  empty: string;
+}
+export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive | PresenceDerive;
 
 export interface FieldConfig {
   key: string;

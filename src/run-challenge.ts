@@ -59,7 +59,7 @@ Environment:
   CHALLENGE_MODEL         Optional Pi model override
   CHALLENGE_THINKING      Optional Pi thinking level (default: off)
   CHALLENGE_TIMEOUT_MS    Wall-clock limit for Pi (default: 900000)
-  CHALLENGE_MAX_MODEL_CALLS Hard completed-call limit (default: 4)
+  CHALLENGE_MAX_MODEL_CALLS Hard completed-call limit (default: 3)
   CHALLENGE_WEIGHTED_TOKEN_BUDGET Hard weighted-token limit (default: 18000)
 `);
 }
@@ -206,8 +206,8 @@ export async function runPi(
       let guardPending = false;
       let completedModelCalls = 0;
       let weightedTokenExpenditure = 0;
-      const configuredCallLimit = Number(process.env.CHALLENGE_MAX_MODEL_CALLS ?? 4);
-      const maximumModelCalls = Number.isSafeInteger(configuredCallLimit) && configuredCallLimit > 0 ? configuredCallLimit : 4;
+      const configuredCallLimit = Number(process.env.CHALLENGE_MAX_MODEL_CALLS ?? 3);
+      const maximumModelCalls = Number.isSafeInteger(configuredCallLimit) && configuredCallLimit > 0 ? configuredCallLimit : 3;
       const configuredTokenBudget = Number(process.env.CHALLENGE_WEIGHTED_TOKEN_BUDGET ?? 18_000);
       const maximumWeightedTokens = Number.isFinite(configuredTokenBudget) && configuredTokenBudget > 0 ? configuredTokenBudget : 18_000;
       const scheduleForceKill = () => {

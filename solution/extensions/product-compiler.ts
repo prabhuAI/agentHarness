@@ -31,7 +31,7 @@ const fieldSchema = Type.Object({
     equals: Type.String({ description: "exact controlling value that makes this field visible" }),
   })),
   derive: Type.Optional(Type.Object({
-    kind: Type.String({ enum: ["dateThreshold", "formula"], description: "dateThreshold = a date-based status; formula = a number computed by arithmetic over other fields" }),
+    kind: Type.String({ enum: ["dateThreshold", "formula", "presence"], description: "dateThreshold = a date-based status; formula = arithmetic; presence = a two-state status based on whether another field is empty" }),
     dateField: Type.Optional(Type.String({ description: "dateThreshold only: id of the date field the elapsed span is measured from (e.g. last_watered)" })),
     thresholdField: Type.Optional(Type.String({ description: "id of a number field giving the threshold in days (e.g. watering_frequency); use this or thresholdDays" })),
     thresholdDays: Type.Optional(Type.Number({ description: "fixed threshold span in days when there is no per-record threshold field" })),
@@ -42,7 +42,10 @@ const fieldSchema = Type.Object({
       ok: Type.String({ description: "option label otherwise" }),
     }, { description: "dateThreshold only: each label must be one of this field's options" })),
     expression: Type.Optional(Type.String({ description: "formula only: arithmetic over other number/currency field ids and numeric literals, using + - * / and parentheses (e.g. \"target_amount - current_amount\", \"price / 12\", \"weight * (1 + reps / 30)\")" })),
-  }, { description: "Compute this field's value instead of taking user input. Use kind dateThreshold on a status field for a date-based lifecycle (overdue / due soon / fine), or kind formula on a number/currency field for a value derived by arithmetic from other fields. Either way, do not also list it as a customRequirement." })),
+    sourceField: Type.Optional(Type.String({ description: "presence only: field whose empty/non-empty state determines this status" })),
+    nonEmpty: Type.Optional(Type.String({ description: "presence only: status option when sourceField has a value" })),
+    empty: Type.Optional(Type.String({ description: "presence only: status option when sourceField is empty" })),
+  }, { description: "Compute this field instead of taking user input. Use dateThreshold for a date lifecycle, formula for arithmetic, or presence for a two-state status derived from whether another field is filled. Never repeat it as a customRequirement." })),
 });
 const predicateSchema = {
   id: Type.String(),
@@ -379,7 +382,8 @@ export function registerProductCompiler(
       "Multiple editable entities are supported deterministically. When scored records involve two participants and the user wants a league table, ladder, or ranking, add both entities plus a standings entry. The two participant fields live on sourceEntity and select records from rowEntity; provide each side's score-for and score-against fields and the win/draw/loss points. Never describe this again in customRequirements.",
       "When a product has multiple entities, set calculation.entity so a metric is counted from the correct record collection (for example, a total of matches must use entity match).",
       "For a status that is a date-based lifecycle (e.g. overdue / due soon / fine from a last-done date and a frequency), add a status field with those options and set its `derive` (kind dateThreshold) instead of a customRequirement — the runtime computes it live and auto-derives its per-band filters and counts.",
-      "A status the user sets by hand (marking an item Lent then Returned, a bill Paid, a task Done) is a plain status field with `transition` enabled — the user edits it directly. Never add a customRequirement to auto-flip a status from whether another field is filled in or cleared; that coupling is ordinary editing, and a manually-set status field with its options covers it.",
+      "When a two-state status follows whether another field is filled (borrower present = Lent out, borrower empty = On shelf; assignee present = Assigned), set the status field's `derive` to kind presence with sourceField, nonEmpty, and empty. Never describe field coupling as a customRequirement.",
+      "A status the user sets independently (a bill Paid, a task Done) is a plain status field with `transition` enabled. When its value follows whether another field is filled, use a presence-derived status instead.",
       "When the idea asks to see a number graphed or tracked over time (a weight chart, spend trend, progress over dates), add a `charts` entry (type line) with the date field as xField and the number/currency field as yField — never a customRequirement. The runtime renders it deterministically.",
       "For a per-record number computed by arithmetic from other number/currency fields (remaining = target − current, monthly = price ÷ 12, one-rep-max = weight × (1 + reps ÷ 30)), add a number/currency field with `derive` kind formula and an `expression` over the other field ids — never a customRequirement. The runtime evaluates it live.",
       "For a one-tap button on each record that stamps a date field to today (a \"Done!\" / \"Mark paid\" / \"Watered\" button) or clears a field (a \"Returned\" button that empties a borrower), add a `quickActions` entry with the target field id and set today/clear — never a customRequirement. The runtime renders the button and saves the change.",
@@ -419,7 +423,7 @@ export function registerProductCompiler(
         await writeReport(appRoot, ir, route, journeys, emptyQa);
         await trace.record({ agent: "qa", action: "verify_journeys", status: "skipped", reason: "focused custom implementation required" });
         return {
-          content: [{ type: "text", text: `Base product compiled via ${route.route}. Implement only: ${route.unsupported.join("; ")}. Relevant files: src/App.tsx, src/styles.css, and src/App.test.tsx. Read files directly; the read tool cannot list directories. Then call finalize_product.` }],
+          content: [{ type: "text", text: `Base product compiled via ${route.route}. Implement only: ${route.unsupported.join("; ")}. Start with src/App.tsx only. Read src/styles.css only for a visual requirement, and src/App.test.tsx only when verification reports a test failure. Do not read repository.ts unless persistence itself is the requirement. Apply one focused patch, then call finalize_product.` }],
           details: { route, budget },
         };
       }

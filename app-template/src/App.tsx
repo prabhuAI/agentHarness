@@ -52,6 +52,9 @@ function dayIndex(value: unknown): number | null {
 export function computeDerivedValue(field: FieldConfig, values: Values, now: Date): RecordValue {
   const spec = field.derive;
   if (!spec) return values[field.key] ?? "";
+  if (spec.kind === "presence") {
+    return String(values[spec.sourceField] ?? "").trim() === "" ? spec.empty : spec.nonEmpty;
+  }
   if (spec.kind === "formula") {
     // Resolve each referenced field to its numeric value; a blank or non-numeric
     // input makes the whole formula unresolved, so the record shows no value.

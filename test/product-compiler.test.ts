@@ -54,6 +54,50 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe("Product IR compiler", () => {
+  it("promotes explicit empty/non-empty field coupling out of the hybrid route", () => {
+    const coupling = "When a book is marked Returned (borrower field cleared), also set its status to On shelf; when a borrower name is entered for a book on the shelf, set its status to Lent out. These two fields should stay coupled.";
+    const ir = normalizeProductIR(validateProductIR(fixture({
+      product: { name: "Home Library", description: "Track books and borrowers.", targetUser: "A reader", genome: "catalog" },
+      entities: [{
+        name: "book", plural: "books", primaryField: "title",
+        fields: [
+          { id: "title", label: "Title", type: "text", required: true },
+          { id: "borrower", label: "Borrowed by", type: "text", required: false },
+          { id: "status", label: "Status", type: "status", required: false, options: ["On shelf", "Lent out"] },
+        ],
+      }],
+      quickActions: [{ id: "returned", label: "Returned", field: "borrower", set: "clear" }],
+      customRequirements: [coupling],
+    })));
+
+    expect(ir.entities[0].fields.find((field) => field.id === "status")?.derive).toEqual({
+      kind: "presence", sourceField: "borrower", empty: "On shelf", nonEmpty: "Lent out",
+    });
+    expect(ir.customRequirements).toEqual([]);
+    expect(classifyCapabilities(ir).route).toBe("compile");
+  });
+
+  it("does not discard novel work while promoting a proven presence coupling", () => {
+    const ir = normalizeProductIR(validateProductIR(fixture({
+      entities: [{
+        name: "decision", plural: "decisions", primaryField: "title",
+        fields: [
+          { id: "title", label: "Title", type: "text", required: true },
+          { id: "owner", label: "Owner", type: "text", required: false },
+          { id: "status", label: "Status", type: "status", required: false, options: ["Unassigned", "Assigned"] },
+        ],
+      }],
+      quickActions: [{ id: "unassign", label: "Unassign", field: "owner", set: "clear" }],
+      customRequirements: [
+        "When owner is cleared set status to Unassigned; when owner is entered set status to Assigned.",
+        "Render an interactive dependency graph.",
+      ],
+    })));
+
+    expect(ir.customRequirements).toEqual(["Render an interactive dependency graph."]);
+    expect(classifyCapabilities(ir).route).toBe("hybrid");
+  });
+
   it("repairs one impossible closing brace inside a stringified container", () => {
     const entities = JSON.stringify(fixture().entities);
     const fieldsEnd = entities.lastIndexOf("]}");
