@@ -55,7 +55,7 @@ const predicateSchema = {
   value: Type.Optional(Type.String()),
 };
 const strictProductIRSchema = Type.Object({
-  version: Type.String({ enum: ["1"] }),
+  version: Type.Optional(Type.String({ enum: ["1"], description: "Optional; defaults to 1" })),
   product: Type.Object({
     name: Type.String(),
     description: Type.Optional(Type.String()),

@@ -35,6 +35,25 @@ describe("tool-argument robustness", () => {
     expect(Value.Check(productIRSchema, { ...baseArgs })).toBe(false);
   });
 
+  it("defaults a missing version and drops an empty visibility comparison without a retry", () => {
+    const args = {
+      product: { name: "Home Library", genome: "tracker" },
+      entities: [{
+        name: "book", plural: "books",
+        fields: [
+          { id: "title", label: "Title", type: "text", required: true },
+          { id: "borrower", label: "Borrower", type: "text" },
+          { id: "lent_at", label: "Lent on", type: "date", visibleWhen: { field: "borrower", equals: "" } },
+        ],
+      }],
+    };
+
+    expect(Value.Check(productIRSchema, args)).toBe(true);
+    const ir = normalizeProductIR(validateProductIR(args));
+    expect(ir.version).toBe("1");
+    expect(ir.entities[0].fields.find((field) => field.id === "lent_at")?.visibleWhen).toBeUndefined();
+  });
+
   it("coerces a stringified entities array back into JSON", () => {
     const coerced = coerceStringifiedIR({ ...baseArgs, entities: JSON.stringify(entitiesArray) }) as Record<string, unknown>;
     expect(Array.isArray(coerced.entities)).toBe(true);

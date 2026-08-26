@@ -22,7 +22,7 @@ const strings = (value: unknown): value is string[] => Array.isArray(value) && v
 export function validateProductIR(value: unknown): ProductIR {
   const issues: string[] = [];
   if (!isRecord(value)) throw new ProductIRValidationError(["root must be an object"]);
-  if (value.version !== "1") issues.push("version must be 1");
+  if (value.version !== undefined && value.version !== "1") issues.push("version must be 1");
   const product = value.product;
   if (!isRecord(product)) issues.push("product must be an object");
   else {
@@ -63,7 +63,10 @@ export function validateProductIR(value: unknown): ProductIR {
         if (!isRecord(field.visibleWhen)) issues.push(`field ${fieldIndex}.visibleWhen must be an object`);
         else {
           if (typeof field.visibleWhen.field !== "string" || field.visibleWhen.field.trim() === "") issues.push(`field ${fieldIndex}.visibleWhen.field is required`);
-          if (typeof field.visibleWhen.equals !== "string" || field.visibleWhen.equals.trim() === "") issues.push(`field ${fieldIndex}.visibleWhen.equals is required`);
+          // An empty comparison is recoverable. Normalization drops that
+          // condition (the field stays visible) instead of rejecting the whole
+          // product and spending another model call on a schema retry.
+          if (typeof field.visibleWhen.equals !== "string") issues.push(`field ${fieldIndex}.visibleWhen.equals must be a string`);
         }
       }
       // A malformed derive spec is not fatal: normalizeProductIR drops it and the
