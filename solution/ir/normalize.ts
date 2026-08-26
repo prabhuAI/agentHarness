@@ -375,6 +375,50 @@ function promotePresenceCouplings(
   return { entities: promotedEntities, customRequirements: requirements.filter((_, index) => !consumed.has(index)) };
 }
 
+// A standings table already gives the runtime two behaviors weaker models tend to
+// restate as prose: each participant is chosen from the row entity's existing
+// records (RelatedWorkspace renders a reference dropdown of them), and the two
+// participants cannot be the same record ("Choose two different participants").
+// Listing either as a customRequirement needlessly forces the bounded hybrid
+// route for a product the deterministic runtime already covers end to end. Drop
+// only requirements that clearly restate one of these two standings-provided
+// behaviors, anchored to the table's own entities/fields; anything genuinely
+// custom is left untouched and still routes to hybrid.
+function pruneStandingsImpliedRequirements(
+  requirements: string[],
+  standings: ProductStandings[],
+  entities: [ProductEntity, ...ProductEntity[]],
+): string[] {
+  if (requirements.length === 0 || standings.length === 0) return requirements;
+  const entityByName = new Map(entities.map((entity) => [entity.name, entity]));
+  // Nouns/terms that anchor a requirement to a standings table: the row and
+  // source entity names/plurals, plus every participant field's label and id
+  // words. A requirement must mention one of these before it can be pruned.
+  const subjects = new Set<string>();
+  for (const table of standings) {
+    for (const name of [table.rowEntity, table.sourceEntity]) {
+      const entity = entityByName.get(name);
+      if (entity) { subjects.add(entity.name.toLowerCase()); subjects.add(entity.plural.toLowerCase()); }
+    }
+    const source = entityByName.get(table.sourceEntity);
+    for (const participant of table.participants) {
+      const field = source?.fields.find((candidate) => candidate.id === participant.entityField);
+      subjects.add(participant.entityField.replace(/_/gu, " "));
+      if (field) subjects.add(field.label.toLowerCase());
+    }
+  }
+  const mentionsSubject = (text: string): boolean => [...subjects].some((term) => term && text.includes(term));
+  // The "a participant cannot face itself" distinctness rule.
+  const distinctCue = /\b(?:itself|themselves|identical|same|twice|duplicate|different|distinct|differ)\b/u;
+  // The "choose a participant from existing row-entity records" dropdown.
+  const sourcedCue = /\b(?:populate|populated|existing|dropdown|drop-down|seeded|choose from|select from|pick from|list of|options? (?:are|come|from))\b/u;
+  return requirements.filter((requirement) => {
+    const text = requirement.toLowerCase();
+    if (!mentionsSubject(text)) return true;
+    return !(distinctCue.test(text) || sourcedCue.test(text));
+  });
+}
+
 export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
   let entities = input.entities.map((entity, index) => {
     const fields = normalizeFields(entity);
@@ -579,6 +623,6 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     persistence: { strategy: "localStorage" },
     assumptions: uniqueStrings(input.assumptions ?? []),
     excluded: uniqueStrings(input.excluded ?? []),
-    customRequirements: promoted.customRequirements,
+    customRequirements: pruneStandingsImpliedRequirements(promoted.customRequirements, standings, entities),
   };
 }

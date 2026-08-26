@@ -64,4 +64,32 @@ describe("multi-entity standings regression", () => {
       await execute("npm", ["run", "build"], { cwd: appDirectory, timeout: 60_000 });
     } finally { await rm(appDirectory, { recursive: true }); }
   }, 120_000);
+
+  it("prunes standings-implied customRequirements so the league still routes to compile", () => {
+    // The exact prose a weaker model restated on top of an otherwise-complete
+    // standings IR, which used to force the bounded hybrid route (and, once the
+    // model burned its call budget exploring, a failed run). Both behaviors are
+    // already delivered deterministically by RelatedWorkspace, so normalization
+    // must drop them and keep the compile route.
+    const raw = structuredClone(LEAGUE_IR);
+    raw.customRequirements = [
+      "The home_team and away_team category options on a match should be populated from existing team names.",
+      "When entering a match, a team must not play itself.",
+    ];
+    const ir = normalizeProductIR(validateProductIR(raw as unknown));
+    expect(ir.customRequirements).toEqual([]);
+    const route = classifyCapabilities(ir);
+    expect(route.route).toBe("compile");
+    expect(route.unsupported).toEqual([]);
+  });
+
+  it("keeps a genuinely custom requirement on the hybrid route", () => {
+    // A requirement the runtime cannot satisfy from standings alone must survive
+    // the prune, so the router still escalates to the bounded hybrid route.
+    const raw = structuredClone(LEAGUE_IR);
+    raw.customRequirements = ["Email every team captain a fixture reminder the night before a match."];
+    const ir = normalizeProductIR(validateProductIR(raw as unknown));
+    expect(ir.customRequirements).toEqual(["Email every team captain a fixture reminder the night before a match."]);
+    expect(classifyCapabilities(ir).route).toBe("hybrid");
+  });
 });
