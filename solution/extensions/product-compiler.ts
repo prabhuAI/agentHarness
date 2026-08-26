@@ -77,8 +77,8 @@ const strictProductIRSchema = Type.Object({
   }), { minItems: 1, maxItems: 3 }),
   capabilities: Type.Optional(Type.Object({
     create: Type.Optional(Type.Boolean()), edit: Type.Optional(Type.Boolean()), delete: Type.Optional(Type.Boolean()), search: Type.Optional(Type.Boolean()),
-    filter: Type.Optional(Type.Boolean()), sort: Type.Optional(Type.Boolean()), group: Type.Optional(Type.Boolean()), transition: Type.Optional(Type.Boolean()), calculate: Type.Optional(Type.Boolean()),
-  }, { description: "Omitted capabilities default to a create/edit/delete/search CRUD set" })),
+    filter: Type.Optional(Type.Boolean()), sort: Type.Optional(Type.Boolean()), group: Type.Optional(Type.Boolean({ description: "Enable only when the idea explicitly asks to group records, use columns/lanes, or browse sections; category filters alone do not imply grouping" })), transition: Type.Optional(Type.Boolean()), calculate: Type.Optional(Type.Boolean()),
+  }, { description: "Omitted capabilities default to a create/edit/delete/search/sort CRUD set; facets infer filters and summaries, never grouping" })),
   filters: Type.Optional(Type.Array(Type.Object(predicateSchema), { maxItems: 6, description: "Only filters that are not a simple equals check on one category/status field option — those are derived automatically" })),
   calculations: Type.Optional(Type.Array(Type.Object({
     id: Type.String(), label: Type.String(),
@@ -392,6 +392,7 @@ export function registerProductCompiler(
       "Use product.design only when the idea clearly signals a tone, density, contrast, or motion preference; never generate colors, fonts, CSS, or layout instructions.",
       "Do not list one filter or one count per option: the compiler auto-derives an equals filter and a per-option metric for each option of the primary facet (the status field if present, otherwise one category). When the entity has a currency field, that per-option metric is the option's summed amount (spend breakdown); otherwise it is a count. Only add filters/calculations for logic beyond that: an overall total, cross-field conditions, or a totals count.",
       "For a date window like \"this month\", add a filter on the date field with operator today/thisWeek/thisMonth (no value) — never a value like \"thisMonth\". The runtime evaluates it against the current date.",
+      "Enable grouping only when the idea asks for grouped sections, columns, lanes, or a breakdown in the record list. A category/status field and its filter chips do not by themselves justify grouping.",
       "Omit product.tagline unless a short tagline adds real clarity beyond the product name.",
       "Keep assumptions and excluded entries short phrases, not full sentences.",
       "Add a field placeholder only when the field's purpose is not already obvious from its label and type.",

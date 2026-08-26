@@ -51,6 +51,8 @@ export function resolvePresentation(ir: NormalizedProductIR): PresentationPlan {
   const status = entity.fields.find((field) => field.type === "status" && (field.options?.length ?? 0) >= 2 && !field.derive);
   const groupField = entity.fields.find((field) => !field.derive && (field.type === "category" || field.type === "status"));
   const date = entity.fields.find((field) => field.type === "date" || field.type === "datetime");
+  const hasNumericMeasure = entity.fields.some((field) => field.type === "number" || field.type === "currency");
+  const hasAggregateMeasure = ir.calculations.some((calculation) => calculation.operation === "sum" || calculation.operation === "sumWhere");
   const eventLanguage = /\b(agenda|appointment|calendar|class|event|meeting|reservation|schedule|session|shift|timetable|upcoming activit(?:y|ies))\b/u.test(text);
 
   let primary: PrimaryView;
@@ -58,7 +60,7 @@ export function resolvePresentation(ir: NormalizedProductIR): PresentationPlan {
   if (ir.standings.length > 0) {
     primary = "standings";
     reason = "scored participant aggregation";
-  } else if (status && ir.product.genome === "workflow") {
+  } else if (status && ir.product.genome === "workflow" && ir.capabilities.group) {
     primary = "board";
     reason = `workflow grouped by ${status.id}`;
   } else if (ir.product.genome === "planner" || (date && eventLanguage)) {
@@ -67,7 +69,7 @@ export function resolvePresentation(ir: NormalizedProductIR): PresentationPlan {
   } else if (ir.product.genome === "catalog") {
     primary = "gallery";
     reason = "catalog browsing";
-  } else if (ir.product.genome === "dashboard" || ir.charts.length > 0 || ir.calculations.length >= 4) {
+  } else if (ir.product.genome === "dashboard" || ir.charts.length > 0 || hasAggregateMeasure || (hasNumericMeasure && ir.calculations.length >= 4)) {
     primary = "dashboard";
     reason = "metrics-led monitoring";
   } else if (groupField && ir.capabilities.group) {

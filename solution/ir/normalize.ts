@@ -403,11 +403,10 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
   entities = promoted.entities;
   const primaryFieldMap = new Map(entities[0].fields.map((field) => [field.id, field]));
   const primaryFields = new Set(primaryFieldMap.keys());
-  // A category/status field with a small fixed option set is, by construction, a
-  // facet you can filter, group, and summarize by — that is the whole point of
-  // enumerating its options. So a facet deterministically implies filter, group,
-  // and calculate, even when the model under-scoped the idea and left them off
-  // (which stranded the option list with no way to browse or break down by it).
+  // A category/status field with a small fixed option set is inherently useful
+  // for filtering and summaries. Grouping is different: it changes the whole
+  // information architecture and can turn a requested simple list into several
+  // mostly-empty panels, so it remains opt-in.
   const hasFacet = Boolean(primaryFacetField(entities[0].fields));
   const hasExplicitFilters = (input.filters?.length ?? 0) > 0;
   const hasExplicitCalculations = (input.calculations?.length ?? 0) > 0;
@@ -420,7 +419,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     search: input.capabilities?.search ?? true,
     filter: (input.capabilities?.filter ?? hasExplicitFilters) || hasFacet,
     sort: input.capabilities?.sort ?? true,
-    group: (input.capabilities?.group ?? false) || hasFacet,
+    group: input.capabilities?.group ?? false,
     transition: input.capabilities?.transition ?? false,
     calculate: (input.capabilities?.calculate ?? hasExplicitCalculations) || hasFacet,
   };

@@ -423,6 +423,10 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .tracker-view > li::before { content: counter(tracker); position: absolute; z-index: 1; left: 0; top: 21px; display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-size: 10px; font-weight: 850; }
 .tracker-view > li::after { content: ""; position: absolute; left: 11px; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--accent) 22%, var(--border)); }
 .tracker-view .card { padding: 19px 10px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }
+/* The tracker component already owns its rail and marker. Suppress the older
+   progress-workbench card pseudos when both compatibility layers are present. */
+.app[data-layout="progress-workbench"] .tracker-view .card { padding: 19px 10px; }
+.app[data-layout="progress-workbench"] .tracker-view .card::before, .app[data-layout="progress-workbench"] .tracker-view .card::after { display: none; }
 
 .board-view { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; padding: var(--panel-space); scroll-snap-type: x proximity; }
 .board-column { flex: 1 0 274px; max-width: 360px; overflow: hidden; scroll-snap-align: start; border: 1px solid var(--border); border-top: 4px solid var(--accent); border-radius: var(--card-radius); background: var(--surface-alt); }
@@ -479,7 +483,13 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .collection-group-heading h3 { margin: 0; font: 800 14px var(--font-display); }
 .collection-group-heading span { color: var(--muted); font-size: 12px; font-weight: 800; }
 .collection-group > .tracker-view, .collection-group > .agenda-view, .collection-group > .gallery-view, .collection-group > .standings-roster { padding: 16px; }
-.collection-group > .dashboard-view { margin: 16px; }
+.collection-group > .dashboard-view { margin: 0; border: 0; border-radius: 0; }
+.collection-group > .dashboard-view .dashboard-view-heading { display: none; }
+.collection-group > .dashboard-view .dashboard-view-records { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 360px)); gap: 12px; padding: 14px; }
+.collection-group > .dashboard-view .card { display: block; padding: 16px; border: 1px solid var(--border); border-radius: calc(var(--card-radius) * .8); box-shadow: 0 4px 14px color-mix(in srgb, var(--ink) 5%, transparent); }
+.collection-group > .dashboard-view .card-top { display: flex; }
+.collection-group > .dashboard-view .card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin-top: 14px; }
+.collection-group > .dashboard-view .card dl div { grid-template-columns: 1fr; gap: 3px; }
 
 /* Named, deterministic variants alter composition inside each primary view. */
 .app[data-presentation-variant="checklist"] .tracker-view > li::before { content: "✓"; }
@@ -488,7 +498,9 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .app[data-presentation-variant="milestones"] .tracker-view > li::before, .app[data-presentation-variant="milestones"] .tracker-view > li::after { display: none; }
 .app[data-presentation-variant="pipeline"] .board-column { border-top: 0; border-left: 4px solid var(--accent); }
 .app[data-presentation-variant="swimlanes"] .board-view { display: grid; }
-.app[data-presentation-variant="swimlanes"] .board-column { max-width: none; }
+.app[data-presentation-variant="swimlanes"] .board-column { display: grid; grid-template-columns: minmax(130px, 180px) minmax(0, 1fr); max-width: none; }
+.app[data-presentation-variant="swimlanes"] .board-column-heading { align-self: stretch; border-right: 1px solid var(--border); }
+.app[data-presentation-variant="swimlanes"] .board-column-records { grid-template-columns: repeat(auto-fill, minmax(250px, 340px)); align-items: start; padding: 10px; }
 .app[data-presentation-variant="calendar"] .agenda-view { grid-template-columns: repeat(7, minmax(150px, 1fr)); }
 .app[data-presentation-variant="timeline"] .agenda-view { grid-template-columns: 1fr; }
 .app[data-presentation-variant="storefront"] .gallery-cover { min-height: 170px; }
@@ -552,6 +564,9 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
   .hero, .app[data-layout="command-center"] .hero { display: flex; align-items: center; }
   .app[data-layout="stage-board"] .record-group { flex-basis: 82vw; }
   .board-column { flex-basis: 82vw; }
+  .app[data-presentation-variant="swimlanes"] .board-column { display: block; }
+  .app[data-presentation-variant="swimlanes"] .board-column-heading { border-right: 0; border-bottom: 1px solid var(--border); }
+  .app[data-presentation-variant="swimlanes"] .board-column-records, .collection-group > .dashboard-view .dashboard-view-records { grid-template-columns: 1fr; }
   .agenda-view, .gallery-view, .standings-roster { grid-template-columns: 1fr; padding: 16px; }
   .app[data-presentation-variant="calendar"] .agenda-view { grid-template-columns: repeat(7, minmax(140px, 1fr)); overflow-x: auto; }
   .hero-copy { padding-right: 0; }
@@ -572,6 +587,9 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
   .filter-chips::-webkit-scrollbar { display: none; }
   .grid { grid-template-columns: 1fr; padding: 16px; }
   .group-list { padding: 16px; }
+  .tracker-view .card-top { flex-wrap: wrap; }
+  .tracker-view .card-top h3 { flex: 1 0 100%; font-size: 17px; }
+  .tracker-view .actions { width: 100%; justify-content: flex-end; margin-top: 8px; }
   .form-grid { grid-template-columns: 1fr; }
   .field-wide { grid-column: auto; }
   .dialog-actions { position: sticky; bottom: -27px; margin: 0 -27px -27px; padding: 14px 27px 20px; border-top: 1px solid var(--border); background: var(--surface); }

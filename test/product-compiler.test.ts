@@ -123,10 +123,12 @@ describe("Product IR compiler", () => {
     expect(config).toMatchObject({
       name: "Decision Log",
       genome: "workflow",
-      presentation: { primary: "board", groupField: "status" },
+      presentation: { primary: "tracker" },
       primaryField: "title",
-      design: { layout: "stage-board", tone: "professional", density: "compact" },
+      design: { layout: "progress-workbench", tone: "professional", density: "compact" },
     });
+    expect(config.presentation.groupField).toBeUndefined();
+    expect(config.capabilities.group).toBe(false);
     expect(config.filters).toHaveLength(2);
     expect(config.summaries).toHaveLength(3);
     expect(deriveJourneys(ir).map((journey) => journey.id)).toEqual(expect.arrayContaining(["create", "persistence", "filter", "calculate", "delete"]));
@@ -429,6 +431,28 @@ describe("Product IR compiler", () => {
     expect(classifyCapabilities(ir).route).toBe("compile");
     expect(compileConfig(ir).capabilities.group).toBe(true);
     expect(deriveJourneys(ir)).toContainEqual(expect.objectContaining({ id: "group" }));
+  });
+
+  it("does not turn a filterable category into grouped boxes unless grouping was requested", () => {
+    const raw = fixture({
+      product: { name: "Home Library", description: "Keep every book in one list and filter what is lent out.", targetUser: "A reader", genome: "tracker" },
+      entities: [{
+        name: "book", plural: "books", primaryField: "title",
+        fields: [
+          { id: "title", label: "Title", type: "text", required: true },
+          { id: "category", label: "Category", type: "category", required: false, options: ["Novel", "Reference", "Cookbook", "History", "Science"] },
+        ],
+      }],
+      capabilities: { ...fixture().capabilities, filter: false, group: false, calculate: false },
+      filters: [], calculations: [],
+    });
+    const ir = normalizeProductIR(validateProductIR(raw));
+    const config = compileConfig(ir);
+
+    expect(ir.capabilities).toMatchObject({ filter: true, calculate: true, group: false });
+    expect(config.presentation).toMatchObject({ primary: "tracker", reason: "focused record tracking" });
+    expect(config.presentation.groupField).toBeUndefined();
+    expect(config.filters).toHaveLength(5);
   });
 
   it("normalizes and compiles conditional field visibility", () => {

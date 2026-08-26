@@ -8,4 +8,6 @@ When a two-state status follows whether another field is filled, use a derived s
 
 For “who is next?”, FIFO, oldest-first, triage, or dispatch, use `priority` with a sort field and optional eligibility filter; never repeat that behavior in `customRequirements`.
 
+Grouping changes the page structure. Enable `capabilities.group` only when the idea explicitly asks for grouped sections, columns, lanes, or a grouped record breakdown. Category/status filters do not imply grouping.
+
 For compile-route success, `compile_product` terminates the run only after deterministic journeys, production build, live HTTP startup, and required-artifact validation. If it returns hybrid/custom requirements or a verification failure, inspect only relevant files, make the smallest focused patch, and call `finalize_product`. Maximum targeted repair attempts: two. Never rewrite the generic runtime, add dependencies, write `result.json`, or produce essays.
