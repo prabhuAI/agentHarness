@@ -278,7 +278,7 @@
       "presentation": {
         "navigation": "single",
         "primary": "tracker",
-        "reason": "focused record tracking",
+        "reason": "progress / checklist tracking",
         "variant": "checklist"
       },
       "primaryField": "name",

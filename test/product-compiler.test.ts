@@ -294,10 +294,14 @@ describe("Product IR compiler", () => {
     })));
 
     const products = [
-      make({ name: "Simple Tracker", description: "Track a short list.", tagline: "", targetUser: "One person", genome: "tracker" }),
+      // Tracker: a checklist needs a genuine completion signal (a `done` flag),
+      // otherwise a plain list of items is honestly a table.
+      make({ name: "Simple Tracker", description: "Track a short list.", tagline: "", targetUser: "One person", genome: "tracker" }, [...simpleFields, { id: "done", label: "Done", type: "boolean" as const, required: false }]),
       make({ name: "Dense Registry", description: "Maintain detailed records.", tagline: "", targetUser: "Operations", genome: "tracker" }, Array.from({ length: 7 }, (_, index) => ({ id: index === 0 ? "title" : `field_${index}`, label: `Field ${index}`, type: "text" as const, required: index === 0 }))),
       make({ name: "Community Center Activities", description: "Plan upcoming activities, classes, and events.", tagline: "", targetUser: "Coordinator", genome: "tracker" }, [...simpleFields, { id: "date", label: "Date", type: "date" as const, required: true }]),
-      make({ name: "Recipe Library", description: "Browse saved recipes.", tagline: "", targetUser: "Home cooks", genome: "catalog" }),
+      // Gallery: only earns its place when there is real media to show — here a
+      // cover-image url field — since the field vocabulary has no image type.
+      make({ name: "Recipe Library", description: "Browse saved recipes.", tagline: "", targetUser: "Home cooks", genome: "catalog" }, [...simpleFields, { id: "photo", label: "Photo", type: "url" as const, required: false }]),
       make({ name: "Operations Pulse", description: "Monitor business performance.", tagline: "", targetUser: "Managers", genome: "dashboard" }, simpleFields, [{ id: "total", label: "Total", operation: "count" }]),
     ];
     const presentations = products.map((ir) => compileConfig(ir));
@@ -312,7 +316,7 @@ describe("Product IR compiler", () => {
     const variants = Array.from({ length: 40 }, (_, index) => {
       const raw = fixture({
         product: { name: `Focus Log ${index}`, description: "Track a short list.", tagline: "", targetUser: "One person", genome: "tracker" },
-        entities: [{ name: "item", plural: "items", primaryField: "title", fields: [{ id: "title", label: "Title", type: "text", required: true }] }],
+        entities: [{ name: "item", plural: "items", primaryField: "title", fields: [{ id: "title", label: "Title", type: "text", required: true }, { id: "done", label: "Done", type: "boolean", required: false }] }],
         capabilities: { create: true, edit: true, delete: true, search: true, filter: false, sort: true, group: false, transition: false, calculate: false },
         filters: [], calculations: [], charts: [],
       });
@@ -321,7 +325,7 @@ describe("Product IR compiler", () => {
     expect(new Set(variants)).toEqual(new Set(["timeline", "checklist", "milestones"]));
     const repeated = fixture({
       product: { name: "Focus Log 0", description: "Track a short list.", tagline: "", targetUser: "One person", genome: "tracker" },
-      entities: [{ name: "item", plural: "items", primaryField: "title", fields: [{ id: "title", label: "Title", type: "text", required: true }] }],
+      entities: [{ name: "item", plural: "items", primaryField: "title", fields: [{ id: "title", label: "Title", type: "text", required: true }, { id: "done", label: "Done", type: "boolean", required: false }] }],
       capabilities: { create: true, edit: true, delete: true, search: true, filter: false, sort: true, group: false, transition: false, calculate: false },
       filters: [], calculations: [], charts: [],
     });

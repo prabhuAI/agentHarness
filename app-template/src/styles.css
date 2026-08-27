@@ -278,7 +278,13 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
   background: var(--surface);
   box-shadow: 0 7px 22px color-mix(in srgb, var(--ink) 5%, transparent);
 }
-.card-top { display: flex; justify-content: space-between; gap: 14px; }
+/* Title and actions share a row, but the title keeps a real minimum width and
+   the row is allowed to wrap: on a narrow card the action buttons drop to their
+   own line and the title takes the full width instead of being squeezed to an
+   ellipsis. Views that render cards as table rows override .card-top to
+   `display: contents`, so this flex behaviour does not affect them. */
+.card-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 14px; }
+.card-top > h3 { flex: 1 1 auto; min-width: 8rem; }
 .card h3 { overflow: hidden; margin: 0; font: 750 18px var(--font-display); letter-spacing: -.025em; text-overflow: ellipsis; }
 .card.is-priority { border-color: color-mix(in srgb, var(--accent) 64%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent), 0 9px 26px color-mix(in srgb, var(--accent) 10%, transparent); }
 .priority-badge { display: inline-flex; align-items: center; margin-right: 8px; border-radius: 999px; background: var(--accent); color: var(--accent-text); padding: 3px 8px; font: 800 10px var(--font-body); letter-spacing: .04em; text-transform: uppercase; vertical-align: 2px; }
@@ -320,13 +326,13 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 
 /* ── progress-workbench (tracker): a single-column progress timeline ── */
 .app[data-layout="progress-workbench"] .grid { grid-template-columns: 1fr; gap: 0; padding: 8px var(--panel-space) var(--panel-space); }
-.app[data-layout="progress-workbench"] .card { margin: 0; padding: 20px 6px 20px 44px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }
+.app[data-layout="progress-workbench"] .grid .card { margin: 0; padding: 20px 6px 20px 44px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }
 .app[data-layout="progress-workbench"] .grid > .card:last-child { border-bottom: 0; }
-.app[data-layout="progress-workbench"] .card::before { content: ""; position: absolute; left: 15px; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--accent) 24%, var(--border)); }
-.app[data-layout="progress-workbench"] .card::after { content: ""; position: absolute; left: 9px; top: 24px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); border: 3px solid var(--accent); box-shadow: 0 0 0 4px var(--canvas); }
-.app[data-layout="progress-workbench"] .card dl { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 12px; }
-.app[data-layout="progress-workbench"] .card dl div { display: flex; grid-template-columns: none; gap: 7px; align-items: baseline; min-width: 0; }
-.app[data-layout="progress-workbench"] dt { text-transform: none; letter-spacing: 0; }
+.app[data-layout="progress-workbench"] .grid .card::before { content: ""; position: absolute; left: 15px; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--accent) 24%, var(--border)); }
+.app[data-layout="progress-workbench"] .grid .card::after { content: ""; position: absolute; left: 9px; top: 24px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); border: 3px solid var(--accent); box-shadow: 0 0 0 4px var(--canvas); }
+.app[data-layout="progress-workbench"] .grid .card dl { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 12px; }
+.app[data-layout="progress-workbench"] .grid .card dl div { display: flex; grid-template-columns: none; gap: 7px; align-items: baseline; min-width: 0; }
+.app[data-layout="progress-workbench"] .grid .card dt { text-transform: none; letter-spacing: 0; }
 
 /* ── stage-board (workflow): a horizontal Kanban board of status columns ── */
 .app[data-layout="stage-board"] .group-list { display: flex; gap: 14px; padding: var(--panel-space); overflow-x: auto; overflow-y: hidden; align-items: start; scroll-snap-type: x proximity; }
@@ -334,18 +340,21 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .app[data-layout="stage-board"] .group-heading { position: sticky; top: 0; z-index: 1; padding: 13px 14px 8px; }
 .app[data-layout="stage-board"] .record-group .grid { grid-template-columns: 1fr; gap: 10px; padding: 0 12px 14px; }
 .app[data-layout="stage-board"] .grid { gap: 12px; }
-.app[data-layout="stage-board"] .card { padding: 14px; box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 5%, transparent); }
-.app[data-layout="stage-board"] .card h3 { font-size: 15px; }
-.app[data-layout="stage-board"] .card dl { margin-top: 12px; gap: 8px; }
-.app[data-layout="stage-board"] .card dl div { grid-template-columns: 1fr; gap: 2px; }
+.app[data-layout="stage-board"] .grid .card { padding: 14px; box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 5%, transparent); }
+.app[data-layout="stage-board"] .grid .card h3 { font-size: 15px; }
+.app[data-layout="stage-board"] .grid .card dl { margin-top: 12px; gap: 8px; }
+.app[data-layout="stage-board"] .grid .card dl div { grid-template-columns: 1fr; gap: 2px; }
 
-/* ── editorial-gallery (catalog): a magazine gallery with header bands ── */
+/* ── editorial-gallery (catalog): a magazine gallery with header bands ──
+   Scoped to the `.grid .card` fallback path (RelatedWorkspace). The primary
+   collection renders `.gallery-item .card`, which supplies its own cover band;
+   leaving these unscoped stacked a second header band on every gallery card. */
 .app[data-layout="editorial-gallery"] .grid { grid-template-columns: repeat(auto-fill, minmax(clamp(220px, 30vw, 264px), 1fr)); gap: 18px; }
-.app[data-layout="editorial-gallery"] .card { overflow: hidden; padding: 0; border-radius: calc(var(--card-radius) + 6px); }
-.app[data-layout="editorial-gallery"] .card::before { content: ""; display: block; height: 88px; background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 38%, var(--surface-alt))); }
-.app[data-layout="editorial-gallery"] .card-top { padding: 16px 16px 0; }
-.app[data-layout="editorial-gallery"] .card h3 { font-size: 19px; white-space: normal; }
-.app[data-layout="editorial-gallery"] .card dl { padding: 0 16px 18px; margin-top: 14px; }
+.app[data-layout="editorial-gallery"] .grid .card { overflow: hidden; padding: 0; border-radius: calc(var(--card-radius) + 6px); }
+.app[data-layout="editorial-gallery"] .grid .card::before { content: ""; display: block; height: 88px; background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 38%, var(--surface-alt))); }
+.app[data-layout="editorial-gallery"] .grid .card-top { padding: 16px 16px 0; }
+.app[data-layout="editorial-gallery"] .grid .card h3 { font-size: 19px; white-space: normal; }
+.app[data-layout="editorial-gallery"] .grid .card dl { padding: 0 16px 18px; margin-top: 14px; }
 .app[data-layout="editorial-gallery"] .hero h1 { letter-spacing: -.05em; }
 
 /* ── agenda-canvas (planner): a week strip of agenda columns ── */
@@ -355,11 +364,11 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .app[data-layout="agenda-canvas"] .group-heading h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
 .app[data-layout="agenda-canvas"] .record-group .grid { grid-template-columns: 1fr; gap: 8px; padding: 10px; }
 .app[data-layout="agenda-canvas"] .grid { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
-.app[data-layout="agenda-canvas"] .card { padding: 11px 12px; border: 0; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--surface); box-shadow: 0 1px 4px color-mix(in srgb, var(--ink) 5%, transparent); }
-.app[data-layout="agenda-canvas"] .card h3 { font-size: 14px; }
-.app[data-layout="agenda-canvas"] .card dl { margin-top: 8px; gap: 6px; }
-.app[data-layout="agenda-canvas"] .card dl div { grid-template-columns: 1fr; gap: 2px; }
-.app[data-layout="agenda-canvas"] .actions button { padding: 4px 7px; font-size: 11px; }
+.app[data-layout="agenda-canvas"] .grid .card { padding: 11px 12px; border: 0; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--surface); box-shadow: 0 1px 4px color-mix(in srgb, var(--ink) 5%, transparent); }
+.app[data-layout="agenda-canvas"] .grid .card h3 { font-size: 14px; }
+.app[data-layout="agenda-canvas"] .grid .card dl { margin-top: 8px; gap: 6px; }
+.app[data-layout="agenda-canvas"] .grid .card dl div { grid-template-columns: 1fr; gap: 2px; }
+.app[data-layout="agenda-canvas"] .grid .card .actions button { padding: 4px 7px; font-size: 11px; }
 
 /* ── command-center (dashboard): KPI tiles up top, dense data list below ── */
 .app[data-layout="command-center"] main { width: min(1180px, calc(100% - 40px)); }
@@ -367,14 +376,14 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .app[data-layout="command-center"] .hero-art { display: none; }
 .app[data-layout="command-center"] .hero h1 { font-size: clamp(28px, 3.4vw, 42px); }
 .app[data-layout="command-center"] .grid { grid-template-columns: 1fr; gap: 0; padding: 0; }
-.app[data-layout="command-center"] .card { display: grid; grid-template-columns: minmax(160px, 1.3fr) 2fr auto; align-items: center; gap: 20px; padding: 15px var(--panel-space); border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; }
-.app[data-layout="command-center"] .card-top { display: contents; }
-.app[data-layout="command-center"] .card-top h3 { grid-column: 1; }
-.app[data-layout="command-center"] .card .actions { grid-column: 3; justify-self: end; }
+.app[data-layout="command-center"] .grid .card { display: grid; grid-template-columns: minmax(160px, 1.3fr) 2fr auto; align-items: center; gap: 20px; padding: 15px var(--panel-space); border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+.app[data-layout="command-center"] .grid .card-top { display: contents; }
+.app[data-layout="command-center"] .grid .card-top h3 { grid-column: 1; }
+.app[data-layout="command-center"] .grid .card .actions { grid-column: 3; justify-self: end; }
 .app[data-layout="command-center"] .grid > .card:last-child { border-bottom: 0; }
-.app[data-layout="command-center"] .card:hover { background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
-.app[data-layout="command-center"] .card dl { grid-column: 2; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin: 0; }
-.app[data-layout="command-center"] .card dl div { grid-template-columns: 1fr; gap: 4px; }
+.app[data-layout="command-center"] .grid .card:hover { background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+.app[data-layout="command-center"] .grid .card dl { grid-column: 2; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin: 0; }
+.app[data-layout="command-center"] .grid .card dl div { grid-template-columns: 1fr; gap: 4px; }
 
 /* ── Shared UX: sticky navigation, undo toast, clear-view control ── */
 .topbar { position: sticky; top: 0; z-index: 20; }
@@ -424,8 +433,11 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .tracker-view > li::after { content: ""; position: absolute; left: 11px; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--accent) 22%, var(--border)); }
 .tracker-view .card { padding: 19px 10px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }
 
-.board-view { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; padding: var(--panel-space); scroll-snap-type: x proximity; }
-.board-column { flex: 1 0 274px; max-width: 360px; overflow: hidden; scroll-snap-align: start; border: 1px solid var(--border); border-top: 4px solid var(--accent); border-radius: var(--card-radius); background: var(--surface-alt); }
+/* `safe center` keeps a few columns balanced in the middle of wide screens
+   instead of stranding them at the left with a large empty gutter, but falls
+   back to start-alignment (fully scrollable) once the columns overflow. */
+.board-view { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; justify-content: safe center; overflow-x: auto; padding: var(--panel-space); scroll-snap-type: x proximity; }
+.board-column { flex: 0 1 320px; max-width: 360px; overflow: hidden; scroll-snap-align: start; border: 1px solid var(--border); border-top: 4px solid var(--accent); border-radius: var(--card-radius); background: var(--surface-alt); }
 .board-column-heading { display: flex; align-items: center; justify-content: space-between; padding: 14px; }
 .board-column-heading h3 { margin: 0; font: 780 15px var(--font-display); }
 .board-column-heading span { display: grid; min-width: 26px; height: 26px; place-items: center; border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 800; }
@@ -441,11 +453,20 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .agenda-day-records { display: grid; gap: 8px; padding: 10px; }
 .agenda-day .card { padding: 12px 13px; border: 0; border-left: 4px solid var(--accent); border-radius: 6px; box-shadow: 0 2px 9px color-mix(in srgb, var(--ink) 5%, transparent); }
 .agenda-day .card dl { display: flex; flex-wrap: wrap; gap: 7px 18px; margin-top: 9px; }
+/* Each field is an inline "LABEL value" pair, not a 92px-label grid, so a narrow
+   agenda column wraps whole words instead of breaking a value one char per line. */
+.agenda-day .card dl div { display: flex; gap: 6px; grid-template-columns: none; align-items: baseline; min-width: 0; }
 
 .gallery-view { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; padding: var(--panel-space); }
 .gallery-item { overflow: hidden; border: 1px solid var(--border); border-radius: var(--card-radius); background: var(--surface); box-shadow: 0 10px 28px color-mix(in srgb, var(--ink) 7%, transparent); }
-.gallery-cover { display: flex; min-height: 112px; align-items: flex-end; justify-content: flex-end; padding: 14px; background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 28%, var(--surface-alt))); color: color-mix(in srgb, var(--accent-text) 80%, transparent); font: 800 24px var(--font-display); }
-.gallery-item .card { padding: 17px; border: 0; border-radius: 0; box-shadow: none; }
+/* Compact catalog cards: this template has no cover-image field, so the gallery
+   drops the decorative placeholder band and renders tight info panels — title
+   and actions on top, labelled fields below. `overflow: visible` on the title
+   keeps it from collapsing out beside the action buttons in a narrow card. */
+.gallery-cover { display: none; }
+.gallery-item .card { padding: 16px; border: 0; border-radius: 0; box-shadow: none; }
+.gallery-item .card-top { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.gallery-item .card h3 { overflow: visible; white-space: normal; }
 .gallery-item .card dl div { grid-template-columns: 1fr; gap: 2px; }
 
 .dashboard-view { margin: var(--panel-space); border: 1px solid var(--border); border-radius: var(--card-radius); background: var(--surface); }
@@ -459,16 +480,20 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .dashboard-view-records dl { grid-column: 2; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); margin: 0; }
 .dashboard-view-records dl div { grid-template-columns: 1fr; gap: 3px; }
 
+/* Plain data table (a real <table>): a header cell and a body cell per field,
+   so columns and headers stay in lockstep without any grid placement tricks. */
 .table-view { overflow-x: auto; margin-top: 10px; }
-.table-view-head, .table-view-row .card { display: grid; grid-template-columns: minmax(170px, 1.1fr) minmax(300px, 2fr) auto; align-items: center; gap: 18px; min-width: 700px; padding: 13px var(--panel-space); }
-.table-view-head { border-bottom: 1px solid var(--border); background: var(--surface-alt); color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
-.table-view-row .card { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; }
-.table-view-row:last-child .card { border-bottom: 0; }
-.table-view .card-top { display: contents; }
-.table-view .card-top h3 { grid-column: 1; }
-.table-view .actions { grid-column: 3; }
-.table-view dl { grid-column: 2; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); margin: 0; }
-.table-view dl div { grid-template-columns: 1fr; gap: 3px; }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table thead th { text-align: left; padding: 12px var(--panel-space); border-bottom: 1px solid var(--border); background: var(--surface-alt); color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.data-table tbody th, .data-table tbody td { padding: 13px var(--panel-space); border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.data-table tbody tr:last-child th, .data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table tbody th[scope="row"] { font: 750 15px var(--font-display); color: var(--ink); }
+.data-table tbody td { font-size: 14px; color: var(--ink); }
+.data-table tbody tr.is-priority th[scope="row"] { color: var(--accent); }
+.data-table tbody tr:hover th, .data-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+.data-table .muted-cell { color: var(--muted); }
+.data-table th.col-actions, .data-table td.col-actions { text-align: right; white-space: nowrap; width: 1%; }
+.data-table td.col-actions .actions { justify-content: flex-end; }
 
 .standings-roster { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; padding: var(--panel-space); }
 .standings-roster .card { box-shadow: none; }
@@ -489,7 +514,9 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .app[data-presentation-variant="pipeline"] .board-column { border-top: 0; border-left: 4px solid var(--accent); }
 .app[data-presentation-variant="swimlanes"] .board-view { display: grid; }
 .app[data-presentation-variant="swimlanes"] .board-column { max-width: none; }
-.app[data-presentation-variant="calendar"] .agenda-view { grid-template-columns: repeat(7, minmax(150px, 1fr)); }
+/* A fixed 7-column week grid crushes detail-rich activity cards; size columns to
+   stay readable and wrap to more rows instead. */
+.app[data-presentation-variant="calendar"] .agenda-view { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 .app[data-presentation-variant="timeline"] .agenda-view { grid-template-columns: 1fr; }
 .app[data-presentation-variant="storefront"] .gallery-cover { min-height: 170px; }
 .app[data-presentation-variant="directory"] .gallery-view { grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); }
@@ -514,14 +541,20 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .app[data-view="table"] .card dl { grid-column: 2; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); margin: 0; }
 .app[data-view="table"] .card dl div { grid-template-columns: 1fr; gap: 4px; }
 
+/* Scope the legacy gallery card treatment to the `.grid .card` fallback path
+   (RelatedWorkspace). The primary collection now renders `.gallery-item .card`,
+   which owns its own cover band — leaving these unscoped stacked a redundant
+   ::before band on every gallery card and forced `overflow: hidden`, which
+   collapsed the title in the narrow flex card-top. */
 .app[data-view="gallery"] .grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
-.app[data-view="gallery"] .card { overflow: hidden; padding: 0 18px 18px; }
-.app[data-view="gallery"] .card::before { content: ""; display: block; height: 72px; margin: 0 -18px 17px; background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 34%, var(--surface-alt))); }
-.app[data-view="gallery"] .card dl div { grid-template-columns: 1fr; gap: 2px; }
+.app[data-view="gallery"] .grid .card { overflow: hidden; padding: 0 18px 18px; }
+.app[data-view="gallery"] .grid .card::before { content: ""; display: block; height: 72px; margin: 0 -18px 17px; background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 34%, var(--surface-alt))); }
+.app[data-view="gallery"] .grid .card dl div { grid-template-columns: 1fr; gap: 2px; }
 
 .app[data-view="agenda"] .grid { grid-template-columns: 1fr; gap: 9px; }
 .app[data-view="agenda"] .card { padding: 13px 15px; border-left: 4px solid var(--accent); box-shadow: 0 3px 12px color-mix(in srgb, var(--ink) 5%, transparent); }
 .app[data-view="agenda"] .card dl { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 10px; }
+.app[data-view="agenda"] .card dl div { display: flex; gap: 6px; grid-template-columns: none; align-items: baseline; min-width: 0; }
 
 .app[data-view="dashboard"] .stat-strip { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .app[data-view="dashboard"] .collection { display: grid; grid-template-columns: minmax(0, 1fr); }
@@ -533,8 +566,8 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 
 @media (max-width: 800px) {
   .stat-strip { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-  .app[data-layout="command-center"] .card { grid-template-columns: 1fr; gap: 12px; }
-  .app[data-layout="command-center"] .card-top { display: flex; }
+  .app[data-layout="command-center"] .grid .card { grid-template-columns: 1fr; gap: 12px; }
+  .app[data-layout="command-center"] .grid .card-top { display: flex; }
   .app[data-view="table"] .card { grid-template-columns: 1fr; gap: 12px; }
   .app[data-view="table"] .card-top { display: flex; }
   .app[data-view="table"] .card .actions, .app[data-view="table"] .card dl { grid-column: auto; }
@@ -553,7 +586,7 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
   .app[data-layout="stage-board"] .record-group { flex-basis: 82vw; }
   .board-column { flex-basis: 82vw; }
   .agenda-view, .gallery-view, .standings-roster { grid-template-columns: 1fr; padding: 16px; }
-  .app[data-presentation-variant="calendar"] .agenda-view { grid-template-columns: repeat(7, minmax(140px, 1fr)); overflow-x: auto; }
+  .app[data-presentation-variant="calendar"] .agenda-view { grid-template-columns: 1fr; }
   .hero-copy { padding-right: 0; }
   .hero h1 { font-size: clamp(24px, 6vw, 32px); }
   /* One consistent gutter for every collection band on small screens. */

@@ -256,7 +256,7 @@
         "groupField": "stage",
         "navigation": "single",
         "primary": "board",
-        "reason": "workflow grouped by stage",
+        "reason": "lifecycle grouped by stage",
         "variant": "pipeline"
       },
       "primaryField": "title",

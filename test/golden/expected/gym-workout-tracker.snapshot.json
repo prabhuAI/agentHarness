@@ -237,13 +237,13 @@
         },
         "contrast": "balanced",
         "density": "comfortable",
-        "id": "command-center-calm-b",
-        "layout": "command-center",
-        "layoutLabel": "Command center",
+        "id": "data-ledger-calm-b",
+        "layout": "data-ledger",
+        "layoutLabel": "Data ledger",
         "motion": "subtle",
         "shape": {
-          "cardRadius": 16,
-          "panelRadius": 22
+          "cardRadius": 14,
+          "panelRadius": 20
         },
         "spacing": {
           "gap": 14,
@@ -348,11 +348,10 @@
       "genome": "tracker",
       "name": "Gym Log",
       "presentation": {
-        "groupField": "focus",
         "navigation": "single",
-        "primary": "dashboard",
-        "reason": "metrics-led monitoring",
-        "variant": "analyst"
+        "primary": "table",
+        "reason": "single-entity register",
+        "variant": "directory"
       },
       "primaryField": "title",
       "quickActions": [],
@@ -453,7 +452,7 @@
       ],
       "tagline": "Log it, lift it, track it."
     },
-    "summary.md": "# Gym Log\n\nTrack gym workouts and weekly bodyweight so progress stays visible.\n\n- **Target user:** Individuals training at the gym\n- **Build route:** compile\n- **Genome:** tracker\n- **Presentation:** dashboard / analyst\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Planned verification journeys\n\n- Application loads and shows a useful empty state\n- Invalid workout input shows validation without crashing\n- User can add a complete workout and see it in workouts\n- workouts survive a page refresh\n- User can edit an existing workout\n- User can search workouts\n- User can narrow workouts with a meaningful filter\n- workouts are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing workout\n"
+    "summary.md": "# Gym Log\n\nTrack gym workouts and weekly bodyweight so progress stays visible.\n\n- **Target user:** Individuals training at the gym\n- **Build route:** compile\n- **Genome:** tracker\n- **Presentation:** table / directory\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Planned verification journeys\n\n- Application loads and shows a useful empty state\n- Invalid workout input shows validation without crashing\n- User can add a complete workout and see it in workouts\n- workouts survive a page refresh\n- User can edit an existing workout\n- User can search workouts\n- User can narrow workouts with a meaningful filter\n- workouts are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing workout\n"
   },
   "journeys": [
     {

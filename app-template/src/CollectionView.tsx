@@ -30,8 +30,9 @@ function TrackerView({ records, renderRecord }: CollectionViewProps) {
 }
 
 function TableView({ records, renderRecord }: CollectionViewProps) {
+  // The main app renders the table view as a real <table> (see App.tsx). This
+  // stays as a structural fallback for grouped-table sections.
   return <div className="table-view" aria-label={`${productConfig.entityNamePlural} table`}>
-    <div className="table-view-head"><span>{productConfig.fields.find((field) => field.key === productConfig.primaryField)?.label}</span><span>Details</span><span>Actions</span></div>
     <div>{records.map((record) => <div className="table-view-row" key={record.id}>{renderRecord(record, "table")}</div>)}</div>
   </div>;
 }

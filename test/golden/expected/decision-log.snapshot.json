@@ -241,7 +241,7 @@
         "groupField": "status",
         "navigation": "single",
         "primary": "board",
-        "reason": "workflow grouped by status",
+        "reason": "lifecycle grouped by status",
         "variant": "pipeline"
       },
       "primaryField": "title",

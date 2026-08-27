@@ -263,7 +263,7 @@
         "groupField": "cadence",
         "navigation": "single",
         "primary": "dashboard",
-        "reason": "metrics-led monitoring",
+        "reason": "metrics dashboard product",
         "variant": "analyst"
       },
       "primaryField": "name",

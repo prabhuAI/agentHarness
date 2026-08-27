@@ -391,6 +391,19 @@ export function App() {
   }, [derivedRecords]);
   const summaries = useMemo(() => productConfig.summaries.map((summary) => ({ ...summary, value: computeSummaryValue(summary, derivedRecords) })), [derivedRecords]);
   const summaryValueById = useMemo(() => Object.fromEntries(summaries.map((summary) => [summary.id, summary.value])), [summaries]);
+  // Only headline metrics belong in the stat strip. A per-facet count that is
+  // already surfaced as a filter-chip badge would just be shown twice, so drop
+  // it from the tiles and let the chip carry the number. Matching uses the raw
+  // config summaries (the `summaries` memo overwrites `value` with the computed
+  // count, so its predicate value is no longer comparable).
+  const facetSummaryIds = useMemo(() => new Set(productConfig.summaries
+    .filter((summary) => productConfig.filters.some((preset) =>
+      summary.operation === "countWhere"
+      && summary.field === preset.field
+      && String(summary.operator ?? "") === String(preset.operator ?? "")
+      && String(summary.value ?? "") === String(preset.value ?? "")))
+    .map((summary) => summary.id)), []);
+  const tileSummaries = useMemo(() => summaries.filter((summary) => !facetSummaryIds.has(summary.id)), [summaries, facetSummaryIds]);
   const filterCount = (preset: (typeof productConfig.filters)[number]): number | undefined => {
     // Only a count-type summary is a valid chip badge; a sumWhere breakdown holds
     // a money total, which must not be shown as if it were a record count.
@@ -504,8 +517,30 @@ export function App() {
   const recordCard = (record: EntityRecord, view = viewPlan.primary) => <article className={`card record-${view}${record.id === priorityRecordId ? " is-priority" : ""}`} key={record.id}>
     <div className="card-top"><h3>{record.id === priorityRecordId && <span className="priority-badge">{productConfig.priority?.label}</span>}<span>{displayValue(productConfig.fields.find((field) => field.key === productConfig.primaryField)!, record.values[productConfig.primaryField])}</span></h3>
       <div className="actions">{productConfig.quickActions.map((action) => <button key={action.id} type="button" className="quick-action" onClick={() => runQuickAction(record, action)}>{action.label}</button>)}{productConfig.capabilities.edit && <button onClick={() => openEdit(record)}>Edit</button>}{productConfig.capabilities.delete && <button className="danger" onClick={() => remove(record)}>Delete</button>}</div></div>
-    <dl>{productConfig.secondaryFields.map((key) => { const field = productConfig.fields.find((candidate) => candidate.key === key); return field && isFieldVisible(field, record.values) ? <div key={key}><dt>{field.label}</dt><dd className={field.type === "status" ? "badge" : ""}>{displayValue(field, record.values[key])}</dd></div> : null; })}</dl>
+    <dl>{productConfig.secondaryFields.map((key) => { const field = productConfig.fields.find((candidate) => candidate.key === key); const value = record.values[key]; return field && isFieldVisible(field, record.values) && value !== undefined && value !== null && value !== "" ? <div key={key}><dt>{field.label}</dt><dd className={field.type === "status" ? "badge" : ""}>{displayValue(field, value)}</dd></div> : null; })}</dl>
   </article>;
+
+  // Table view renders a real <table> so columns align to their headers reliably
+  // (CSS-grid card rows could not keep the header and cells in lockstep).
+  const primaryFieldConfig = productConfig.fields.find((field) => field.key === productConfig.primaryField)!;
+  const tableColumns = productConfig.secondaryFields
+    .map((key) => productConfig.fields.find((field) => field.key === key))
+    .filter((field): field is FieldConfig => Boolean(field));
+  const hasRowActions = productConfig.capabilities.edit || productConfig.capabilities.delete || productConfig.quickActions.length > 0;
+  const recordTable = (rows: EntityRecord[]) => <div className="table-view" role="region" aria-label={`${productConfig.entityNamePlural} table`}>
+    <table className="data-table">
+      <thead><tr>
+        <th scope="col">{primaryFieldConfig.label}</th>
+        {tableColumns.map((field) => <th key={field.key} scope="col">{field.label}</th>)}
+        {hasRowActions && <th scope="col" className="col-actions">Actions</th>}
+      </tr></thead>
+      <tbody>{rows.map((record) => <tr key={record.id} className={record.id === priorityRecordId ? "is-priority" : ""}>
+        <th scope="row">{record.id === priorityRecordId && <span className="priority-badge">{productConfig.priority?.label}</span>}{displayValue(primaryFieldConfig, record.values[productConfig.primaryField])}</th>
+        {tableColumns.map((field) => { const value = record.values[field.key]; const shown = isFieldVisible(field, record.values) && value !== undefined && value !== null && value !== ""; return <td key={field.key} data-label={field.label}>{shown ? <span className={field.type === "status" ? "badge" : ""}>{displayValue(field, value)}</span> : <span className="muted-cell">—</span>}</td>; })}
+        {hasRowActions && <td className="col-actions"><div className="actions">{productConfig.quickActions.map((action) => <button key={action.id} type="button" className="quick-action" onClick={() => runQuickAction(record, action)}>{action.label}</button>)}{productConfig.capabilities.edit && <button onClick={() => openEdit(record)}>Edit</button>}{productConfig.capabilities.delete && <button className="danger" onClick={() => remove(record)}>Delete</button>}</div></td>}
+      </tr>)}</tbody>
+    </table>
+  </div>;
 
   return <div
     className={`app genome-${productConfig.genome}`}
@@ -536,8 +571,8 @@ export function App() {
       {(productConfig.entities?.length ?? 0) > 1 && <RelatedWorkspace primaryRecords={records} />}
       <section className="collection" aria-labelledby="collection-title">
         <h2 id="collection-title" className="sr-only">{productConfig.entityNamePlural}</h2>
-        {summaries.length > 0 && <div className="stat-strip" aria-label="Summary">
-          {summaries.map((summary) => <div className={`stat-tile tone-${toneForLabel(summary.label)}`} data-summary-id={summary.id} key={summary.id}>
+        {tileSummaries.length > 0 && <div className="stat-strip" aria-label="Summary">
+          {tileSummaries.map((summary) => <div className={`stat-tile tone-${toneForLabel(summary.label)}`} data-summary-id={summary.id} key={summary.id}>
             <span className="stat-icon" aria-hidden="true"><SummaryIcon operation={summary.operation} /></span>
             <span className="stat-body"><strong>{formatSummaryValue(summary.operation, summary.operation === "sumWhere" ? summary.sumField : summary.field, summary.value)}</strong><span>{summary.label}</span></span>
           </div>)}
@@ -561,6 +596,7 @@ export function App() {
         </div>}
         <div className="result-count" aria-live="polite">{visible.length === records.length ? `${records.length} ${records.length === 1 ? productConfig.entityName : productConfig.entityNamePlural}` : `${visible.length} of ${records.length} shown`}</div>
         {visible.length === 0 ? <div className="empty"><span className="empty-icon">◇</span><h3>{records.length ? "Nothing matches that view" : `No ${productConfig.entityNamePlural} yet`}</h3><p>{records.length ? "Try another search or filter." : `Add your first ${productConfig.entityName} to get started.`}</p>{!records.length && productConfig.capabilities.create && <button className="secondary" onClick={openCreate}>Add {productConfig.entityName}</button>}</div>
+          : viewPlan.primary === "table" ? recordTable(visible)
           : <CollectionView records={visible} renderRecord={recordCard} />}
       </section>
     </main>

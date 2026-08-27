@@ -314,7 +314,16 @@ describe("compiled product runtime", () => {
 
   it("renders configured summaries as compact metrics", () => {
     render(<App />);
-    for (const summary of productConfig.summaries) expect(screen.getAllByText(summary.label).length).toBeGreaterThan(0);
+    // Headline summaries appear as stat tiles; a facet count that mirrors a
+    // filter chip is shown as that chip's badge, not as a duplicate tile.
+    const isFacet = (summary: (typeof productConfig.summaries)[number]) => productConfig.filters.some((preset) =>
+      summary.operation === "countWhere"
+      && summary.field === preset.field
+      && String(summary.operator ?? "") === String(preset.operator ?? "")
+      && String(summary.value ?? "") === String(preset.value ?? ""));
+    for (const summary of productConfig.summaries.filter((candidate) => !isFacet(candidate))) {
+      expect(screen.getAllByText(summary.label).length).toBeGreaterThan(0);
+    }
   });
 
   it("validates required input and supports create, persistence, edit, search, and delete", async () => {
@@ -351,11 +360,19 @@ describe("compiled product runtime", () => {
     const projectedCreated = projectedAfterCreate[0]!.values;
     const summaryRegion = screen.getByLabelText("Summary");
     for (const summary of productConfig.summaries) {
+      // A facet count that mirrors a filter chip is shown as the chip's badge,
+      // not as a duplicate stat tile.
+      const isFacetChip = productConfig.filters.some((preset) =>
+        summary.operation === "countWhere"
+        && summary.field === preset.field
+        && String(summary.operator ?? "") === String(preset.operator ?? "")
+        && String(summary.value ?? "") === String(preset.value ?? ""));
       // Visible labels may legitimately repeat (two different predicates can
       // share user-facing wording), so identity comes from the normalized IR id.
-      const tile = summaryRegion.querySelector<HTMLElement>(`[data-summary-id="${summary.id}"]`)!;
+      const tile = summaryRegion.querySelector<HTMLElement>(`[data-summary-id="${summary.id}"]`);
+      if (isFacetChip) { expect(tile).toBeNull(); continue; }
       expect(tile).toBeInTheDocument();
-      const rendered = tile.querySelector("strong")!.textContent ?? "";
+      const rendered = tile!.querySelector("strong")!.textContent ?? "";
       const expected = computeSummaryValue(summary, projectedAfterCreate);
       if (summary.operation === "count" || summary.operation === "countWhere") expect(rendered).toBe(String(expected));
       else expect(Number(rendered.replace(/[^0-9.-]/gu, ""))).toBe(expected);
