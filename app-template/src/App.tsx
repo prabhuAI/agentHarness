@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } f
 import { type ChartConfig, FieldConfig, type PredicateOperator, productConfig, type QuickActionConfig, type SummaryConfig } from "./product-config.js";
 import { evaluateFormula } from "./formula.js";
 import { createRepository, EntityRecord, RecordValue } from "./repository.js";
+import { referenceLabel, referenceOptions, referenceTarget } from "./relations.js";
+import { parseImportedRecords, recordsToCsv, recordsToJson } from "./io.js";
 import { RelatedWorkspace } from "./RelatedWorkspace.js";
 import { CollectionView } from "./CollectionView.js";
 import { resolveViewPlan } from "./view-plan.js";
@@ -52,6 +54,12 @@ function dayIndex(value: unknown): number | null {
 export function computeDerivedValue(field: FieldConfig, values: Values, now: Date): RecordValue {
   const spec = field.derive;
   if (!spec) return values[field.key] ?? "";
+  if (spec.kind === "presence") {
+    // The status is exactly whether the source field carries a value, so it can
+    // never drift from it: filling the source reads as `whenPresent`, clearing
+    // it (e.g. via a "Returned" quick action) reads as `whenEmpty`.
+    return String(values[spec.sourceField] ?? "").trim() !== "" ? spec.whenPresent : spec.whenEmpty;
+  }
   if (spec.kind === "formula") {
     // Resolve each referenced field to its numeric value; a blank or non-numeric
     // input makes the whole formula unresolved, so the record shows no value.
@@ -102,7 +110,7 @@ export function chartSeries(chart: ChartConfig, records: ReadonlyArray<{ values:
       const x = dayIndex(record.values[chart.xField]);
       // Number("") is 0, so an empty value must be rejected before coercion,
       // otherwise a record with no measurement would plot as a spurious zero.
-      const yText = String(record.values[chart.yField] ?? "").trim();
+      const yText = String(record.values[chart.yField ?? ""] ?? "").trim();
       const y = yText === "" ? Number.NaN : Number(yText);
       const label = String(record.values[chart.xField] ?? "");
       return x !== null && Number.isFinite(y) ? { x, y, label } : null;
@@ -151,6 +159,96 @@ function TrendChart({ chart, records }: { chart: ChartConfig; records: ReadonlyA
       <text className="trend-tick" x={width - padX} y={height - 6} textAnchor="end">{lastLabel}</text>
     </svg>
   </figure>;
+}
+
+// Palette for categorical charts; the first slot reuses the product accent so a
+// single-series chart matches the app, the rest are fixed, colour-blind-safe hues.
+const CHART_PALETTE = ["var(--accent)", "#f59e0b", "#10b981", "#ef4444", "#6366f1", "#14b8a6", "#ec4899", "#8b5cf6"];
+
+export interface ChartSlice { label: string; value: number }
+
+// Group records by a bar/pie chart's category axis. Buckets start from the
+// field's declared options (so empty groups still appear, in declared order),
+// then any custom values encountered are appended in sorted order for
+// determinism. Each bucket is a record count, or the sum of the numeric measure
+// when `yField` is set.
+export function chartBreakdown(chart: ChartConfig, records: ReadonlyArray<{ values: Values }>): ChartSlice[] {
+  const field = productConfig.fields.find((candidate) => candidate.key === chart.xField);
+  const declared = field?.options ?? [];
+  const useSum = Boolean(chart.yField);
+  const totals = new Map<string, number>();
+  for (const option of declared) totals.set(option, 0);
+  for (const record of records) {
+    const key = String(record.values[chart.xField] ?? "").trim();
+    if (key === "") continue;
+    const increment = useSum ? (Number(record.values[chart.yField ?? ""]) || 0) : 1;
+    totals.set(key, (totals.get(key) ?? 0) + increment);
+  }
+  const extras = [...totals.keys()].filter((key) => !declared.includes(key)).sort();
+  return [...declared, ...extras].map((label) => ({ label, value: totals.get(label) ?? 0 }));
+}
+
+// A dependency-free categorical chart: horizontal bars or a share-of-total donut.
+function CategoryChart({ chart, records }: { chart: ChartConfig; records: ReadonlyArray<{ values: Values }> }) {
+  const slices = chartBreakdown(chart, records);
+  const measure = chart.yField ? productConfig.fields.find((field) => field.key === chart.yField) : undefined;
+  const format = (value: number) => measure?.type === "currency"
+    ? new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value)
+    : Number.isInteger(value) ? String(value) : value.toFixed(1);
+  if (!slices.some((slice) => slice.value !== 0)) {
+    return <figure className="trend-chart trend-chart-empty">
+      <figcaption>{chart.label}</figcaption>
+      <p className="trend-chart-hint">Add entries to see this breakdown.</p>
+    </figure>;
+  }
+  if (chart.type === "pie") {
+    const positive = slices.filter((slice) => slice.value > 0);
+    const total = positive.reduce((sum, slice) => sum + slice.value, 0) || 1;
+    const radius = 70;
+    const circumference = 2 * Math.PI * radius;
+    let offset = 0;
+    return <figure className="trend-chart">
+      <figcaption>{chart.label}</figcaption>
+      <div className="pie-chart">
+        <svg viewBox="0 0 180 180" role="img" aria-label={`${chart.label} pie chart`}>
+          {positive.map((slice, index) => {
+            const dash = (slice.value / total) * circumference;
+            const arc = <circle key={slice.label} r={radius} cx={90} cy={90} fill="none"
+              stroke={CHART_PALETTE[index % CHART_PALETTE.length]} strokeWidth={32}
+              strokeDasharray={`${dash.toFixed(2)} ${(circumference - dash).toFixed(2)}`}
+              strokeDashoffset={(-offset).toFixed(2)} transform="rotate(-90 90 90)" />;
+            offset += dash;
+            return arc;
+          })}
+        </svg>
+        <ul className="pie-legend">
+          {positive.map((slice, index) => <li key={slice.label}>
+            <span className="pie-swatch" style={{ background: CHART_PALETTE[index % CHART_PALETTE.length] }} aria-hidden="true" />
+            {slice.label} — {format(slice.value)}
+          </li>)}
+        </ul>
+      </div>
+    </figure>;
+  }
+  const max = Math.max(...slices.map((slice) => slice.value), 1);
+  return <figure className="trend-chart">
+    <figcaption>{chart.label}</figcaption>
+    <div className="bar-chart" role="img" aria-label={`${chart.label} bar chart`}>
+      {slices.map((slice, index) => <div className="bar-row" key={slice.label}>
+        <span className="bar-label">{slice.label}</span>
+        <span className="bar-track"><span className="bar-fill" style={{ width: `${(slice.value / max) * 100}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} /></span>
+        <span className="bar-value">{format(slice.value)}</span>
+      </div>)}
+    </div>
+  </figure>;
+}
+
+// Route a chart to its renderer: date trends to the line chart, categorical
+// breakdowns to the bar/pie chart.
+function ProductChartView({ chart, records }: { chart: ChartConfig; records: ReadonlyArray<{ values: Values }> }) {
+  return chart.type === "line"
+    ? <TrendChart chart={chart} records={records} />
+    : <CategoryChart chart={chart} records={records} />;
 }
 
 function validate(values: Values): Errors {
@@ -215,6 +313,13 @@ function Field({ field, value, error, onChange }: {
       placeholder={`Enter custom ${field.label.toLowerCase()}`}
       onChange={(event) => onChange(event.target.value)}
     />}</div>;
+  } else if (field.type === "reference") {
+    const target = referenceTarget(field);
+    const referenceChoices = target ? referenceOptions(target) : [];
+    control = <select {...common} value={textValue} onChange={(event) => onChange(event.target.value)}>
+      <option value="">Choose {field.label.toLowerCase()}</option>
+      {referenceChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+    </select>;
   } else if (field.type === "boolean") {
     control = <label className="check"><input {...common} type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.target.checked)} /><span>Yes</span></label>;
   } else {
@@ -230,6 +335,10 @@ function Field({ field, value, error, onChange }: {
 
 function displayValue(field: FieldConfig, value: RecordValue | undefined) {
   if (value === undefined || value === "") return "—";
+  if (field.type === "reference") {
+    const target = referenceTarget(field);
+    return target ? referenceLabel(target, String(value)) : String(value);
+  }
   if (field.type === "boolean") return value ? "Yes" : "No";
   if (field.type === "currency") return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(Number(value));
   if (field.type === "date" || field.type === "datetime") return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(String(value)));
@@ -239,12 +348,13 @@ function displayValue(field: FieldConfig, value: RecordValue | undefined) {
 // Format a summary's numeric value, rendering money totals as currency. A `sum`
 // totals its `field`; a `sumWhere` totals its `sumField` — either is currency
 // when that measure field is a currency field.
+const MEASURE_OPERATIONS = new Set(["sum", "sumWhere", "average", "avgWhere", "min", "minWhere", "max", "maxWhere"]);
 function formatSummaryValue(operation: string, measureKey: string | undefined, value: number): string {
-  const isCurrency = (operation === "sum" || operation === "sumWhere") && measureKey
+  const isCurrency = MEASURE_OPERATIONS.has(operation) && measureKey
     && productConfig.fields.find((field) => field.key === measureKey)?.type === "currency";
-  return isCurrency
-    ? new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value)
-    : String(value);
+  if (isCurrency) return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+  // An average can be fractional; keep counts and whole sums as plain integers.
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 // Compute one summary metric over the records. `sum` totals a numeric field;
@@ -252,9 +362,19 @@ function formatSummaryValue(operation: string, measureKey: string | undefined, v
 // counts them; `count` is the record total. Pure and now-injectable for tests.
 export function computeSummaryValue(summary: SummaryConfig, records: ReadonlyArray<{ values: Values }>, now: Date = new Date()): number {
   if (summary.operation === "count") return records.length;
-  if (summary.operation === "sum") return records.reduce((total, record) => total + Number(record.values[summary.field ?? ""] || 0), 0);
-  const matching = records.filter((record) => matchesPredicate(record.values[summary.field ?? ""], summary.operator ?? "nonEmpty", summary.value, now));
-  if (summary.operation === "sumWhere") return matching.reduce((total, record) => total + Number(record.values[summary.sumField ?? ""] || 0), 0);
+  // Bare aggregates reduce `field` over every record.
+  const measure = (record: { values: Values }) => Number(record.values[summary.field ?? ""] || 0);
+  if (summary.operation === "sum") return records.reduce((total, record) => total + measure(record), 0);
+  if (summary.operation === "average") return records.length ? records.reduce((total, record) => total + measure(record), 0) / records.length : 0;
+  if (summary.operation === "min") return records.length ? Math.min(...records.map(measure)) : 0;
+  if (summary.operation === "max") return records.length ? Math.max(...records.map(measure)) : 0;
+  // Conditional aggregates reduce `sumField` over the records matching the predicate.
+  const matching = records.filter((record) => matchesPredicate(record.values[summary.field ?? ""], summary.operator ?? "nonEmpty", summary.value, now, summary.valueEnd));
+  const weighed = (record: { values: Values }) => Number(record.values[summary.sumField ?? ""] || 0);
+  if (summary.operation === "sumWhere") return matching.reduce((total, record) => total + weighed(record), 0);
+  if (summary.operation === "avgWhere") return matching.length ? matching.reduce((total, record) => total + weighed(record), 0) / matching.length : 0;
+  if (summary.operation === "minWhere") return matching.length ? Math.min(...matching.map(weighed)) : 0;
+  if (summary.operation === "maxWhere") return matching.length ? Math.max(...matching.map(weighed)) : 0;
   return matching.length;
 }
 
@@ -278,7 +398,22 @@ export function compareRecordsBySort(
   return option.direction === "desc" ? -cmp : cmp;
 }
 
-export function matchesPredicate(value: RecordValue | undefined, operator: PredicateOperator, expected?: string, now: Date = new Date()) {
+// Three-way compare of a stored value against an expected bound: numeric when
+// both parse as finite numbers, otherwise a numeric-aware string compare (ISO
+// dates sort chronologically as text). Returns null when either side is blank,
+// so a comparison against a missing value never matches.
+function compareValues(value: RecordValue | undefined, expected: string | undefined): number | null {
+  if (expected === undefined) return null;
+  const av = String(value ?? "").trim();
+  const bv = String(expected).trim();
+  if (av === "" || bv === "") return null;
+  const a = Number(av);
+  const b = Number(bv);
+  if (Number.isFinite(a) && Number.isFinite(b)) return Math.sign(a - b);
+  return Math.sign(av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" }));
+}
+
+export function matchesPredicate(value: RecordValue | undefined, operator: PredicateOperator, expected?: string, now: Date = new Date(), valueEnd?: string) {
   const text = String(value ?? "").trim();
   if (operator === "today" || operator === "thisWeek" || operator === "thisMonth") {
     const parts = dateParts(value);
@@ -293,10 +428,26 @@ export function matchesPredicate(value: RecordValue | undefined, operator: Predi
     return index !== null && index >= weekStart && index <= weekStart + 6;
   }
   if (operator === "equals") return text === String(expected ?? "");
+  if (operator === "notEquals") return text !== String(expected ?? "");
+  if (operator === "contains") return text.toLowerCase().includes(String(expected ?? "").toLowerCase());
   if (operator === "nonEmpty") return text !== "";
   if (operator === "empty") return text === "";
   if (operator === "truthy") return value === true || text === "true";
-  return value === false || text === "false" || text === "";
+  if (operator === "falsy") return value === false || text === "false" || text === "";
+  // Range/comparison. before/after are date-field aliases of lessThan/greaterThan;
+  // between is an inclusive [expected, valueEnd] window.
+  if (operator === "between") {
+    const low = compareValues(value, expected);
+    const high = compareValues(value, valueEnd);
+    return low !== null && high !== null && low >= 0 && high <= 0;
+  }
+  const cmp = compareValues(value, expected);
+  if (cmp === null) return false;
+  if (operator === "lessThan" || operator === "before") return cmp < 0;
+  if (operator === "greaterThan" || operator === "after") return cmp > 0;
+  if (operator === "atMost") return cmp <= 0;
+  if (operator === "atLeast") return cmp >= 0;
+  return false;
 }
 
 function ThemeIcon({ resolved }: { resolved: ResolvedTheme }) {
@@ -349,6 +500,7 @@ export function App() {
   const [themePreference, setThemePreference] = useState(loadThemePreference);
   const [systemDark, setSystemDark] = useState(systemPrefersDark);
   const dialog = useRef<HTMLDialogElement>(null);
+  const importInput = useRef<HTMLInputElement>(null);
   const resolvedTheme = resolveTheme(themePreference, systemDark);
   const viewPlan = resolveViewPlan(productConfig);
 
@@ -371,13 +523,13 @@ export function App() {
   const visible = useMemo(() => derivedRecords.filter((record) => {
     const matchesQuery = !query || productConfig.searchableFields.some((key) => String(record.values[key] ?? "").toLowerCase().includes(query.toLowerCase()));
     const preset = productConfig.filters.find((candidate) => candidate.id === filter);
-    const matchesFilter = !preset || matchesPredicate(record.values[preset.field], preset.operator, preset.value);
+    const matchesFilter = !preset || matchesPredicate(record.values[preset.field], preset.operator, preset.value, undefined, preset.valueEnd);
     return matchesQuery && matchesFilter;
   }).sort((left, right) => {
     if (sort === "priority" && productConfig.priority?.filter) {
       const predicate = productConfig.priority.filter;
-      const leftEligible = matchesPredicate(left.values[predicate.field], predicate.operator, predicate.value);
-      const rightEligible = matchesPredicate(right.values[predicate.field], predicate.operator, predicate.value);
+      const leftEligible = matchesPredicate(left.values[predicate.field], predicate.operator, predicate.value, undefined, predicate.valueEnd);
+      const rightEligible = matchesPredicate(right.values[predicate.field], predicate.operator, predicate.value, undefined, predicate.valueEnd);
       if (leftEligible !== rightEligible) return leftEligible ? -1 : 1;
     }
     return compareRecordsBySort(sort, left, right);
@@ -386,7 +538,7 @@ export function App() {
     const priority = productConfig.priority;
     if (!priority) return undefined;
     return [...derivedRecords]
-      .filter((record) => !priority.filter || matchesPredicate(record.values[priority.filter.field], priority.filter.operator, priority.filter.value))
+      .filter((record) => !priority.filter || matchesPredicate(record.values[priority.filter.field], priority.filter.operator, priority.filter.value, undefined, priority.filter.valueEnd))
       .sort((left, right) => compareRecordsBySort("priority", left, right))[0]?.id;
   }, [derivedRecords]);
   const summaries = useMemo(() => productConfig.summaries.map((summary) => ({ ...summary, value: computeSummaryValue(summary, derivedRecords) })), [derivedRecords]);
@@ -462,16 +614,24 @@ export function App() {
     }
   };
 
-  // A quick action mutates one field on a record and saves immediately, no dialog:
-  // "today" stamps a date/datetime field to now; "clear" empties the field.
+  // A quick action mutates one field on a record and saves immediately, no dialog.
+  // Each verb maps to a deterministic new value computed from the current one.
   const runQuickAction = (record: EntityRecord, action: QuickActionConfig) => {
     const field = productConfig.fields.find((candidate) => candidate.key === action.field);
+    const current = record.values[action.field];
     let next: RecordValue = "";
-    if (action.set === "today") {
+    if (action.set === "today" || action.set === "now") {
       const now = new Date();
       const pad = (n: number) => String(n).padStart(2, "0");
       const day = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-      next = field?.type === "datetime" ? `${day}T${pad(now.getHours())}:${pad(now.getMinutes())}` : day;
+      const stampTime = action.set === "now" || field?.type === "datetime";
+      next = stampTime ? `${day}T${pad(now.getHours())}:${pad(now.getMinutes())}` : day;
+    } else if (action.set === "increment") {
+      next = (Number(current) || 0) + (action.amount ?? 1);
+    } else if (action.set === "toggle") {
+      next = !(current === true || current === "true");
+    } else if (action.set === "setValue") {
+      next = action.value ?? "";
     }
     try {
       repository.update(record.id, { ...record.values, [action.field]: next });
@@ -489,6 +649,32 @@ export function App() {
   };
 
   const dismissNotice = () => { setNotice(""); setUndo(null); };
+
+  // Trigger a client-side file download of `text` with no external dependency.
+  const downloadFile = (filename: string, mime: string, text: string) => {
+    const url = URL.createObjectURL(new Blob([text], { type: mime }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+  const slug = productConfig.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "records";
+  const exportRecords = (format: "csv" | "json") => {
+    const text = format === "csv" ? recordsToCsv(derivedRecords) : recordsToJson(records);
+    downloadFile(`${slug}.${format}`, format === "csv" ? "text/csv" : "application/json", text);
+  };
+  const importRecords = async (file: File) => {
+    try {
+      const parsed = parseImportedRecords(await file.text());
+      if (parsed.length === 0) { setNotice("No importable records found in that file."); return; }
+      for (const values of parsed) repository.create(values);
+      setRecords(repository.list());
+      setNotice(`Imported ${parsed.length} ${parsed.length === 1 ? productConfig.entityName : productConfig.entityNamePlural}.`);
+    } catch {
+      setNotice("That file could not be imported. Expected a JSON array of records.");
+    }
+  };
 
   const design = productConfig.design;
   const palette = paletteFor(design, resolvedTheme);
@@ -574,15 +760,23 @@ export function App() {
         {tileSummaries.length > 0 && <div className="stat-strip" aria-label="Summary">
           {tileSummaries.map((summary) => <div className={`stat-tile tone-${toneForLabel(summary.label)}`} data-summary-id={summary.id} key={summary.id}>
             <span className="stat-icon" aria-hidden="true"><SummaryIcon operation={summary.operation} /></span>
-            <span className="stat-body"><strong>{formatSummaryValue(summary.operation, summary.operation === "sumWhere" ? summary.sumField : summary.field, summary.value)}</strong><span>{summary.label}</span></span>
+            <span className="stat-body"><strong>{formatSummaryValue(summary.operation, summary.operation.endsWith("Where") && summary.operation !== "countWhere" ? summary.sumField : summary.field, summary.value)}</strong><span>{summary.label}</span></span>
           </div>)}
         </div>}
         {productConfig.charts.length > 0 && <div className="chart-strip" aria-label="Trends">
-          {productConfig.charts.map((chart) => <TrendChart key={chart.id} chart={chart} records={derivedRecords} />)}
+          {productConfig.charts.map((chart) => <ProductChartView key={chart.id} chart={chart} records={derivedRecords} />)}
         </div>}
         <div className="toolbar">
           {productConfig.capabilities.search && <label className="search"><span className="sr-only">Search {productConfig.entityNamePlural}</span><input type="search" placeholder={`Search ${productConfig.entityNamePlural}…`} value={query} onChange={(event) => setQuery(event.target.value)} /></label>}
           {productConfig.capabilities.sort && <label className="sort-field"><span className="sr-only">Sort {productConfig.entityNamePlural}</span><select aria-label={`Sort ${productConfig.entityNamePlural}`} value={sort} onChange={(event) => setSort(event.target.value)}>{productConfig.sorts.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
+          {productConfig.capabilities.export && <div className="data-tools" role="group" aria-label="Export and import">
+            <button type="button" className="secondary" onClick={() => exportRecords("csv")} disabled={records.length === 0}>Export CSV</button>
+            <button type="button" className="secondary" onClick={() => exportRecords("json")} disabled={records.length === 0}>Export JSON</button>
+            {productConfig.capabilities.create && <>
+              <button type="button" className="secondary" onClick={() => importInput.current?.click()}>Import</button>
+              <input ref={importInput} type="file" accept="application/json,.json" className="sr-only" aria-label="Import records from JSON file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importRecords(file); event.target.value = ""; }} />
+            </>}
+          </div>}
         </div>
         {productConfig.filters.length > 0 && <div className="filter-chips" role="group" aria-label={`Filter ${productConfig.entityNamePlural}`}>
           <button type="button" className={`chip${filter === "all" ? " is-active" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All {productConfig.entityNamePlural}</button>

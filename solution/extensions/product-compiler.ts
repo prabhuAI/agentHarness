@@ -19,7 +19,7 @@ import { verifyAppStartup } from "../../src/verify-app.js";
 const fieldSchema = Type.Object({
   id: Type.String({ description: "short snake_case semantic key" }),
   label: Type.String(),
-  type: Type.String({ description: "One of: text, longText, number, currency, date, datetime, boolean, category, status, email, url. A dropdown/single-select of options is 'category' (a fixed lifecycle is 'status'); never 'select', 'dropdown', or 'enum'." }),
+  type: Type.String({ description: "One of: text, longText, number, currency, date, datetime, boolean, category, status, email, url, reference. A dropdown/single-select of options is 'category' (a fixed lifecycle is 'status'); never 'select', 'dropdown', or 'enum'. Use 'reference' with refEntity only for a genuine link to another entity's record (e.g. a loan's book); a borrower/owner name is a plain text field, not a reference." }),
   required: Type.Optional(Type.Boolean({ description: "Defaults to false when omitted" })),
   placeholder: Type.Optional(Type.String()),
   options: Type.Optional(Type.Array(Type.String(), { maxItems: 12 })),
@@ -30,8 +30,9 @@ const fieldSchema = Type.Object({
     field: Type.String({ description: "id of another field that controls visibility" }),
     equals: Type.String({ description: "exact controlling value that makes this field visible" }),
   })),
+  refEntity: Type.Optional(Type.String({ description: "reference type only: singular name of the entity this field links to; must be a different entity in this IR" })),
   derive: Type.Optional(Type.Object({
-    kind: Type.String({ enum: ["dateThreshold", "formula"], description: "dateThreshold = a date-based status; formula = a number computed by arithmetic over other fields" }),
+    kind: Type.String({ enum: ["dateThreshold", "formula", "presence"], description: "dateThreshold = a date-based status; formula = a number computed by arithmetic over other fields; presence = a two-state status determined by whether another field is filled in" }),
     dateField: Type.Optional(Type.String({ description: "dateThreshold only: id of the date field the elapsed span is measured from (e.g. last_watered)" })),
     thresholdField: Type.Optional(Type.String({ description: "id of a number field giving the threshold in days (e.g. watering_frequency); use this or thresholdDays" })),
     thresholdDays: Type.Optional(Type.Number({ description: "fixed threshold span in days when there is no per-record threshold field" })),
@@ -42,14 +43,23 @@ const fieldSchema = Type.Object({
       ok: Type.String({ description: "option label otherwise" }),
     }, { description: "dateThreshold only: each label must be one of this field's options" })),
     expression: Type.Optional(Type.String({ description: "formula only: arithmetic over other number/currency field ids and numeric literals, using + - * / and parentheses (e.g. \"target_amount - current_amount\", \"price / 12\", \"weight * (1 + reps / 30)\")" })),
-  }, { description: "Compute this field's value instead of taking user input. Use kind dateThreshold on a status field for a date-based lifecycle (overdue / due soon / fine), or kind formula on a number/currency field for a value derived by arithmetic from other fields. Either way, do not also list it as a customRequirement." })),
+    sourceField: Type.Optional(Type.String({ description: "presence only: id of the field whose non-empty value drives this status (e.g. borrower)" })),
+    whenPresent: Type.Optional(Type.String({ description: "presence only: status label when the source field is filled in (e.g. \"Lent out\")" })),
+    whenEmpty: Type.Optional(Type.String({ description: "presence only: status label when the source field is empty (e.g. \"On shelf\")" })),
+  }, { description: "Compute this field's value instead of taking user input. Use kind dateThreshold on a status field for a date-based lifecycle (overdue / due soon / fine); kind formula on a number/currency field for a value derived by arithmetic; or kind presence on a status field whose two states are exactly whether another field is filled in (e.g. lent-out vs on-shelf from a borrower field). Either way, do not also list it as a customRequirement." })),
 });
+// Shared predicate operators for filters, conditional calculations, and priority.
+// equals/notEquals/contains test text; greaterThan/lessThan/atLeast/atMost/between
+// compare numbers or dates (between needs valueEnd); before/after compare a date
+// field; today/thisWeek/thisMonth test a date against now and take no value.
+const PREDICATE_OPERATOR_ENUM = ["equals", "notEquals", "contains", "nonEmpty", "empty", "truthy", "falsy", "greaterThan", "lessThan", "atLeast", "atMost", "between", "before", "after", "today", "thisWeek", "thisMonth"];
 const predicateSchema = {
   id: Type.String(),
   label: Type.String(),
   field: Type.String(),
-  operator: Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy", "today", "thisWeek", "thisMonth"], description: "today/thisWeek/thisMonth filter a date field against the current date and take no value" }),
+  operator: Type.String({ enum: PREDICATE_OPERATOR_ENUM, description: "equals/notEquals/contains test text; greaterThan/lessThan/atLeast/atMost/between compare numbers or dates; before/after compare a date; today/thisWeek/thisMonth test a date against the current date and take no value" }),
   value: Type.Optional(Type.String()),
+  valueEnd: Type.Optional(Type.String({ description: "between only: the inclusive upper bound (value is the lower bound)" })),
 };
 const strictProductIRSchema = Type.Object({
   version: Type.String({ enum: ["1"] }),
@@ -58,7 +68,7 @@ const strictProductIRSchema = Type.Object({
     description: Type.Optional(Type.String()),
     tagline: Type.Optional(Type.String({ description: "Omit unless a short tagline adds real clarity beyond the product name" })),
     targetUser: Type.Optional(Type.String()),
-    genome: Type.Optional(Type.String({ enum: ["tracker", "workflow", "catalog", "planner", "dashboard"], description: "Defaults to tracker when omitted" })),
+    genome: Type.Optional(Type.String({ enum: ["tracker", "workflow", "catalog", "planner", "dashboard", "ledger", "directory", "log", "inventory"], description: "Defaults to tracker when omitted" })),
     design: Type.Optional(Type.Object({
       tone: Type.String({ enum: ["calm", "playful", "professional", "bold", "warm", "technical"] }),
       density: Type.String({ enum: ["compact", "comfortable", "spacious"] }),
@@ -75,30 +85,34 @@ const strictProductIRSchema = Type.Object({
   capabilities: Type.Optional(Type.Object({
     create: Type.Optional(Type.Boolean()), edit: Type.Optional(Type.Boolean()), delete: Type.Optional(Type.Boolean()), search: Type.Optional(Type.Boolean()),
     filter: Type.Optional(Type.Boolean()), sort: Type.Optional(Type.Boolean()), group: Type.Optional(Type.Boolean()), transition: Type.Optional(Type.Boolean()), calculate: Type.Optional(Type.Boolean()),
+    export: Type.Optional(Type.Boolean({ description: "CSV/JSON export + JSON import of records; off by default — set true only when the idea asks to export, back up, or download data" })),
   }, { description: "Omitted capabilities default to a create/edit/delete/search CRUD set" })),
   filters: Type.Optional(Type.Array(Type.Object(predicateSchema), { maxItems: 6, description: "Only filters that are not a simple equals check on one category/status field option — those are derived automatically" })),
   calculations: Type.Optional(Type.Array(Type.Object({
     id: Type.String(), label: Type.String(),
     entity: Type.Optional(Type.String({ description: "Entity whose records this metric summarizes; important when the product has multiple entities" })),
-    operation: Type.String({ enum: ["count", "countWhere", "sum", "sumWhere"], description: "count = all records; sum = total of a number/currency field; countWhere/sumWhere = over records matching a predicate" }),
-    field: Type.Optional(Type.String({ description: "For sum: the number/currency field to total. For countWhere/sumWhere: the field the predicate tests." })),
-    operator: Type.Optional(Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy", "today", "thisWeek", "thisMonth"] })),
+    operation: Type.String({ enum: ["count", "countWhere", "sum", "sumWhere", "average", "avgWhere", "min", "minWhere", "max", "maxWhere"], description: "count = all records; sum/average/min/max reduce a number/currency `field`; the *Where variants reduce `sumField` over records matching a predicate" }),
+    field: Type.Optional(Type.String({ description: "For sum/average/min/max: the number/currency field to reduce. For countWhere/*Where: the field the predicate tests." })),
+    operator: Type.Optional(Type.String({ enum: PREDICATE_OPERATOR_ENUM })),
     value: Type.Optional(Type.String()),
-    sumField: Type.Optional(Type.String({ description: "For sumWhere: the number/currency field summed over the matching records" })),
-  }), { maxItems: 4, description: "Only a totals count and any sums — per-facet-option counts and per-option spend breakdowns are derived automatically" })),
+    valueEnd: Type.Optional(Type.String({ description: "between only: inclusive upper bound" })),
+    sumField: Type.Optional(Type.String({ description: "For sumWhere/avgWhere/minWhere/maxWhere: the number/currency field reduced over the matching records" })),
+  }), { maxItems: 4, description: "Only a totals count and any aggregates — per-facet-option counts and per-option spend breakdowns are derived automatically" })),
   charts: Type.Optional(Type.Array(Type.Object({
     id: Type.String(),
     label: Type.String(),
-    type: Type.String({ enum: ["line"], description: "A line/trend chart" }),
-    xField: Type.String({ description: "id of the date or datetime field for the x axis" }),
-    yField: Type.String({ description: "id of the number or currency field plotted on the y axis" }),
-  }), { maxItems: 3, description: "Trend charts the runtime renders deterministically: a number plotted over time. Use this — never a customRequirement — when the user wants to see a value graphed or track progress over time (e.g. weight over date). Requires a date field and a number/currency field on the entity." })),
+    type: Type.String({ enum: ["line", "bar", "pie"], description: "line = a number over a date axis; bar/pie = records grouped by a category/status field" }),
+    xField: Type.String({ description: "line: the date/datetime field. bar/pie: the category/status field to group by" }),
+    yField: Type.Optional(Type.String({ description: "line: the number/currency field plotted (required). bar/pie: optional number/currency measure summed per group (omit to count records)" })),
+  }), { maxItems: 3, description: "Charts the runtime renders deterministically — never a customRequirement. line: a value over time (weight over date). bar/pie: a breakdown by category (spend by category, count by status). line needs a date + number field; bar/pie need a category/status field with options." })),
   quickActions: Type.Optional(Type.Array(Type.Object({
     id: Type.String(),
-    label: Type.String({ description: "the button caption, e.g. \"Done!\", \"Mark paid\", \"Returned\"" }),
+    label: Type.String({ description: "the button caption, e.g. \"Done!\", \"+1\", \"Returned\", \"Ship\"" }),
     field: Type.String({ description: "id of the field this action mutates" }),
-    set: Type.String({ enum: ["today", "clear"], description: "today = stamp a date field to the current date; clear = empty the field" }),
-  }), { maxItems: 4, description: "One-tap per-record buttons that set a field to a computed value. Use this — never a customRequirement — for a \"mark done today\" / \"mark paid\" / \"returned\" button that stamps a date field to today or clears a field." })),
+    set: Type.String({ enum: ["today", "now", "clear", "increment", "toggle", "setValue"], description: "today/now stamp a date/datetime; clear empties; increment adds `amount` to a number/currency; toggle flips a boolean; setValue sets a category/status to `value`" }),
+    amount: Type.Optional(Type.Number({ description: "increment only: step to add (may be negative); defaults to 1" })),
+    value: Type.Optional(Type.String({ description: "setValue only: the option to set the category/status field to" })),
+  }), { maxItems: 4, description: "One-tap per-record buttons that set a field to a computed value. Use this — never a customRequirement — for \"mark done today\", \"+1\" (increment a count/streak/stock), toggle a flag, or advance a status (setValue)." })),
   standings: Type.Optional(Type.Array(Type.Object({
     id: Type.String(),
     label: Type.String({ description: "Visible table heading, e.g. League table or Standings" }),
@@ -119,8 +133,9 @@ const strictProductIRSchema = Type.Object({
     direction: Type.Optional(Type.String({ enum: ["asc", "desc"], description: "asc means earliest/smallest first; defaults to asc" })),
     filter: Type.Optional(Type.Object({
       field: Type.String(),
-      operator: Type.String({ enum: ["equals", "nonEmpty", "empty", "truthy", "falsy", "today", "thisWeek", "thisMonth"] }),
+      operator: Type.String({ enum: PREDICATE_OPERATOR_ENUM }),
       value: Type.Optional(Type.String()),
+      valueEnd: Type.Optional(Type.String({ description: "between only: inclusive upper bound" })),
     }, { description: "Optional subset eligible for priority, e.g. status equals Waiting" })),
   }, { description: "Ordered queue with a highlighted first record. Use for who-is-next, FIFO, oldest-first, triage, or dispatch workflows; never use a customRequirement for these." })),
   persistence: Type.Optional(Type.Object({ strategy: Type.String({ enum: ["localStorage"] }) })),
@@ -381,6 +396,10 @@ export function registerProductCompiler(
       "For a status that is a date-based lifecycle (e.g. overdue / due soon / fine from a last-done date and a frequency), add a status field with those options and set its `derive` (kind dateThreshold) instead of a customRequirement — the runtime computes it live and auto-derives its per-band filters and counts.",
       "A status the user sets by hand (marking an item Lent then Returned, a bill Paid, a task Done) is a plain status field with `transition` enabled — the user edits it directly. Never add a customRequirement to auto-flip a status from whether another field is filled in or cleared; that coupling is ordinary editing, and a manually-set status field with its options covers it.",
       "When the idea asks to see a number graphed or tracked over time (a weight chart, spend trend, progress over dates), add a `charts` entry (type line) with the date field as xField and the number/currency field as yField — never a customRequirement. The runtime renders it deterministically.",
+      "For a breakdown by category rather than over time (spend by category, count by status, share of each type), add a `charts` entry type bar or pie with the category/status field as xField; set yField to a number/currency field to sum it per group, or omit yField to count records. For an average/min/max headline metric, use calculation operations average/min/max (or avgWhere/minWhere/maxWhere with a predicate) — never a customRequirement.",
+      "For a one-tap per-record button, add a `quickActions` entry: set today/now to stamp a date/datetime (\"Done!\"), clear to empty a field (\"Returned\"), increment with `amount` to bump a number/currency count/streak/stock (\"+1\"), toggle to flip a boolean, or setValue with `value` to advance a status. Never a customRequirement.",
+      "Only use a `reference` field (with refEntity) for a real link between two entities the user manages separately (a loan references a book; a task references a project). A person's name written on the record — borrower, owner, assignee — is a plain text field, not a reference and not a second entity.",
+      "Set capabilities.export true only when the idea explicitly asks to export, download, back up, or import data (e.g. \"export to CSV\", \"download my data\"). It is off by default; do not enable it for an ordinary tracker that never mentions it.",
       "For a per-record number computed by arithmetic from other number/currency fields (remaining = target − current, monthly = price ÷ 12, one-rep-max = weight × (1 + reps ÷ 30)), add a number/currency field with `derive` kind formula and an `expression` over the other field ids — never a customRequirement. The runtime evaluates it live.",
       "For a one-tap button on each record that stamps a date field to today (a \"Done!\" / \"Mark paid\" / \"Watered\" button) or clears a field (a \"Returned\" button that empties a borrower), add a `quickActions` entry with the target field id and set today/clear — never a customRequirement. The runtime renders the button and saves the change.",
       "For ambiguous categories, prefer useful suggestions with allowCustom true.",

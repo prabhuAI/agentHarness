@@ -1,4 +1,4 @@
-export const GENOMES = ["tracker", "workflow", "catalog", "planner", "dashboard"] as const;
+export const GENOMES = ["tracker", "workflow", "catalog", "planner", "dashboard", "ledger", "directory", "log", "inventory"] as const;
 export type Genome = (typeof GENOMES)[number];
 
 export const DESIGN_TONES = ["calm", "playful", "professional", "bold", "warm", "technical"] as const;
@@ -22,11 +22,15 @@ export interface DesignIntent {
 
 export const FIELD_TYPES = [
   "text", "longText", "number", "currency", "date", "datetime", "boolean",
-  "category", "status", "email", "url",
+  "category", "status", "email", "url", "reference",
 ] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
 
-export const FILTER_OPERATORS = ["equals", "nonEmpty", "empty", "truthy", "falsy", "today", "thisWeek", "thisMonth"] as const;
+export const FILTER_OPERATORS = [
+  "equals", "notEquals", "contains", "nonEmpty", "empty", "truthy", "falsy",
+  "greaterThan", "lessThan", "atLeast", "atMost", "between",
+  "before", "after", "today", "thisWeek", "thisMonth",
+] as const;
 export type FilterOperator = (typeof FILTER_OPERATORS)[number];
 
 // Operators that test a date field against the current date rather than a stored
@@ -34,27 +38,47 @@ export type FilterOperator = (typeof FILTER_OPERATORS)[number];
 export const DATE_WINDOW_OPERATORS = ["today", "thisWeek", "thisMonth"] as const;
 export type DateWindowOperator = (typeof DATE_WINDOW_OPERATORS)[number];
 
-export const CALCULATION_OPERATIONS = ["count", "countWhere", "sum", "sumWhere"] as const;
+// Operators that compare a stored value against a threshold. `between` carries a
+// second bound in `valueEnd`; the rest carry one comparison value. Numeric fields
+// compare numerically; date/datetime and text compare lexicographically (ISO dates
+// sort chronologically). `before`/`after` are date-only aliases of lessThan/greaterThan.
+export const COMPARISON_OPERATORS = ["greaterThan", "lessThan", "atLeast", "atMost", "between", "before", "after"] as const;
+export type ComparisonOperator = (typeof COMPARISON_OPERATORS)[number];
+// Comparison operators restricted to date/datetime fields.
+export const DATE_COMPARISON_OPERATORS = ["before", "after"] as const;
+
+export const CALCULATION_OPERATIONS = [
+  "count", "countWhere",
+  "sum", "sumWhere",
+  "average", "avgWhere",
+  "min", "minWhere",
+  "max", "maxWhere",
+] as const;
 export type CalculationOperation = (typeof CALCULATION_OPERATIONS)[number];
 
-export const DERIVED_FIELD_KINDS = ["dateThreshold", "formula"] as const;
+export const DERIVED_FIELD_KINDS = ["dateThreshold", "formula", "presence"] as const;
 export type DerivedFieldKind = (typeof DERIVED_FIELD_KINDS)[number];
 
-export const CHART_TYPES = ["line"] as const;
+export const CHART_TYPES = ["line", "bar", "pie"] as const;
 export type ChartType = (typeof CHART_TYPES)[number];
 
-// A deterministic trend chart of one numeric field plotted against one date
-// field, sorted chronologically. This covers the ubiquitous "see my <number>
-// over time" request (weight over date, spend over month) without a custom LLM
-// patch. Points come straight from the persisted records at read time.
+// A deterministic chart derived from persisted records at read time. Three kinds:
+//   line — one numeric `yField` plotted against a date `xField`, chronologically
+//          ("see my <number> over time": weight over date, spend over month).
+//   bar  — records grouped by a category/status `xField`; each bar is either the
+//          count of records in that group, or — when `yField` is numeric — the
+//          sum of that measure per group (spend by category).
+//   pie  — the same grouped breakdown shown as a share-of-total donut.
+// bar/pie leave `yField` unset to count records; set it to sum a numeric measure.
 export interface ProductChart {
   id: string;
   label: string;
   type: ChartType;
-  // Field id of the date/datetime axis (x).
+  // line: the date/datetime axis. bar/pie: the category/status field grouped on.
   xField: string;
-  // Field id of the number/currency value plotted (y).
-  yField: string;
+  // line: the number/currency value plotted (required). bar/pie: an optional
+  // numeric measure summed per group; omitted means count records.
+  yField?: string;
 }
 
 // A field whose value is computed at read time from other fields, rather than
@@ -93,7 +117,22 @@ export interface FormulaDerive {
   expression: string;
 }
 
-export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive;
+// A two-state lifecycle that is fully determined by whether another field is
+// filled in — e.g. a book is "Lent out" exactly when its borrower field is set,
+// otherwise "On shelf". Because the status is computed at read time from the
+// source field's presence, the two can never drift out of sync: clearing the
+// source flips the status back, and no separate manual status is stored.
+export interface PresenceDerive {
+  kind: "presence";
+  // Field id whose non-empty value drives this status.
+  sourceField: string;
+  // Option label when the source field is filled in.
+  whenPresent: string;
+  // Option label when the source field is empty.
+  whenEmpty: string;
+}
+
+export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive | PresenceDerive;
 
 export interface ProductField {
   id: string;
@@ -110,6 +149,10 @@ export interface ProductField {
     equals: string;
   };
   derive?: DerivedFieldSpec;
+  // For a `reference` field: the name of the entity this field links to. The field
+  // stores a linked record's id and displays that record's primary field. Kept only
+  // when it resolves to a real, different entity; otherwise the field degrades to text.
+  refEntity?: string;
 }
 
 export interface ProductEntity {
@@ -145,6 +188,7 @@ export interface ProductPriority {
     field: string;
     operator: FilterOperator;
     value?: string;
+    valueEnd?: string;
   };
 }
 
@@ -154,6 +198,8 @@ export interface ProductFilter {
   field: string;
   operator: FilterOperator;
   value?: string;
+  // Upper bound for the `between` operator (inclusive); ignored by other operators.
+  valueEnd?: string;
 }
 
 export interface ProductCalculation {
@@ -168,20 +214,33 @@ export interface ProductCalculation {
   field?: string;
   operator?: FilterOperator;
   value?: string;
+  // Upper bound for a `between` predicate (inclusive); ignored otherwise.
+  valueEnd?: string;
   // For sumWhere: the numeric field whose values are summed over the matching
   // records (e.g. sum `amount` where `category` = Food).
   sumField?: string;
 }
 
 // A one-tap action on each record that mutates one field to a computed value —
-// the deterministic form of the recurring "Done!"/"Mark paid"/"Returned" button
-// that would otherwise force the hybrid (LLM) route. `set` is the mutation:
-// "today" stamps a date field to the current date; "clear" empties the field.
+// the deterministic form of the recurring "Done!"/"Mark paid"/"+1"/"Returned"
+// button that would otherwise force the hybrid (LLM) route. `set` is the mutation:
+//   today     — stamp a date/datetime field to the current date
+//   now       — stamp a datetime field to the current date and time
+//   clear     — empty the field
+//   increment — add `amount` (default 1) to a number/currency field (streaks, tallies, stock)
+//   toggle    — flip a boolean field
+//   setValue  — set a category/status field to the fixed `value` (advance a lifecycle)
+export const QUICK_ACTION_SETS = ["today", "now", "clear", "increment", "toggle", "setValue"] as const;
+export type QuickActionSet = (typeof QUICK_ACTION_SETS)[number];
 export interface ProductQuickAction {
   id: string;
   label: string;
   field: string;
-  set: "today" | "clear";
+  set: QuickActionSet;
+  // Step for `increment` (may be negative to decrement); defaults to 1.
+  amount?: number;
+  // Target value for `setValue`; must be non-empty.
+  value?: string;
 }
 
 export interface ProductCapabilities {
@@ -194,6 +253,9 @@ export interface ProductCapabilities {
   group: boolean;
   transition: boolean;
   calculate: boolean;
+  // Deterministic CSV/JSON export and JSON import of the primary entity's records.
+  // A domain-neutral runtime feature; defaults on, set false to hide the controls.
+  export: boolean;
 }
 
 export interface ProductIR {
@@ -208,7 +270,9 @@ export interface ProductIR {
     design?: DesignIntent;
   };
   entities: ProductEntity[];
-  capabilities: ProductCapabilities;
+  // Raw input capabilities may be partial; normalize fills every field with a
+  // sensible default (export defaults on), so the normalized IR carries them all.
+  capabilities: Partial<ProductCapabilities>;
   filters: ProductFilter[];
   calculations: ProductCalculation[];
   charts: ProductChart[];
@@ -224,6 +288,7 @@ export interface ProductIR {
 export interface NormalizedProductIR extends ProductIR {
   product: ProductIR["product"] & { design: DesignIntent; tagline: string };
   entities: [ProductEntity, ...ProductEntity[]];
+  capabilities: ProductCapabilities;
   standings: ProductStandings[];
 }
 

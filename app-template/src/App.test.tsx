@@ -238,6 +238,39 @@ describe("compiled product runtime", () => {
     expect(computeDerivedValue(bad, { current: "5" }, now)).toBe(""); // non-finite → no value
   });
 
+  it("derives a presence status from whether the source field is filled in", () => {
+    // A two-state lifecycle computed from another field's presence: the book is
+    // "Lent out" exactly when a borrower is recorded, otherwise "On shelf". The
+    // status can never drift from the borrower because it is never stored.
+    const now = new Date(Date.UTC(2026, 7, 22));
+    const status: FieldConfig = {
+      key: "status", label: "Status", type: "status", options: ["On shelf", "Lent out"],
+      derive: { kind: "presence", sourceField: "borrower", whenPresent: "Lent out", whenEmpty: "On shelf" },
+    };
+    expect(computeDerivedValue(status, { borrower: "prabhu" }, now)).toBe("Lent out");
+    expect(computeDerivedValue(status, { borrower: "" }, now)).toBe("On shelf"); // cleared on return → back on shelf
+    expect(computeDerivedValue(status, { borrower: "   " }, now)).toBe("On shelf"); // whitespace-only is empty
+    expect(computeDerivedValue(status, {}, now)).toBe("On shelf"); // no borrower key at all
+  });
+
+  it("counts a presence-derived status from stored records that only carry the source field", () => {
+    // The reported bug: a book with a borrower recorded but no stored status was
+    // counted as "On shelf", so "Lent out" showed 0. With status derived from the
+    // borrower's presence, the count is computed from the borrower alone.
+    const now = new Date(Date.UTC(2026, 7, 27));
+    const status: FieldConfig = {
+      key: "status", label: "Status", type: "status", options: ["On shelf", "Lent out"],
+      derive: { kind: "presence", sourceField: "borrower", whenPresent: "Lent out", whenEmpty: "On shelf" },
+    };
+    const lentOut: SummaryConfig = { id: "lent", label: "Lent out", operation: "countWhere", field: "status", operator: "equals", value: "Lent out" };
+    const onShelf: SummaryConfig = { id: "shelf", label: "On shelf", operation: "countWhere", field: "status", operator: "equals", value: "On shelf" };
+    // Stored records never contain a `status` key — only what the user typed.
+    const withStatus = (values: Record<string, string>) => ({ values: { ...values, status: computeDerivedValue(status, values, now) } });
+    const records = [withStatus({ borrower: "prabhu" }), withStatus({ borrower: "" })];
+    expect(computeSummaryValue(lentOut, records, now)).toBe(1); // the borrowed book, not 0
+    expect(computeSummaryValue(onShelf, records, now)).toBe(1);
+  });
+
   it("matches a date field against today, this week, and this month windows", () => {
     const now = new Date(Date.UTC(2026, 7, 19)); // Wed 2026-08-19
     expect(matchesPredicate("2026-08-19", "today", undefined, now)).toBe(true);

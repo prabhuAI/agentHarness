@@ -49,6 +49,7 @@
         "create": true,
         "delete": true,
         "edit": true,
+        "export": false,
         "filter": true,
         "group": true,
         "search": true,
@@ -163,6 +164,7 @@
         "create": true,
         "delete": true,
         "edit": true,
+        "export": false,
         "group": true,
         "search": true,
         "sort": true

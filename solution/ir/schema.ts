@@ -74,6 +74,11 @@ export function validateProductIR(value: unknown): ProductIR {
         else if (!DERIVED_FIELD_KINDS.includes(field.derive.kind as never)) issues.push(`field ${fieldIndex}.derive.kind is unsupported`);
         else if (field.derive.kind === "formula") {
           if (typeof field.derive.expression !== "string" || field.derive.expression.trim() === "") issues.push(`field ${fieldIndex}.derive.expression is required`);
+        } else if (field.derive.kind === "presence") {
+          if (typeof field.derive.sourceField !== "string" || field.derive.sourceField.trim() === "") issues.push(`field ${fieldIndex}.derive.sourceField is required`);
+          for (const label of ["whenPresent", "whenEmpty"] as const) {
+            if (typeof field.derive[label] !== "string" || field.derive[label].trim() === "") issues.push(`field ${fieldIndex}.derive.${label} is required`);
+          }
         } else {
           if (typeof field.derive.dateField !== "string" || field.derive.dateField.trim() === "") issues.push(`field ${fieldIndex}.derive.dateField is required`);
           if (!isRecord(field.derive.buckets)) issues.push(`field ${fieldIndex}.derive.buckets must be an object`);

@@ -25,7 +25,7 @@ interface CompiledConfig {
   charts: ProductChart[];
   quickActions: ProductQuickAction[];
   sorts: Array<{ id: string; label: string; field?: string; direction?: "asc" | "desc"; type?: string }>;
-  capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean };
+  capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean; export: boolean };
   fields: Array<Record<string, unknown>>;
   entities?: CompiledEntityConfig[];
   standings?: ProductStandings[];
@@ -54,6 +54,7 @@ function compileFields(entity: ProductEntity): Array<Record<string, unknown>> {
     ...(field.max !== undefined ? { max: field.max } : {}),
     ...(field.visibleWhen ? { visibleWhen: field.visibleWhen } : {}),
     ...(field.derive ? { derive: field.derive } : {}),
+    ...(field.refEntity ? { refEntity: field.refEntity } : {}),
   }));
 }
 
@@ -133,6 +134,7 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
       search: ir.capabilities.search && searchableFields.length > 0,
       sort: ir.capabilities.sort,
       group: ir.capabilities.group && hasGroupableField,
+      export: ir.capabilities.export,
     },
     fields: compileFields(entity),
     ...(ir.entities.length > 1 ? { entities: ir.entities.map(compileEntity) } : {}),

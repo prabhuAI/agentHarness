@@ -153,8 +153,15 @@ function choose<T>(items: T[], seed: number, salt: number): T {
   return items[((seed ^ salt) >>> 0) % items.length]!;
 }
 
+const PRIMARY_VIEWS = new Set<PrimaryView>(["tracker", "table", "board", "gallery", "agenda", "dashboard", "standings"]);
+
 export function resolveDesign(view: PrimaryView | Genome, intent: DesignIntent, seed = ""): CompiledDesign {
-  const primary: PrimaryView = view === "workflow" ? "board" : view === "catalog" ? "gallery" : view === "planner" ? "agenda" : view;
+  // Accept either a resolved presentation view or a legacy genome. A genome maps
+  // to its closest view; anything without a mapping (e.g. ledger, directory) falls
+  // back to the honest table layout.
+  const primary: PrimaryView = PRIMARY_VIEWS.has(view as PrimaryView)
+    ? (view as PrimaryView)
+    : view === "workflow" ? "board" : view === "catalog" ? "gallery" : view === "planner" ? "agenda" : "table";
   const layout = LAYOUTS[primary];
   const hash = seedFrom(seed);
   const basePalette = choose(PALETTES[intent.tone], hash, 0x9e3779b1);

@@ -89,11 +89,12 @@ export function resolvePresentation(ir: NormalizedProductIR): PresentationPlan {
   } else if (ir.charts.length > 0 || ir.product.genome === "dashboard") {
     primary = "dashboard";
     reason = ir.charts.length > 0 ? "chart-led monitoring" : "metrics dashboard product";
-  } else if (ir.product.genome === "planner" || (dateField && eventLanguage)) {
+  } else if (ir.product.genome === "planner" || (dateField && eventLanguage) || (ir.product.genome === "log" && dateField)) {
     // Planning is time-anchored; it outranks a status board even when a status
-    // field is present.
+    // field is present. A log is a dated event stream, so it reads as an agenda
+    // too — but only when it actually has a date axis to order by.
     primary = "agenda";
-    reason = dateField ? `date-centered planning by ${dateField.id}` : "planning workspace";
+    reason = ir.product.genome === "log" ? `chronological log by ${dateField!.id}` : dateField ? `date-centered planning by ${dateField.id}` : "planning workspace";
   } else if (statusField && (ir.capabilities.transition || ir.product.genome === "workflow")) {
     primary = "board";
     reason = `lifecycle grouped by ${statusField.id}`;

@@ -123,6 +123,37 @@ describe("Product IR compiler", () => {
     expect(normalized.calculations).toContainEqual(expect.objectContaining({ label: "On shelf", field: "status" }));
   });
 
+  it("normalizes a presence-derived status into a computed facet driven by another field", () => {
+    const library = fixture();
+    library.entities[0]!.name = "book";
+    library.entities[0]!.plural = "books";
+    library.entities[0]!.fields.push({ id: "borrower", label: "Borrowed by", type: "text", required: false });
+    const status = library.entities[0]!.fields.find((field) => field.id === "status")!;
+    status.required = true; // a computed field can never be user-required
+    status.options = [];
+    status.derive = { kind: "presence", sourceField: "borrower", whenPresent: "Lent out", whenEmpty: "On shelf" } as never;
+    library.filters = [];
+    library.calculations = [{ id: "total", label: "Total books", operation: "count" }];
+
+    const normalized = normalizeProductIR(validateProductIR(library));
+    const normalizedStatus = normalized.entities[0]!.fields.find((field) => field.id === "status")!;
+    expect(normalizedStatus.type).toBe("status");
+    expect(normalizedStatus.required).toBe(false);
+    expect(normalizedStatus.options).toEqual(["On shelf", "Lent out"]); // [empty, present]
+    expect(normalizedStatus.derive).toEqual({ kind: "presence", sourceField: "borrower", whenPresent: "Lent out", whenEmpty: "On shelf" });
+    // The computed status still seeds per-state filters and counts, so "Lent out"
+    // can never drift from the borrower field.
+    expect(normalized.filters).toContainEqual(expect.objectContaining({ field: "status", operator: "equals", value: "Lent out" }));
+    expect(normalized.calculations).toContainEqual(expect.objectContaining({ field: "status", operation: "countWhere", value: "Lent out" }));
+
+    // A dangling source reference degrades the field to a plain manual status
+    // rather than emitting an unresolvable derive.
+    const dangling = fixture();
+    dangling.entities[0]!.fields.find((field) => field.id === "status")!.derive = { kind: "presence", sourceField: "nope", whenPresent: "A", whenEmpty: "B" } as never;
+    const degraded = normalizeProductIR(validateProductIR(dangling));
+    expect(degraded.entities[0]!.fields.find((field) => field.id === "status")!.derive).toBeUndefined();
+  });
+
   it("deduplicates an entity-scoped explicit metric against the primary entity's derived facet metric", () => {
     const hiring = fixture();
     hiring.entities[0]!.name = "candidate";

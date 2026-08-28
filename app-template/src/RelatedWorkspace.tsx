@@ -72,13 +72,21 @@ export function RelatedWorkspace({ primaryRecords }: { primaryRecords: EntityRec
   const entityFor = (name: string) => entities.find((entity) => entity.name === name);
   const referenceFor = (entityName: string, fieldKey: string) => (productConfig.standings ?? [])
     .find((table) => table.sourceEntity === entityName && table.participants.some((participant) => participant.entityField === fieldKey));
+  // The entity a field links to: an explicit `reference` field's target, or the
+  // row entity of a standings participant. Both store a linked record's id and
+  // render as that record's primary-field label / a picker of its records.
+  const linkTargetName = (entity: EntityConfig, fieldKey: string): string | undefined => {
+    const field = entity.fields.find((candidate) => candidate.key === fieldKey);
+    if (field?.type === "reference" && field.refEntity) return field.refEntity;
+    return referenceFor(entity.name, fieldKey)?.rowEntity;
+  };
   const displayRecordValue = (entity: EntityConfig, fieldKey: string, value: RecordValue | undefined): string => {
     const raw = String(value ?? "").trim();
     if (!raw) return "—";
-    const reference = referenceFor(entity.name, fieldKey);
-    if (!reference) return raw;
-    const rowsEntity = entityFor(reference.rowEntity);
-    const linked = recordsFor(reference.rowEntity).find((candidate) => candidate.id === raw);
+    const targetName = linkTargetName(entity, fieldKey);
+    if (!targetName) return raw;
+    const rowsEntity = entityFor(targetName);
+    const linked = recordsFor(targetName).find((candidate) => candidate.id === raw);
     return rowsEntity && linked ? String(linked.values[rowsEntity.primaryField] ?? "Unnamed") : "Unknown record";
   };
   const recordTitle = (entity: EntityConfig, record: EntityRecord): string => {
@@ -139,11 +147,11 @@ export function RelatedWorkspace({ primaryRecords }: { primaryRecords: EntityRec
   const renderField = (entity: EntityConfig, field: FieldConfig) => {
     const id = `related-${entity.name}-${field.key}`;
     const value = values[field.key] ?? (field.type === "boolean" ? false : "");
-    const reference = referenceFor(entity.name, field.key);
+    const targetName = linkTargetName(entity, field.key);
     let control;
-    if (reference) {
-      const rowsEntity = entityFor(reference.rowEntity)!;
-      const options = recordsFor(reference.rowEntity);
+    if (targetName) {
+      const rowsEntity = entityFor(targetName)!;
+      const options = recordsFor(targetName);
       control = <select id={id} value={String(value)} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}>
         <option value="">Choose {field.label.toLowerCase()}</option>
         {options.map((record) => <option key={record.id} value={record.id}>{String(record.values[rowsEntity.primaryField] ?? "Unnamed")}</option>)}

@@ -1,6 +1,6 @@
 import type { NormalizedProductIR, RouteDecision } from "../ir/types.js";
 
-const RUNTIME_CAPABILITIES = new Set(["create", "edit", "delete", "search", "filter", "sort", "group", "calculate", "transition"]);
+const RUNTIME_CAPABILITIES = new Set(["create", "edit", "delete", "search", "filter", "sort", "group", "calculate", "transition", "export"]);
 
 export function classifyCapabilities(ir: NormalizedProductIR): RouteDecision {
   const requested = Object.entries(ir.capabilities).filter(([, enabled]) => enabled).map(([name]) => name);

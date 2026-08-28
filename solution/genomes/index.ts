@@ -12,6 +12,10 @@ export const GENOME_DEFAULTS: Record<Genome, GenomeDefaults> = {
   catalog: { eyebrow: "Catalog", collectionLabel: "Library", defaultCapabilities: ["create", "edit", "delete", "search", "filter", "sort"] },
   planner: { eyebrow: "Planner", collectionLabel: "Plan", defaultCapabilities: ["create", "edit", "delete", "search", "filter", "sort"] },
   dashboard: { eyebrow: "Dashboard", collectionLabel: "Data", defaultCapabilities: ["create", "edit", "delete", "filter", "calculate", "group"] },
+  ledger: { eyebrow: "Ledger", collectionLabel: "Entries", defaultCapabilities: ["create", "edit", "delete", "search", "filter", "calculate"] },
+  directory: { eyebrow: "Directory", collectionLabel: "Directory", defaultCapabilities: ["create", "edit", "delete", "search", "filter", "sort"] },
+  log: { eyebrow: "Log", collectionLabel: "Entries", defaultCapabilities: ["create", "edit", "delete", "search", "filter", "sort"] },
+  inventory: { eyebrow: "Inventory", collectionLabel: "Stock", defaultCapabilities: ["create", "edit", "delete", "search", "filter", "sort", "calculate"] },
 };
 
 export function genomeFor(ir: NormalizedProductIR): GenomeDefaults {

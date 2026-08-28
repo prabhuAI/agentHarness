@@ -1,6 +1,13 @@
 import { analyzeFormula } from "./formula.js";
-import type { DateThresholdDerive, DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductField, ProductFilter, ProductIR, ProductPriority, ProductQuickAction, ProductStandings } from "./types.js";
-import { DATE_WINDOW_OPERATORS, DERIVED_FIELD_KINDS, FIELD_TYPES, FILTER_OPERATORS, GENOMES, type FieldType } from "./types.js";
+import type { ChartType, DateThresholdDerive, DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductField, ProductFilter, ProductIR, ProductPriority, ProductQuickAction, ProductStandings } from "./types.js";
+import { CHART_TYPES, DATE_COMPARISON_OPERATORS, DATE_WINDOW_OPERATORS, DERIVED_FIELD_KINDS, FIELD_TYPES, FILTER_OPERATORS, GENOMES, QUICK_ACTION_SETS, type FieldType } from "./types.js";
+
+// Operators that require a non-empty comparison `value` (between additionally
+// requires `valueEnd`, checked separately). nonEmpty/empty/truthy/falsy and the
+// date-window operators carry no value and are absent here.
+const VALUE_OPERATORS = new Set<FilterOperator>([
+  "equals", "notEquals", "contains", "greaterThan", "lessThan", "atLeast", "atMost",
+]);
 
 // Common field-type synonyms weaker models emit, mapped to the runtime's vocabulary.
 const FIELD_TYPE_SYNONYMS: Record<string, FieldType> = {
@@ -48,6 +55,10 @@ function inferDesignIntent(input: ProductIR): DesignIntent {
     catalog: { tone: "calm", density: "spacious", contrast: "soft", motion: "subtle" },
     planner: { tone: "warm", density: "comfortable", contrast: "balanced", motion: "subtle" },
     dashboard: { tone: "technical", density: "compact", contrast: "high", motion: "subtle" },
+    ledger: { tone: "professional", density: "compact", contrast: "high", motion: "subtle" },
+    directory: { tone: "calm", density: "comfortable", contrast: "balanced", motion: "subtle" },
+    log: { tone: "calm", density: "comfortable", contrast: "balanced", motion: "subtle" },
+    inventory: { tone: "professional", density: "compact", contrast: "balanced", motion: "subtle" },
   };
   const inferred = { ...genomeDefaults[resolveGenome(product.genome)] };
   if (includesAny(text, ["family", "parent", "home", "community", "care", "food"])) inferred.tone = "warm";
@@ -71,6 +82,17 @@ function normalizeDerive(raw: unknown, fieldId: string, fieldIds: Set<string>, n
   const spec = raw as { kind?: unknown; dateField?: unknown; thresholdField?: unknown; thresholdDays?: unknown; soonWithinDays?: unknown; buckets?: Partial<DateThresholdDerive["buckets"]>; expression?: unknown };
   const kind = String(spec.kind);
   if (!(DERIVED_FIELD_KINDS as readonly string[]).includes(kind)) return undefined;
+  if (kind === "presence") {
+    // A presence lifecycle needs a real sibling source field (not itself) and
+    // two distinct labels; otherwise it degrades to a plain manual field.
+    const presence = raw as { sourceField?: unknown; whenPresent?: unknown; whenEmpty?: unknown };
+    const sourceField = identifier(String(presence.sourceField ?? ""), "");
+    if (!fieldIds.has(sourceField) || sourceField === fieldId) return undefined;
+    const whenPresent = clean(String(presence.whenPresent ?? ""));
+    const whenEmpty = clean(String(presence.whenEmpty ?? ""));
+    if (!whenPresent || !whenEmpty || whenPresent === whenEmpty) return undefined;
+    return { kind: "presence", sourceField, whenPresent, whenEmpty };
+  }
   if (kind === "formula") {
     const expression = clean(String(spec.expression ?? ""));
     if (!expression) return undefined;
@@ -116,13 +138,22 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     const rawDerive = (field as ProductField).derive;
     const deriveKind = rawDerive && typeof rawDerive === "object" ? String((rawDerive as { kind?: unknown }).kind) : "";
     const buckets = (rawDerive as { buckets?: Partial<DateThresholdDerive["buckets"]> } | undefined)?.buckets;
+    const isPresenceDerive = deriveKind === "presence";
+    const isFormulaDerive = deriveKind === "formula";
     // Only a date-threshold lifecycle folds its bucket labels into options (so the
     // facet machinery derives per-band filters and counts); a formula stays numeric.
-    const isDateThresholdDerive = deriveKind === "dateThreshold" || (deriveKind !== "formula" && Boolean(buckets));
-    const isFormulaDerive = deriveKind === "formula";
+    const isDateThresholdDerive = deriveKind === "dateThreshold" || (!isPresenceDerive && !isFormulaDerive && Boolean(buckets));
     if (isDateThresholdDerive && buckets) {
       const bands = [buckets.overdue, buckets.soon, buckets.ok].filter((value): value is string => typeof value === "string");
       options = uniqueStrings([...(options ?? []), ...bands]);
+    }
+    // A presence lifecycle's options are exactly its two computed labels, in the
+    // order [empty, present] so the "resting" state reads first as a filter chip.
+    // Fold them in so the facet machinery derives per-state filters and counts.
+    if (isPresenceDerive) {
+      const presence = rawDerive as { whenEmpty?: unknown; whenPresent?: unknown };
+      const labels = [presence.whenEmpty, presence.whenPresent].filter((value): value is string => typeof value === "string" && value.trim() !== "");
+      options = uniqueStrings([...(options ?? []), ...labels]);
     }
     // A field carrying an enumerated option list is a choice control regardless of
     // the type the model tagged it with. Weaker models often emit `text` with
@@ -133,12 +164,15 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     // A date-threshold field is a computed lifecycle: force `status` so it groups,
     // filters, and badges like one. A formula field is a computed number: force a
     // numeric type so it renders and sums as a number, never a free-text input.
-    if (isDateThresholdDerive) type = "status";
+    if (isDateThresholdDerive || isPresenceDerive) type = "status";
     else if (isFormulaDerive) type = field.type === "currency" ? "currency" : "number";
     // A category dropdown defaults to accepting custom input when the model didn't say
     // otherwise: it matches the "prefer suggestions with custom input" guidance and keeps
     // an open-ended category (e.g. "kind of book") usable. Status stays a fixed lifecycle.
     const allowCustom = field.allowCustom !== undefined ? field.allowCustom : (type === "category" && hasOptions ? true : undefined);
+    // A reference field carries the target entity name; it is validated against
+    // the full entity set in a later pass (unresolved → degraded to plain text).
+    const refEntity = type === "reference" ? clean(String((field as ProductField).refEntity ?? "")) : "";
     return {
       id,
       label: clean(field.label || id),
@@ -150,6 +184,7 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
       ...(allowCustom !== undefined ? { allowCustom } : {}),
       ...(Number.isFinite(field.min) ? { min: field.min } : {}),
       ...(Number.isFinite(field.max) ? { max: field.max } : {}),
+      ...(refEntity ? { refEntity } : {}),
     };
   });
   const normalizedIds = new Set(normalized.map((field) => field.id));
@@ -276,17 +311,25 @@ function dedupeCalculationsByLabel(calculations: ProductCalculation[], defaultEn
 // and a date-window operator targets an actual date field. Dropping the rest
 // stops a model's malformed filter/metric (e.g. countWhere on a field with no
 // value, or `equals "thisMonth"`) from shipping as a dead or misleading control.
-function predicateUsable(fieldId: string | undefined, operator: FilterOperator | undefined, value: string | undefined, fieldMap: Map<string, ProductField>): boolean {
+function predicateUsable(fieldId: string | undefined, operator: FilterOperator | undefined, value: string | undefined, fieldMap: Map<string, ProductField>, valueEnd?: string): boolean {
   if (!fieldId || !fieldMap.has(fieldId)) return false;
   // No operator means no real predicate — a countWhere/sumWhere without one would
   // silently default to "nonEmpty" and count/sum every record under a specific
   // label (the "Food this month" that was really an all-records total). Drop it.
   if (!operator || !(FILTER_OPERATORS as readonly string[]).includes(operator)) return false;
+  const type = fieldMap.get(fieldId)?.type;
   if ((DATE_WINDOW_OPERATORS as readonly string[]).includes(operator)) {
-    const type = fieldMap.get(fieldId)?.type;
     return type === "date" || type === "datetime";
   }
-  if (operator === "equals") return value !== undefined && value !== "";
+  // before/after only make sense against a date axis and need a comparison value.
+  if ((DATE_COMPARISON_OPERATORS as readonly string[]).includes(operator)) {
+    return (type === "date" || type === "datetime") && value !== undefined && value !== "";
+  }
+  // between needs both an inclusive low (value) and high (valueEnd) bound.
+  if (operator === "between") return value !== undefined && value !== "" && valueEnd !== undefined && valueEnd !== "";
+  // Every value-carrying operator needs a non-empty comparison value; the rest
+  // (nonEmpty/empty/truthy/falsy) test presence and carry none.
+  if (VALUE_OPERATORS.has(operator)) return value !== undefined && value !== "";
   return true;
 }
 
@@ -309,7 +352,9 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     // "Aug 17, 2026"), so its raw stored value never appears verbatim, and it
     // rarely identifies the record. Prefer a non-date enterable field for the
     // primary when one exists; fall back to a date only when nothing else can.
-    const titleable = enterable.filter((field) => field.type !== "date" && field.type !== "datetime");
+    // A reference field stores an opaque record id, so like a date it never makes
+    // a readable title; keep it out of the preferred primary pool.
+    const titleable = enterable.filter((field) => field.type !== "date" && field.type !== "datetime" && field.type !== "reference");
     const pool = titleable.length > 0 ? titleable : enterable;
     const fallbackPrimary = pool[0]?.id ?? enterable[0]?.id ?? fields[0]?.id ?? "name";
     const requestedPrimary = identifier(entity.primaryField, fallbackPrimary);
@@ -324,6 +369,23 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
       fields: requiredFields,
     };
   }) as [ProductEntity, ...ProductEntity[]];
+  // Resolve reference fields now that every entity is known. A reference is kept
+  // only when its refEntity resolves to a real, *different* entity (self-references
+  // and dangling targets are meaningless); otherwise the field degrades to plain
+  // text so a mis-specified link never blocks the compile. The stored refEntity is
+  // rewritten to the target's canonical (cleaned) name so the runtime can match it.
+  const entityByIdentifier = new Map(entities.map((entity) => [identifier(entity.name, ""), entity.name]));
+  for (const entity of entities) {
+    entity.fields = entity.fields.map((field) => {
+      if (field.type !== "reference") return field;
+      const target = field.refEntity ? entityByIdentifier.get(identifier(field.refEntity, "")) : undefined;
+      if (!target || target === entity.name) {
+        const { refEntity, ...rest } = field;
+        return { ...rest, type: "text" };
+      }
+      return { ...field, refEntity: target };
+    });
+  }
   const primaryFieldMap = new Map(entities[0].fields.map((field) => [field.id, field]));
   const primaryFields = new Set(primaryFieldMap.keys());
   // A category/status field with a small fixed option set is, by construction, a
@@ -346,6 +408,9 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     group: (input.capabilities?.group ?? false) || hasFacet,
     transition: input.capabilities?.transition ?? false,
     calculate: (input.capabilities?.calculate ?? hasExplicitCalculations) || hasFacet,
+    // Off by default: export/import is a real feature, not baseline CRUD, so it
+    // appears only when the idea actually asks to export, back up, or download data.
+    export: input.capabilities?.export ?? false,
   };
   const isNumeric = (fieldId: string | undefined): boolean => {
     const type = fieldId ? primaryFieldMap.get(fieldId)?.type : undefined;
@@ -360,9 +425,9 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
       // "thisMonth") into the real window operator so it actually filters.
       const asWindow = windowKeyword(filter.value);
       if (asWindow && (type === "date" || type === "datetime")) return { ...base, operator: asWindow };
-      return { ...base, operator: filter.operator, ...(filter.value !== undefined ? { value: filter.value } : {}) };
+      return { ...base, operator: filter.operator, ...(filter.value !== undefined ? { value: filter.value } : {}), ...(filter.valueEnd !== undefined ? { valueEnd: filter.valueEnd } : {}) };
     })
-    .filter((filter) => predicateUsable(filter.field, filter.operator, filter.value, primaryFieldMap));
+    .filter((filter) => predicateUsable(filter.field, filter.operator, filter.value, primaryFieldMap, filter.valueEnd));
   let calculations = (input.calculations ?? [])
     .map((calculation, index) => {
       const id = identifier(calculation.id, `metric_${index + 1}`);
@@ -380,46 +445,85 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     })
     .filter((calculation) => {
       if (calculation.operation === "count") return true;
-      if (calculation.operation === "sum") return isNumeric(calculation.field);
-      if (calculation.operation === "sumWhere") return isNumeric(calculation.sumField) && predicateUsable(calculation.field, calculation.operator, calculation.value, primaryFieldMap);
+      // A bare aggregate (sum/average/min/max) totals or reduces one numeric field.
+      if (calculation.operation === "sum" || calculation.operation === "average" || calculation.operation === "min" || calculation.operation === "max") return isNumeric(calculation.field);
+      // A conditional aggregate reduces sumField over records matching the predicate.
+      if (calculation.operation === "sumWhere" || calculation.operation === "avgWhere" || calculation.operation === "minWhere" || calculation.operation === "maxWhere") return isNumeric(calculation.sumField) && predicateUsable(calculation.field, calculation.operator, calculation.value, primaryFieldMap, calculation.valueEnd);
       // countWhere: a genuine predicate over a real field, never a bare no-value count.
-      return predicateUsable(calculation.field, calculation.operator, calculation.value, primaryFieldMap);
+      return predicateUsable(calculation.field, calculation.operator, calculation.value, primaryFieldMap, calculation.valueEnd);
     });
   if (capabilities.filter) filters = deriveOptionFilters(entities[0].fields, filters);
   filters = dedupeFiltersByLabel(filters);
   if (capabilities.calculate) calculations = deriveOptionCalculations(entities[0].fields, calculations);
   calculations = dedupeCalculationsByLabel(calculations, entities[0].name);
-  // A chart is kept only when its axes resolve to a real date field (x) and a
-  // real numeric field (y); anything else is dropped rather than rejected, so a
-  // mis-specified chart never blocks a compile.
+  // A chart is kept only when its axes resolve to fields of the right type for its
+  // kind — line needs a date x and a numeric y; bar/pie need a category/status x and
+  // may carry an optional numeric measure (dropped to a count when absent/invalid).
+  // Anything else is dropped rather than rejected, so a mis-specified chart never
+  // blocks a compile. An unknown type defaults to line.
   const charts = (input.charts ?? [])
-    .map((chart, index): ProductChart => ({
-      id: identifier(String(chart?.id ?? ""), `chart_${index + 1}`),
-      label: clean(String(chart?.label ?? "")) || "Trend",
-      type: "line",
-      xField: identifier(String(chart?.xField ?? ""), ""),
-      yField: identifier(String(chart?.yField ?? ""), ""),
-    }))
+    .map((chart, index): ProductChart => {
+      const type = (CHART_TYPES as readonly string[]).includes(String(chart?.type)) ? (chart!.type as ChartType) : "line";
+      const yField = identifier(String(chart?.yField ?? ""), "");
+      const yType = primaryFieldMap.get(yField)?.type;
+      const yNumeric = yType === "number" || yType === "currency";
+      return {
+        id: identifier(String(chart?.id ?? ""), `chart_${index + 1}`),
+        label: clean(String(chart?.label ?? "")) || "Trend",
+        type,
+        xField: identifier(String(chart?.xField ?? ""), ""),
+        // line requires a numeric y; bar/pie keep a numeric measure only when valid.
+        ...(type === "line" ? { yField } : yNumeric ? { yField } : {}),
+      };
+    })
     .filter((chart) => {
       const xType = primaryFieldMap.get(chart.xField)?.type;
-      const yType = primaryFieldMap.get(chart.yField)?.type;
-      return (xType === "date" || xType === "datetime") && (yType === "number" || yType === "currency");
+      if (chart.type === "line") {
+        const yType = chart.yField ? primaryFieldMap.get(chart.yField)?.type : undefined;
+        return (xType === "date" || xType === "datetime") && (yType === "number" || yType === "currency");
+      }
+      // bar/pie group on a fixed-option facet; without options there is nothing to bucket.
+      const xField = primaryFieldMap.get(chart.xField);
+      return (xType === "category" || xType === "status") && (xField?.options?.length ?? 0) > 0;
     });
   // A quick action mutates one stored field, so it is kept only when the field
-  // exists and is enterable (never a derived field), and — for a "today" stamp —
-  // is actually a date/datetime field. Anything else is dropped rather than
-  // rejected, so a mis-specified action never blocks a compile.
+  // exists, is enterable (never a derived field), and the verb matches the field's
+  // type — a date stamp needs a date field, an increment a numeric one, a toggle a
+  // boolean, a setValue a choice field with a value. Anything else is dropped
+  // rather than rejected, so a mis-specified action never blocks a compile.
   const quickActions = (input.quickActions ?? [])
-    .map((action, index): ProductQuickAction => ({
-      id: identifier(String(action?.id ?? ""), `action_${index + 1}`),
-      label: clean(String(action?.label ?? "")) || "Update",
-      field: identifier(String(action?.field ?? ""), ""),
-      set: action?.set === "clear" ? "clear" : "today",
-    }))
+    .map((action, index): ProductQuickAction => {
+      const set = (QUICK_ACTION_SETS as readonly string[]).includes(String(action?.set)) ? (action!.set as ProductQuickAction["set"]) : "today";
+      const amount = Number(action?.amount);
+      const value = clean(String(action?.value ?? ""));
+      return {
+        id: identifier(String(action?.id ?? ""), `action_${index + 1}`),
+        label: clean(String(action?.label ?? "")) || "Update",
+        field: identifier(String(action?.field ?? ""), ""),
+        set,
+        ...(set === "increment" ? { amount: Number.isFinite(amount) && amount !== 0 ? amount : 1 } : {}),
+        ...(set === "setValue" && value ? { value } : {}),
+      };
+    })
     .filter((action) => {
       const field = primaryFieldMap.get(action.field);
       if (!field || field.derive) return false;
-      return action.set === "clear" || field.type === "date" || field.type === "datetime";
+      switch (action.set) {
+        case "clear": return true;
+        case "today": return field.type === "date" || field.type === "datetime";
+        case "now": return field.type === "datetime";
+        case "increment": return field.type === "number" || field.type === "currency";
+        case "toggle": return field.type === "boolean";
+        // setValue advances a choice field; require a target value, and — when the
+        // field has a fixed option set (status, or a category without custom input) —
+        // require the target to be one of those options.
+        case "setValue": {
+          if ((field.type !== "category" && field.type !== "status") || !action.value) return false;
+          const fixed = field.type === "status" || field.allowCustom === false;
+          return !fixed || (field.options ?? []).includes(action.value);
+        }
+        default: return false;
+      }
     });
   // A priority is a deterministic ordering over the primary entity. Invalid
   // field references degrade to no priority rather than forcing a repair call.
@@ -431,8 +535,8 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     if (sortTarget && !sortTarget.derive) {
       const rawFilter = input.priority.filter;
       const filterField = rawFilter ? identifier(rawFilter.field, "") : "";
-      const filter = rawFilter && predicateUsable(filterField, rawFilter.operator, rawFilter.value, primaryFieldMap)
-        ? { field: filterField, operator: rawFilter.operator, ...(rawFilter.value !== undefined ? { value: clean(rawFilter.value) } : {}) }
+      const filter = rawFilter && predicateUsable(filterField, rawFilter.operator, rawFilter.value, primaryFieldMap, rawFilter.valueEnd)
+        ? { field: filterField, operator: rawFilter.operator, ...(rawFilter.value !== undefined ? { value: clean(rawFilter.value) } : {}), ...(rawFilter.valueEnd !== undefined ? { valueEnd: clean(rawFilter.valueEnd) } : {}) }
         : undefined;
       priority = {
         label: clean(input.priority.label ?? "") || "Next up",

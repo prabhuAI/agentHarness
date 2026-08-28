@@ -2,8 +2,11 @@ import rawConfig from "../product.config.json";
 
 export type FieldType =
   | "text" | "longText" | "number" | "currency" | "date" | "datetime"
-  | "boolean" | "category" | "status" | "email" | "url";
-export type PredicateOperator = "equals" | "nonEmpty" | "empty" | "truthy" | "falsy" | "today" | "thisWeek" | "thisMonth";
+  | "boolean" | "category" | "status" | "email" | "url" | "reference";
+export type PredicateOperator =
+  | "equals" | "notEquals" | "contains" | "nonEmpty" | "empty" | "truthy" | "falsy"
+  | "greaterThan" | "lessThan" | "atLeast" | "atMost" | "between"
+  | "before" | "after" | "today" | "thisWeek" | "thisMonth";
 
 // A value computed at read time from other fields, never entered by the user.
 // `dateThreshold` buckets a record by how its elapsed days since `dateField`
@@ -22,7 +25,15 @@ export interface FormulaDerive {
   kind: "formula";
   expression: string;
 }
-export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive;
+// `presence` computes a two-state status from whether `sourceField` is filled in
+// (`whenPresent`) or empty (`whenEmpty`), so the status can never drift from it.
+export interface PresenceDerive {
+  kind: "presence";
+  sourceField: string;
+  whenPresent: string;
+  whenEmpty: string;
+}
+export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive | PresenceDerive;
 
 export interface FieldConfig {
   key: string;
@@ -39,6 +50,9 @@ export interface FieldConfig {
     equals: string;
   };
   derive?: DerivedFieldSpec;
+  // For a `reference` field: the entity this field links to. The stored value is a
+  // linked record's id; the UI shows and picks by that entity's primary field.
+  refEntity?: string;
 }
 
 export interface FilterPreset {
@@ -47,27 +61,38 @@ export interface FilterPreset {
   field: string;
   operator: PredicateOperator;
   value?: string;
+  // Inclusive upper bound for the `between` operator; ignored by others.
+  valueEnd?: string;
 }
 
 export interface SummaryConfig {
   id: string;
   label: string;
-  operation: "count" | "countWhere" | "sum" | "sumWhere";
+  operation:
+    | "count" | "countWhere"
+    | "sum" | "sumWhere"
+    | "average" | "avgWhere"
+    | "min" | "minWhere"
+    | "max" | "maxWhere";
   field?: string;
   operator?: PredicateOperator;
   value?: string;
-  // For sumWhere: the numeric field summed over records matching the predicate.
+  valueEnd?: string;
+  // For the *Where conditional aggregates: the numeric field reduced over the
+  // records matching the predicate.
   sumField?: string;
 }
 
-// A deterministic trend chart: the numeric `yField` plotted against the date
-// `xField`, one point per record, ordered chronologically.
+// A deterministic chart. `line` plots the numeric `yField` against the date
+// `xField` chronologically. `bar`/`pie` group records by the category/status
+// `xField`; each group is a record count, or the sum of the numeric `yField`
+// when one is given.
 export interface ChartConfig {
   id: string;
   label: string;
-  type: "line";
+  type: "line" | "bar" | "pie";
   xField: string;
-  yField: string;
+  yField?: string;
 }
 
 // A single option in the list's sort control. `updated`/`created` are the two
@@ -85,7 +110,7 @@ export interface PriorityConfig {
   label: string;
   sortField: string;
   direction: "asc" | "desc";
-  filter?: { field: string; operator: PredicateOperator; value?: string };
+  filter?: { field: string; operator: PredicateOperator; value?: string; valueEnd?: string };
 }
 
 export interface DesignConfig {
@@ -116,13 +141,16 @@ export interface PresentationConfig {
   dateField?: string;
 }
 
-// A one-tap per-record button that mutates one field to a computed value:
-// "today" stamps a date field to the current date; "clear" empties the field.
+// A one-tap per-record button that mutates one field to a computed value.
+// today/now stamp a date/datetime; clear empties; increment adds `amount` to a
+// number/currency; toggle flips a boolean; setValue sets a choice field to `value`.
 export interface QuickActionConfig {
   id: string;
   label: string;
   field: string;
-  set: "today" | "clear";
+  set: "today" | "now" | "clear" | "increment" | "toggle" | "setValue";
+  amount?: number;
+  value?: string;
 }
 
 export interface EntityConfig {
@@ -151,7 +179,7 @@ export interface ProductConfig {
   tagline: string;
   entityName: string;
   entityNamePlural: string;
-  genome: "tracker" | "workflow" | "catalog" | "planner" | "dashboard";
+  genome: "tracker" | "workflow" | "catalog" | "planner" | "dashboard" | "ledger" | "directory" | "log" | "inventory";
   eyebrow: string;
   collectionLabel: string;
   accent: string;
@@ -166,7 +194,7 @@ export interface ProductConfig {
   charts: ChartConfig[];
   quickActions: QuickActionConfig[];
   sorts: SortOption[];
-  capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean };
+  capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean; export: boolean };
   entities?: EntityConfig[];
   standings?: StandingsConfig[];
   priority?: PriorityConfig;

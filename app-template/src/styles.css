@@ -231,8 +231,21 @@ h2 { margin: 5px 0 0; font: 800 25px var(--font-display); letter-spacing: -.035e
 .trend-dot { fill: var(--accent); }
 .trend-axis { stroke: var(--border); stroke-width: 1; }
 .trend-tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.bar-chart { display: grid; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: minmax(72px, 30%) 1fr auto; align-items: center; gap: 10px; font-size: 12.5px; }
+.bar-label { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { background: var(--surface-alt); border-radius: 999px; height: 12px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; border-radius: 999px; min-width: 2px; }
+.bar-value { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 700; }
+.pie-chart { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.pie-chart svg { width: 150px; height: 150px; flex: none; }
+.pie-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12.5px; }
+.pie-legend li { display: flex; align-items: center; gap: 8px; }
+.pie-swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: var(--panel-space) var(--panel-space) 0; }
+.data-tools { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.data-tools .secondary { font-size: 13px; }
 .search { flex: 1 1 260px; }
 .sort-field { flex: 0 0 auto; }
 .sort-field select { width: auto; min-width: 170px; }

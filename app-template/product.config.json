@@ -105,7 +105,8 @@
     "delete": true,
     "search": true,
     "sort": true,
-    "group": false
+    "group": false,
+    "export": false
   },
   "fields": [
     {
