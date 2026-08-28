@@ -1,0 +1,22 @@
+{
+  "target_user": "A single home user keeping track of their own book collection and informal loans to family",
+  "core_utility": "A simple personal tracker for the books on your shelves at home — what they are, who you've lent them to, and which are currently out.",
+  "included_features": [
+    "create",
+    "edit",
+    "delete",
+    "search",
+    "filter",
+    "sort",
+    "group",
+    "calculate"
+  ],
+  "excluded_features": [],
+  "assumptions": [
+    "Single local user on their own computer, no login or sharing",
+    "Status derives live from whether a borrower name is filled in",
+    "'Returned' button clears the borrower name",
+    "Category suggestions include common book types with free-text override",
+    "Browser-local storage only; no cloud sync"
+  ]
+}

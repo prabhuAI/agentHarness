@@ -1,0 +1,144 @@
+{
+  "status": "success",
+  "app_url": "http://localhost:3000",
+  "start_command": "npm run dev",
+  "summary": "Home Library was compiled and verified.",
+  "implemented_features": [
+    "create",
+    "edit",
+    "delete",
+    "search",
+    "filter",
+    "sort",
+    "group",
+    "calculate"
+  ],
+  "assumptions": [
+    "Single local user on their own computer, no login or sharing",
+    "Status derives live from whether a borrower name is filled in",
+    "'Returned' button clears the borrower name",
+    "Category suggestions include common book types with free-text override",
+    "Browser-local storage only; no cloud sync"
+  ],
+  "tests_run": [
+    {
+      "command": "npm test (compiled journey suite)",
+      "journey": "Application loads and shows a useful empty state",
+      "result": "passed"
+    },
+    {
+      "command": "npm test (compiled journey suite)",
+      "journey": "Invalid book input shows validation without crashing",
+      "result": "passed"
+    },
+    {
+      "command": "npm test (compiled journey suite)",
+      "journey": "User can add a complete book and see it in books",
+      "result": "passed"
+    },
+    {
+      "command": "npm test (compiled journey suite)",
+      "journey": "books survive a page refresh",
+      "result": "passed"
+    },
+    {
+      "command": "npm test (compiled journey suite)",
+      "journey": "User can edit an existing book",
+      "result": "passed"
+    },
+    {
+      "command": "npm test (compiled journey suite)",
+      "journey": "User can search books",
+      "result": "passed"
+    },
+    {
+      "command": "npm test (compiled journey suite)",
+      "journey": "User can narrow books with a meaningful filter",
+      "result": "passed"
+    },
+    {
+      "command": "npm test (compiled journey suite)",
+      "journey": "books are grouped by a meaningful category or status",
+      "result": "passed"
+    },
+    {
+      "command": "npm test (compiled journey suite)",
+      "journey": "Requested derived values update from persisted records",
+      "result": "passed"
+    },
+    {
+      "command": "npm test (compiled journey suite)",
+      "journey": "User can delete an existing book",
+      "result": "passed"
+    },
+    {
+      "command": "npm test (compiled journey suite)",
+      "journey": "A one-tap action updates a book field and persists",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "journey": "The generated application completes a production build",
+      "result": "passed"
+    },
+    {
+      "command": "npm run dev + HTTP probe",
+      "journey": "The generated application starts on port 3000 and answers an HTTP request",
+      "result": "passed"
+    }
+  ],
+  "harness_checks": [
+    {
+      "command": "output/app/node_modules/.bin/vitest run --reporter=json --outputFile=artifacts/runs/2026-08-28T14-56-59-551Z/app-test-results.json --passWithNoTests=false",
+      "journey": "The generated app's Vitest report contained at least one completed test and no failed, skipped, or todo tests",
+      "result": "passed"
+    },
+    {
+      "command": "npm run build",
+      "journey": "The generated app completed a production build",
+      "result": "passed"
+    },
+    {
+      "command": "npm run dev",
+      "journey": "The generated app started its own HTTP server on port 3000 and shut down cleanly",
+      "result": "passed"
+    },
+    {
+      "command": "validate required artifacts",
+      "journey": "idea_spec.json, product-ir.json, summary.md, and auditable trace.jsonl are complete",
+      "result": "passed"
+    }
+  ],
+  "model_calls": 1,
+  "input_tokens": 2,
+  "output_tokens": 666,
+  "cache_read_tokens": 7232,
+  "cache_write_tokens": 0,
+  "total_tokens": 7900,
+  "reasoning_tokens": 0,
+  "cost_total": 0,
+  "call_log": [
+    {
+      "index": 1,
+      "model": "berget/zai-org/GLM-5.2",
+      "input_tokens": 2,
+      "output_tokens": 666,
+      "cache_read_tokens": 7232,
+      "cache_write_tokens": 0,
+      "total_tokens": 7900,
+      "reasoning_tokens": 0,
+      "cost_total": 0
+    }
+  ],
+  "weighted_token_expenditure": 2723.2,
+  "pi_exit_code": 0,
+  "telemetry_source": "pi-json-event-stream",
+  "port_reclamation": {
+    "preexisting_listener": false,
+    "listener_after_pi": false,
+    "attempted": false,
+    "reclaimed": false,
+    "process_ids": [],
+    "diagnostic": "Port 3000 remained free after Pi"
+  }
+}

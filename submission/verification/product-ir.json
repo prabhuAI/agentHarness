@@ -1,0 +1,155 @@
+{
+  "product": {
+    "name": "Home Library",
+    "description": "A simple personal tracker for the books on your shelves at home — what they are, who you've lent them to, and which are currently out.",
+    "targetUser": "A single home user keeping track of their own book collection and informal loans to family",
+    "genome": "tracker",
+    "design": {
+      "tone": "warm",
+      "density": "comfortable",
+      "contrast": "balanced",
+      "motion": "subtle"
+    },
+    "tagline": "",
+    "accent": "#5b5bd6"
+  },
+  "entities": [
+    {
+      "name": "book",
+      "plural": "books",
+      "primaryField": "title",
+      "fields": [
+        {
+          "id": "title",
+          "label": "Title",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. The Hobbit"
+        },
+        {
+          "id": "author",
+          "label": "Author",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. J.R.R. Tolkien"
+        },
+        {
+          "id": "category",
+          "label": "Category",
+          "type": "category",
+          "required": false,
+          "options": [
+            "Novel",
+            "Cookbook",
+            "Reference",
+            "Biography",
+            "History",
+            "Science",
+            "Children's",
+            "Poetry",
+            "Other"
+          ],
+          "allowCustom": true
+        },
+        {
+          "id": "borrower",
+          "label": "Borrowed by",
+          "type": "text",
+          "required": false,
+          "placeholder": "Who has it right now"
+        },
+        {
+          "id": "status",
+          "label": "Status",
+          "type": "status",
+          "required": false,
+          "options": [
+            "On shelf",
+            "Lent out"
+          ],
+          "derive": {
+            "kind": "presence",
+            "sourceField": "borrower",
+            "whenPresent": "Lent out",
+            "whenEmpty": "On shelf"
+          }
+        }
+      ]
+    }
+  ],
+  "filters": [
+    {
+      "id": "on_shelf",
+      "label": "On shelf",
+      "field": "status",
+      "operator": "equals",
+      "value": "On shelf"
+    },
+    {
+      "id": "lent_out",
+      "label": "Lent out",
+      "field": "status",
+      "operator": "equals",
+      "value": "Lent out"
+    }
+  ],
+  "calculations": [
+    {
+      "id": "total_books",
+      "label": "Total books",
+      "entity": "book",
+      "operation": "count"
+    },
+    {
+      "id": "lent_out",
+      "label": "Lent out",
+      "entity": "book",
+      "operation": "countWhere",
+      "field": "status",
+      "operator": "equals",
+      "value": "Lent out"
+    },
+    {
+      "id": "status_on_shelf_count",
+      "label": "On shelf",
+      "operation": "countWhere",
+      "field": "status",
+      "operator": "equals",
+      "value": "On shelf"
+    }
+  ],
+  "quickActions": [
+    {
+      "id": "returned",
+      "label": "Returned",
+      "field": "borrower",
+      "set": "clear"
+    }
+  ],
+  "assumptions": [
+    "Single local user on their own computer, no login or sharing",
+    "Status derives live from whether a borrower name is filled in",
+    "'Returned' button clears the borrower name",
+    "Category suggestions include common book types with free-text override",
+    "Browser-local storage only; no cloud sync"
+  ],
+  "version": "1",
+  "capabilities": {
+    "create": true,
+    "edit": true,
+    "delete": true,
+    "search": true,
+    "filter": true,
+    "sort": true,
+    "group": true,
+    "transition": false,
+    "calculate": true,
+    "export": false
+  },
+  "charts": [],
+  "persistence": {
+    "strategy": "localStorage"
+  },
+  "excluded": [],
+  "customRequirements": []
+}

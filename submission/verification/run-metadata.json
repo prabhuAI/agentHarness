@@ -1,0 +1,17 @@
+{
+  "frozen_at": "2026-08-28T15:02:25.992Z",
+  "commit": "1451e417f699c0c9ab0ec1bf2eecef9e53678bea",
+  "runtime": {
+    "node": "v26.7.0",
+    "npm": "11.19.0"
+  },
+  "provider_models": [
+    "berget/zai-org/GLM-5.2"
+  ],
+  "commands": [
+    "npm run check",
+    "npm run challenge",
+    "npm run validate:result -- output/app/result.json"
+  ],
+  "note": "Raw provider events and session logs are intentionally excluded because they may contain prompts, machine paths, or credentials."
+}
