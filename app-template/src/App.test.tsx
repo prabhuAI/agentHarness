@@ -391,24 +391,34 @@ describe("compiled product runtime", () => {
       values: withDerivedValues(record.values),
     }));
     const projectedCreated = projectedAfterCreate[0]!.values;
-    const summaryRegion = screen.getByLabelText("Summary");
-    for (const summary of productConfig.summaries) {
-      // A facet count that mirrors a filter chip is shown as the chip's badge,
-      // not as a duplicate stat tile.
-      const isFacetChip = productConfig.filters.some((preset) =>
-        summary.operation === "countWhere"
-        && summary.field === preset.field
-        && String(summary.operator ?? "") === String(preset.operator ?? "")
-        && String(summary.value ?? "") === String(preset.value ?? ""));
-      // Visible labels may legitimately repeat (two different predicates can
-      // share user-facing wording), so identity comes from the normalized IR id.
-      const tile = summaryRegion.querySelector<HTMLElement>(`[data-summary-id="${summary.id}"]`);
-      if (isFacetChip) { expect(tile).toBeNull(); continue; }
-      expect(tile).toBeInTheDocument();
-      const rendered = tile!.querySelector("strong")!.textContent ?? "";
-      const expected = computeSummaryValue(summary, projectedAfterCreate);
-      if (summary.operation === "count" || summary.operation === "countWhere") expect(rendered).toBe(String(expected));
-      else expect(Number(rendered.replace(/[^0-9.-]/gu, ""))).toBe(expected);
+    // A facet count that mirrors a filter chip is shown as the chip's badge,
+    // not as a duplicate stat tile.
+    const isFacetChip = (summary: SummaryConfig) => productConfig.filters.some((preset) =>
+      summary.operation === "countWhere"
+      && summary.field === preset.field
+      && String(summary.operator ?? "") === String(preset.operator ?? "")
+      && String(summary.value ?? "") === String(preset.value ?? ""));
+    // The compiler renders the stat strip only when at least one non-facet
+    // summary remains after facet counts move to their filter chips. When every
+    // summary is a facet chip the strip is omitted entirely, so the labelled
+    // region legitimately does not exist.
+    const tileSummaries = productConfig.summaries.filter((summary) => !isFacetChip(summary));
+    const summaryRegion = screen.queryByLabelText("Summary");
+    if (tileSummaries.length === 0) {
+      expect(summaryRegion).toBeNull();
+    } else {
+      expect(summaryRegion).toBeInTheDocument();
+      for (const summary of productConfig.summaries) {
+        // Visible labels may legitimately repeat (two different predicates can
+        // share user-facing wording), so identity comes from the normalized IR id.
+        const tile = summaryRegion!.querySelector<HTMLElement>(`[data-summary-id="${summary.id}"]`);
+        if (isFacetChip(summary)) { expect(tile).toBeNull(); continue; }
+        expect(tile).toBeInTheDocument();
+        const rendered = tile!.querySelector("strong")!.textContent ?? "";
+        const expected = computeSummaryValue(summary, projectedAfterCreate);
+        if (summary.operation === "count" || summary.operation === "countWhere") expect(rendered).toBe(String(expected));
+        else expect(Number(rendered.replace(/[^0-9.-]/gu, ""))).toBe(expected);
+      }
     }
     for (const chart of productConfig.charts) {
       expect(screen.getByRole("img", { name: `${chart.label} line chart with 1 points` })).toBeInTheDocument();
