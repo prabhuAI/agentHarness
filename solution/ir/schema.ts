@@ -1,11 +1,11 @@
 import {
   CALCULATION_OPERATIONS,
-  DERIVED_FIELD_KINDS,
   DESIGN_CONTRASTS,
   DESIGN_DENSITIES,
   DESIGN_MOTIONS,
   DESIGN_TONES,
   FILTER_OPERATORS,
+  QUICK_ACTION_SETS,
   type ProductIR,
 } from "./types.js";
 
@@ -59,31 +59,44 @@ export function validateProductIR(value: unknown): ProductIR {
       if (typeof field.type !== "string" || field.type.trim() === "") issues.push(`field ${fieldIndex} needs a type`);
       if (field.required !== undefined && typeof field.required !== "boolean") issues.push(`field ${fieldIndex}.required must be boolean`);
       if (field.options !== undefined && !strings(field.options)) issues.push(`field ${fieldIndex}.options must be strings`);
+      // A malformed visibleWhen is not fatal: normalizeProductIR drops a condition
+      // with a missing/empty/dangling field or equals, so the field just stays
+      // always-visible. Reject only a present-but-mistyped value — never a missing
+      // part — so an incomplete condition degrades instead of forcing a repair call.
       if (field.visibleWhen !== undefined) {
         if (!isRecord(field.visibleWhen)) issues.push(`field ${fieldIndex}.visibleWhen must be an object`);
         else {
-          if (typeof field.visibleWhen.field !== "string" || field.visibleWhen.field.trim() === "") issues.push(`field ${fieldIndex}.visibleWhen.field is required`);
-          if (typeof field.visibleWhen.equals !== "string" || field.visibleWhen.equals.trim() === "") issues.push(`field ${fieldIndex}.visibleWhen.equals is required`);
+          if (field.visibleWhen.field !== undefined && typeof field.visibleWhen.field !== "string") issues.push(`field ${fieldIndex}.visibleWhen.field must be a string`);
+          if (field.visibleWhen.equals !== undefined && typeof field.visibleWhen.equals !== "string") issues.push(`field ${fieldIndex}.visibleWhen.equals must be a string`);
         }
       }
-      // A malformed derive spec is not fatal: normalizeProductIR drops it and the
-      // field degrades to a normal manual field, so validate only rejects the wrong
-      // shape when the required parts are present but mistyped.
+      // A malformed derive spec is not fatal: normalizeProductIR deterministically
+      // drops any unusable derive (unknown kind, missing expression/sourceField/
+      // dateField, dangling refs, missing buckets) so the field degrades to a plain
+      // manual field. Hard-failing here instead forces a wasteful repair model call
+      // for something we already fix in code, so validate rejects ONLY a value that
+      // is PRESENT but of the wrong type — never a missing required part, and never
+      // an unsupported kind (both of which normalize drops).
       if (field.derive !== undefined) {
         if (!isRecord(field.derive)) issues.push(`field ${fieldIndex}.derive must be an object`);
-        else if (!DERIVED_FIELD_KINDS.includes(field.derive.kind as never)) issues.push(`field ${fieldIndex}.derive.kind is unsupported`);
-        else if (field.derive.kind === "formula") {
-          if (typeof field.derive.expression !== "string" || field.derive.expression.trim() === "") issues.push(`field ${fieldIndex}.derive.expression is required`);
-        } else if (field.derive.kind === "presence") {
-          if (typeof field.derive.sourceField !== "string" || field.derive.sourceField.trim() === "") issues.push(`field ${fieldIndex}.derive.sourceField is required`);
-          for (const label of ["whenPresent", "whenEmpty"] as const) {
-            if (typeof field.derive[label] !== "string" || field.derive[label].trim() === "") issues.push(`field ${fieldIndex}.derive.${label} is required`);
-          }
-        } else {
-          if (typeof field.derive.dateField !== "string" || field.derive.dateField.trim() === "") issues.push(`field ${fieldIndex}.derive.dateField is required`);
-          if (!isRecord(field.derive.buckets)) issues.push(`field ${fieldIndex}.derive.buckets must be an object`);
-          else for (const band of ["overdue", "soon", "ok"] as const) {
-            if (typeof field.derive.buckets[band] !== "string" || field.derive.buckets[band].trim() === "") issues.push(`field ${fieldIndex}.derive.buckets.${band} is required`);
+        else {
+          const derive = field.derive;
+          const mistyped = (value: unknown): boolean => value !== undefined && typeof value !== "string";
+          if (derive.kind === "formula") {
+            if (mistyped(derive.expression)) issues.push(`field ${fieldIndex}.derive.expression must be a string`);
+          } else if (derive.kind === "presence") {
+            if (mistyped(derive.sourceField)) issues.push(`field ${fieldIndex}.derive.sourceField must be a string`);
+            for (const label of ["whenPresent", "whenEmpty"] as const) {
+              if (mistyped(derive[label])) issues.push(`field ${fieldIndex}.derive.${label} must be a string`);
+            }
+          } else if (derive.kind === "dateThreshold") {
+            if (mistyped(derive.dateField)) issues.push(`field ${fieldIndex}.derive.dateField must be a string`);
+            if (derive.buckets !== undefined && !isRecord(derive.buckets)) issues.push(`field ${fieldIndex}.derive.buckets must be an object`);
+            else if (isRecord(derive.buckets)) {
+              for (const band of ["overdue", "soon", "ok"] as const) {
+                if (mistyped(derive.buckets[band])) issues.push(`field ${fieldIndex}.derive.buckets.${band} must be a string`);
+              }
+            }
           }
         }
       }
@@ -119,7 +132,7 @@ export function validateProductIR(value: unknown): ProductIR {
   if (value.quickActions !== undefined && !Array.isArray(value.quickActions)) issues.push("quickActions must be an array");
   else if (Array.isArray(value.quickActions)) value.quickActions.forEach((action, index) => {
     if (!isRecord(action) || typeof action.id !== "string" || typeof action.label !== "string" || typeof action.field !== "string") issues.push(`quickActions[${index}] is invalid`);
-    else if (action.set !== "today" && action.set !== "clear") issues.push(`quickActions[${index}].set must be today or clear`);
+    else if (!(QUICK_ACTION_SETS as readonly string[]).includes(String(action.set))) issues.push(`quickActions[${index}].set must be one of ${QUICK_ACTION_SETS.join(", ")}`);
   });
   if (value.standings !== undefined && !Array.isArray(value.standings)) issues.push("standings must be an array");
   else if (Array.isArray(value.standings)) value.standings.forEach((table, index) => {
@@ -142,10 +155,17 @@ export function validateProductIR(value: unknown): ProductIR {
   });
   if (value.priority !== undefined && !isRecord(value.priority)) issues.push("priority must be an object");
   else if (isRecord(value.priority)) {
-    if (typeof value.priority.sortField !== "string" || value.priority.sortField.trim() === "") issues.push("priority.sortField is required");
-    if (value.priority.label !== undefined && typeof value.priority.label !== "string") issues.push("priority.label must be a string");
-    if (value.priority.direction !== undefined && value.priority.direction !== "asc" && value.priority.direction !== "desc") issues.push("priority.direction must be asc or desc");
-    if (value.priority.filter !== undefined && !isRecord(value.priority.filter)) issues.push("priority.filter must be an object");
+    // priority is a soft ordering enhancement. An incomplete one (no usable
+    // sortField) is not a correctness error: normalizeProductIR deterministically
+    // drops a priority whose sortField is missing or unresolvable rather than
+    // forcing a repair call, so a missing sortField here must degrade the same
+    // way — not hard-fail the whole IR. Its other fields are still validated only
+    // when the priority is well-formed enough to survive normalization.
+    if (typeof value.priority.sortField === "string" && value.priority.sortField.trim() !== "") {
+      if (value.priority.label !== undefined && typeof value.priority.label !== "string") issues.push("priority.label must be a string");
+      if (value.priority.direction !== undefined && value.priority.direction !== "asc" && value.priority.direction !== "desc") issues.push("priority.direction must be asc or desc");
+      if (value.priority.filter !== undefined && !isRecord(value.priority.filter)) issues.push("priority.filter must be an object");
+    }
   }
   for (const key of ["assumptions", "excluded", "customRequirements"] as const) {
     if (value[key] !== undefined && !strings(value[key])) issues.push(`${key} must be an array of strings`);

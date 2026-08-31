@@ -11,6 +11,7 @@
     "challenge": "node --import tsx src/run-challenge.ts",
     "dev": "npm --prefix output/app run dev",
     "validate:result": "node --import tsx src/validate-result.ts",
+    "report": "node --import tsx src/render-run.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:golden": "vitest run test/golden.test.ts",

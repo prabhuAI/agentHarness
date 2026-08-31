@@ -62,7 +62,10 @@ const predicateSchema = {
   valueEnd: Type.Optional(Type.String({ description: "between only: the inclusive upper bound (value is the lower bound)" })),
 };
 const strictProductIRSchema = Type.Object({
-  version: Type.String({ enum: ["1"] }),
+  // Optional so a model that forgets it does not trigger a tool-schema rejection
+  // and a wasted repair call. coerceStringifiedIR defaults a missing version to
+  // "1"; the hand-written validateProductIR still rejects an explicit wrong value.
+  version: Type.Optional(Type.String({ enum: ["1"], description: "Schema version; defaults to \"1\" when omitted." })),
   product: Type.Object({
     name: Type.String(),
     description: Type.Optional(Type.String()),
@@ -244,6 +247,9 @@ export function coerceStringifiedIR(params: unknown): unknown {
   if (typeof params !== "object" || params === null) return params;
   const out: Record<string, unknown> = { ...(params as Record<string, unknown>) };
   for (const key of Object.keys(out)) out[key] = parseIfJsonString(out[key]);
+  // version is optional at the tool boundary (see strictProductIRSchema); default
+  // a missing one so validateProductIR's version check passes without a retry.
+  if (out.version === undefined) out.version = "1";
   if (Array.isArray(out.entities)) {
     out.entities = out.entities.map((entity) => {
       const parsed = parseIfJsonString(entity);

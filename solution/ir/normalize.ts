@@ -201,7 +201,10 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     const condition = source?.visibleWhen;
     if (condition) {
       const controllingField = identifier(condition.field, "");
-      const equals = clean(condition.equals);
+      // condition.equals may be absent on a model-emitted partial visibleWhen;
+      // coerce defensively so an incomplete condition degrades (drops) rather than
+      // throwing. The `equals` truthiness check below then omits it entirely.
+      const equals = clean(String(condition.equals ?? ""));
       if (normalizedIds.has(controllingField) && controllingField !== field.id && equals) {
         result = { ...result, visibleWhen: { field: controllingField, equals } };
       }
@@ -583,8 +586,12 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     };
   }).filter((table): table is ProductStandings => Boolean(table));
   const name = clean(input.product?.name ?? "") || "Untitled";
+  // Exclude the raw input.priority from the passthrough spread: it is re-emitted
+  // below only when it normalized to a usable value, so an unusable one is dropped
+  // rather than leaked through `...input` untouched.
+  const { priority: _rawPriority, ...inputWithoutPriority } = input;
   return {
-    ...input,
+    ...inputWithoutPriority,
     version: "1",
     product: {
       ...input.product,

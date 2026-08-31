@@ -46,7 +46,12 @@ const PROVIDER_SIGNATURES: ProviderSignature[] = [
   {
     kind: "connection",
     pattern:
-      /(econnrefused|enotfound|etimedout|econnreset|eai_again|epipe|socket[_ ]?hang[_ ]?up|network[_ ]?error|fetch[_ ]?failed|could[_ ]?not[_ ]?connect|connection[_ ]?(refused|error|reset|timed[_ ]?out|closed))/i,
+      // NB: a bare EPIPE is deliberately NOT matched here. The generated app's
+      // in-process vite/esbuild dev-server probe emits "write EPIPE" as normal
+      // teardown noise on pi's stderr; treating that as a provider outage falsely
+      // aborts healthy runs. A genuine provider connection drop still surfaces as
+      // econnreset / econnrefused / "socket hang up" / "connection reset".
+      /(econnrefused|enotfound|etimedout|econnreset|eai_again|socket[_ ]?hang[_ ]?up|network[_ ]?error|fetch[_ ]?failed|could[_ ]?not[_ ]?connect|connection[_ ]?(refused|error|reset|timed[_ ]?out|closed))/i,
     summary: "Could not reach the provider API (connection failure).",
   },
   {

@@ -19,6 +19,7 @@ import type { RunResult } from "./types.js";
 import { validateResultObject } from "./validate-result.js";
 import { portHasListener, unavailableAppVerification, verifyGeneratedApp } from "./verify-app.js";
 import { verifyRequiredArtifacts } from "./validate-artifacts.js";
+import { emitRunReport } from "./render-run.js";
 
 interface Arguments {
   ideaFile: string;
@@ -111,6 +112,19 @@ async function runInherited(command: string, args: string[], cwd: string): Promi
   });
 }
 
+// Lines emitted by the generated app's vite/esbuild dev-server probe (which runs
+// in-process during compile and pipes its stderr up through pi). These are app
+// noise, never provider-transport signals, so they must be excluded before the
+// live provider-error watcher classifies pi's stderr.
+const APP_SERVER_NOISE = /(\bvite\b|esbuild|Pre-transform error|The service (was stopped|is no longer running)|Plugin:\s*vite)/i;
+
+export function withoutAppServerNoise(stderr: string): string {
+  return stderr
+    .split(/\r?\n/u)
+    .filter((line) => !APP_SERVER_NOISE.test(line))
+    .join("\n");
+}
+
 function providerErrorFromEventLine(line: string): ReturnType<typeof matchProviderError> {
   try {
     const event = JSON.parse(line) as Record<string, unknown>;
@@ -137,18 +151,33 @@ export function completedModelUsageFromEventLine(line: string): { weighted: numb
   }
 }
 
+const LIVE_TOOL_NARRATION: Record<string, string> = {
+  compile_product: "🔨 compile_product → Product IR compiled deterministically into the app",
+  finalize_product: "📦 finalize_product → run finalized and verified",
+  write: "✍️  write → file written",
+  edit: "✏️  edit → file patched",
+  read: "👁️  read → file inspected",
+};
+
 function summarizeEventLine(line: string): void {
   try {
     const event = JSON.parse(line) as Record<string, unknown>;
+    if (event.type === "turn_start") {
+      console.log(`[pi] 🧠 model turn started …`);
+    }
     if (event.type === "tool_execution_end") {
-      console.log(`[pi] completed tool: ${String(event.toolName ?? "unknown")}`);
+      const tool = String(event.toolName ?? "unknown");
+      console.log(`[pi] ${LIVE_TOOL_NARRATION[tool] ?? `completed tool: ${tool}`}`);
     }
     if (event.type === "message_end") {
       const message = event.message as Record<string, unknown> | undefined;
       const usage = message?.usage as Record<string, unknown> | undefined;
       if (message?.role === "assistant" && usage && message.stopReason !== "error") {
+        const weighted =
+          Number(usage.input ?? 0) + Number(usage.output ?? 0) * 3 + Number(usage.cacheRead ?? 0) * 0.1;
         console.log(
-          `[pi] model call completed: input=${String(usage.input ?? 0)} output=${String(usage.output ?? 0)}`,
+          `[pi] ✅ model call done: input=${String(usage.input ?? 0)} output=${String(usage.output ?? 0)} ` +
+            `cacheRead=${String(usage.cacheRead ?? 0)} → weighted=${weighted.toFixed(1)}`,
         );
       }
     }
@@ -262,7 +291,11 @@ export async function runPi(
       child.stderr.on("data", (chunk: Buffer) => {
         if (fatalProviderError || guardAborted || timedOut) return;
         stderrTail = (stderrTail + chunk.toString("utf8")).slice(-8_192);
-        const provider = matchProviderError(stderrTail);
+        // The generated app's in-process vite/esbuild startup probe pipes its own
+        // stderr up through pi. Those dev-server lines are app noise, not provider
+        // transport errors — exclude them before classifying so teardown output
+        // (e.g. "Pre-transform error … write EPIPE") never aborts a healthy run.
+        const provider = matchProviderError(withoutAppServerNoise(stderrTail));
         if (provider) {
           fatalProviderError = true;
           console.error(`Aborting run early: ${provider.summary}`);
@@ -455,7 +488,12 @@ async function main(): Promise<void> {
   // A written product report (partial.status other than "failed") means the model
   // did compile a verifiable Product IR — a clean exit then is success, not a
   // model_output failure, so the diagnosis must not misfire on it.
-  const diagnosis = classifyPiFailure(`${piStderr}\n${eventContent}`, pi.exitCode, usage.model_calls, partial.status !== "failed");
+  const diagnosis = classifyPiFailure(
+    `${withoutAppServerNoise(piStderr)}\n${eventContent}`,
+    pi.exitCode,
+    usage.model_calls,
+    partial.status !== "failed",
+  );
   const failureSummary = pi.timedOut
     ? "Run exceeded CHALLENGE_TIMEOUT_MS and was terminated before finishing."
     : diagnosis.summary;
@@ -492,6 +530,14 @@ async function main(): Promise<void> {
 
   console.log(`Result written to ${resultPaths.join(" and ")}`);
   console.log(`Audit artifacts written to ${artifactDirectory}`);
+  // Non-scored demo recap: narrate the run and write an HTML report. Fully
+  // guarded — reading artifacts or writing the report must never change the
+  // scored outcome or exit code, so any failure here is swallowed.
+  try {
+    await emitRunReport({ outputDirectory, ideaText: idea });
+  } catch (error) {
+    console.warn(`Run report skipped: ${error instanceof Error ? error.message : String(error)}`);
+  }
   for (const missingResultPath of missingResultPaths) {
     console.error(`Required result destination was not written: ${missingResultPath}`);
   }
