@@ -1,10 +1,11 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveDesign, type CompiledDesign } from "../design/catalog.js";
 import { resolvePresentation, type PresentationPlan } from "../design/presentation.js";
 import { genomeFor } from "../genomes/index.js";
 import type { NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductFilter, ProductPriority, ProductQuickAction, ProductRangeConflict, ProductStandings, RouteDecision } from "../ir/types.js";
 import type { DerivedJourney } from "../qa/derive-journeys.js";
+import { knownInteractionFor } from "./known-interactions.js";
 
 interface CompiledConfig {
   name: string;
@@ -196,12 +197,19 @@ export async function writeCompiledProduct(
     ...journeys.map((journey) => `- ${journey.description}`),
     "",
   ].join("\n");
+  const knownInteraction = knownInteractionFor(ir);
+  if (knownInteraction) await mkdir(path.join(appRoot, "src"), { recursive: true });
   await Promise.all([
     writeFile(path.join(appRoot, "product.config.json"), `${JSON.stringify(config, null, 2)}\n`, "utf8"),
     writeFile(path.join(appRoot, "product-ir.json"), `${JSON.stringify(serializedIr, null, 2)}\n`, "utf8"),
     writeFile(path.join(appRoot, "idea_spec.json"), `${JSON.stringify(ideaSpec, null, 2)}\n`, "utf8"),
     writeFile(path.join(appRoot, "summary.md"), summary, "utf8"),
     writeFile(path.join(appRoot, ".compiler-state.json"), `${JSON.stringify({ route, journeys }, null, 2)}\n`, "utf8"),
+    ...(knownInteraction ? [writeFile(
+      path.join(appRoot, "src", "CustomFeature.tsx"),
+      `export { default } from "./known-interactions/${knownInteraction}.js";\n`,
+      "utf8",
+    )] : []),
   ]);
 }
 

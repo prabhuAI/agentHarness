@@ -5,6 +5,7 @@ import { createRepository, EntityRecord, RecordValue } from "./repository.js";
 import { referenceLabel, referenceOptions, referenceTarget } from "./relations.js";
 import { parseImportedRecords, recordsToCsv, recordsToJson } from "./io.js";
 import { RelatedWorkspace } from "./RelatedWorkspace.js";
+import CustomFeature from "./CustomFeature.js";
 import { CollectionView } from "./CollectionView.js";
 import { resolveViewPlan } from "./view-plan.js";
 import { evaluateRangeConflict } from "./range-conflicts.js";
@@ -531,6 +532,7 @@ export function App() {
       : "updated");
   const [notice, setNotice] = useState(recoveredFromInvalidData ? "Saved data was damaged, so a clean workspace was restored." : "");
   const [undo, setUndo] = useState<EntityRecord | null>(null);
+  const [selectedRecordId, setSelectedRecordId] = useState<string>();
   const entityLabel = productConfig.entityName.charAt(0).toUpperCase() + productConfig.entityName.slice(1);
   const [themePreference, setThemePreference] = useState(loadThemePreference);
   const [systemDark, setSystemDark] = useState(systemPrefersDark);
@@ -749,7 +751,7 @@ export function App() {
     "--layout-gap": `${design.spacing.gap}px`,
   } as CSSProperties;
 
-  const recordCard = (record: EntityRecord, view = viewPlan.primary) => <article data-record-id={record.id} className={`card record-${view}${record.id === priorityRecordId ? " is-priority" : ""}`} key={record.id}>
+  const recordCard = (record: EntityRecord, view = viewPlan.primary) => <article data-record-id={record.id} className={`card record-${view}${record.id === priorityRecordId ? " is-priority" : ""}${record.id === selectedRecordId ? " is-selected" : ""}`} key={record.id}>
     <div className="card-top"><h3>{record.id === priorityRecordId && <span className="priority-badge">{productConfig.priority?.label}</span>}<span>{displayValue(productConfig.fields.find((field) => field.key === productConfig.primaryField)!, record.values[productConfig.primaryField])}</span></h3>
       <div className="actions">{productConfig.quickActions.map((action) => <button key={action.id} type="button" className="quick-action" onClick={() => runQuickAction(record, action)}>{action.label}</button>)}{productConfig.capabilities.edit && <button onClick={() => openEdit(record)}>Edit</button>}{productConfig.capabilities.delete && <button className="danger" onClick={() => remove(record)}>Delete</button>}</div></div>
     <dl>{productConfig.secondaryFields.map((key) => { const field = productConfig.fields.find((candidate) => candidate.key === key); const value = record.values[key]; return field && isFieldVisible(field, record.values) && value !== undefined && value !== null && value !== "" ? <div key={key}><dt>{field.label}</dt><dd className={field.type === "status" ? "badge" : ""}>{displayValue(field, value)}</dd></div> : null; })}</dl>
@@ -775,7 +777,7 @@ export function App() {
         {tableColumns.map((field) => <th key={field.key} scope="col">{field.label}</th>)}
         {hasRowActions && <th scope="col" className="col-actions">Actions</th>}
       </tr></thead>
-      <tbody>{rows.map((record) => <tr key={record.id} data-record-id={record.id} className={record.id === priorityRecordId ? "is-priority" : ""}>
+      <tbody>{rows.map((record) => <tr key={record.id} data-record-id={record.id} className={`${record.id === priorityRecordId ? "is-priority" : ""}${record.id === selectedRecordId ? " is-selected" : ""}`.trim()}>
         <th scope="row">{record.id === priorityRecordId && <span className="priority-badge">{productConfig.priority?.label}</span>}{displayValue(primaryFieldConfig, record.values[productConfig.primaryField])}</th>
         {tableColumns.map((field) => { const value = record.values[field.key]; const shown = isFieldVisible(field, record.values) && value !== undefined && value !== null && value !== ""; return <td key={field.key} data-label={field.label}>{shown ? <span className={field.type === "status" ? "badge" : ""}>{displayValue(field, value)}</span> : <span className="muted-cell">—</span>}</td>; })}
         {hasRowActions && <td className="col-actions"><div className="actions">{productConfig.quickActions.map((action) => <button key={action.id} type="button" className="quick-action" onClick={() => runQuickAction(record, action)}>{action.label}</button>)}{productConfig.capabilities.edit && <button onClick={() => openEdit(record)}>Edit</button>}{productConfig.capabilities.delete && <button className="danger" onClick={() => remove(record)}>Delete</button>}</div></td>}
@@ -809,6 +811,18 @@ export function App() {
         {productConfig.capabilities.create && <button className="primary hero-action" onClick={openCreate}><span aria-hidden="true">+</span> Add {productConfig.entityName}</button>}
       </section>
       {notice && <div className="notice" role="status"><span>{notice}</span><div className="notice-actions">{undo && <button type="button" className="notice-undo" onClick={undoDelete}>Undo</button>}<button className="icon-button notice-dismiss" aria-label="Dismiss message" onClick={dismissNotice}>×</button></div></div>}
+      <CustomFeature
+        records={derivedRecords}
+        onRecordsChanged={() => setRecords(repository.list())}
+        onSelectRecord={(id) => {
+          setSelectedRecordId(id);
+          requestAnimationFrame(() => {
+            const target = [...document.querySelectorAll<HTMLElement>("[data-record-id]")]
+              .find((element) => element.dataset.recordId === id);
+            target?.scrollIntoView({ behavior: "smooth", block: "center" });
+          });
+        }}
+      />
       {(productConfig.entities?.length ?? 0) > 1 && <RelatedWorkspace primaryRecords={records} />}
       <section className="collection" aria-labelledby="collection-title">
         <h2 id="collection-title" className="sr-only">{productConfig.entityNamePlural}</h2>

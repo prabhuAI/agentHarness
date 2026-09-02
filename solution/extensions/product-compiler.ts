@@ -442,11 +442,57 @@ async function readState(appRoot: string): Promise<{ ir: NormalizedProductIR; st
   return { ir: normalizeProductIR(validateProductIR(JSON.parse(irRaw))), state: JSON.parse(stateRaw) as CompilerState };
 }
 
+export function customFeatureAcceptanceErrors(ir: NormalizedProductIR, source: string): string[] {
+  const prose = `${ir.product.description} ${ir.customRequirements.join(" ")}`;
+  const errors: string[] = [];
+  if (/\blocalStorage\b/u.test(source)) {
+    errors.push("Do not access localStorage directly; persist custom state through customStateRepository(featureName).");
+  }
+  const graph = /(?=.*\b(?:graph|network|canvas|nodes?)\b)(?=.*\b(?:drag|arrow|edge|connect|relationship)\w*\b)/isu.test(prose);
+  if (graph) {
+    const hasDragStart = /onPointerDown|onDragStart/u.test(source);
+    const hasDragFinish = /onPointerUp|onDrop/u.test(source);
+    if (!hasDragStart || !hasDragFinish) errors.push("Implement the requested drag interaction, including explicit drag start and drop/pointer-up handlers.");
+    if (!/markerEnd|marker-end|arrowhead/iu.test(source)) errors.push("Render directed relationships with visible arrowheads.");
+  }
+  const audio = /(?=.*\b(?:audio|microphone|mediarecorder|voice memo)\b)(?=.*\b(?:record|capture|playback|waveform)\w*\b)/isu.test(prose);
+  if (audio) {
+    if (!/MediaRecorder/u.test(source) || !/getUserMedia/u.test(source)) errors.push("Implement real browser microphone capture with getUserMedia and MediaRecorder.");
+    if (!/<audio\b|new Audio\s*\(/u.test(source)) errors.push("Provide playable audio for saved recordings.");
+    if (!/waveform|<canvas\b|<svg\b/iu.test(source)) errors.push("Render the requested waveform visualization.");
+  }
+  return errors;
+}
+
 export function registerProductCompiler(
   pi: ExtensionAPI,
   appRoot: string,
   dependencies: CompilerDependencies = { verifyStartup: verifyAppStartup },
 ) {
+  let customWorkActive = false;
+  let customFileWritten = false;
+  const customFeaturePath = path.resolve(appRoot, "src/CustomFeature.tsx");
+  const boundedTools = new Set(["read", "write", "edit", "bash", "grep", "find", "ls"]);
+  pi.on("tool_call", (event) => {
+    if (!boundedTools.has(event.toolName)) return undefined;
+    if (!customWorkActive) {
+      return { block: true, reason: "File and shell tools are unavailable before compile_product. Interpret the idea and call compile_product directly." };
+    }
+    if (event.toolName === "bash" || event.toolName === "grep" || event.toolName === "find" || event.toolName === "ls") {
+      return { block: true, reason: "The custom workspace is intentionally bounded. Use only read/write/edit on the supplied custom-feature files, then call finalize_product." };
+    }
+    const toolInput = event.input as Record<string, unknown>;
+    const requestedPath = path.resolve(appRoot, String(toolInput.path ?? ""));
+    if (requestedPath !== customFeaturePath || (event.toolName === "read" && !customFileWritten)) {
+      return {
+        block: true,
+        reason: "The complete integration contract is already in the compile_product result. Write src/CustomFeature.tsx directly; only that file is available. After writing it, you may read/edit it for one targeted repair.",
+      };
+    }
+    if (event.toolName === "write" || event.toolName === "edit") customFileWritten = true;
+    return undefined;
+  });
+
   const configuredBudget = Number(process.env.CHALLENGE_WEIGHTED_TOKEN_BUDGET ?? 18_000);
   const configuredRepairs = Number(process.env.MAX_LLM_REPAIR_ATTEMPTS ?? 2);
   const maximumWeightedTokens = Number.isFinite(configuredBudget) && configuredBudget > 0 ? configuredBudget : 18_000;
@@ -514,6 +560,7 @@ export function registerProductCompiler(
       await trace.record({ agent: "compiler", action: "generate_application", status: "success", genome: route.genome, fields: ir.entities[0].fields.length });
 
       if (route.route !== "compile") {
+        customWorkActive = true;
         const emptyQa: QaResult = {
           passed: false,
           test: { stdout: "", stderr: "Custom implementation required.", code: 1, killed: false },
@@ -523,8 +570,28 @@ export function registerProductCompiler(
         };
         await writeReport(appRoot, ir, route, journeys, emptyQa);
         await trace.record({ agent: "qa", action: "verify_journeys", status: "skipped", reason: "focused custom implementation required" });
+        const customContext = JSON.stringify({
+          product: ir.product.name,
+          primaryEntity: ir.entities[0],
+          relatedEntities: ir.entities.slice(1).map((entity) => ({
+            name: entity.name,
+            plural: entity.plural,
+            primaryField: entity.primaryField,
+            fields: entity.fields,
+          })),
+          requirements: route.unsupported,
+        });
         return {
-          content: [{ type: "text", text: `Base product compiled via ${route.route}. Implement only: ${route.unsupported.join("; ")}. Relevant files: src/App.tsx, src/styles.css, and src/App.test.tsx. Read files directly; the read tool cannot list directories. Then call finalize_product.` }],
+          content: [{ type: "text", text: [
+            `Base product compiled via ${route.route}. Implement only the focused custom workspace: ${route.unsupported.join("; ")}.`,
+            `Context: ${customContext}`,
+            "The generic app already imports and renders src/CustomFeature.tsx.",
+            "Do not read any files. Replace only src/CustomFeature.tsx now, using inline styles and no added files or dependencies.",
+            "CustomFeature.tsx must default-export a React component accepting CustomFeatureProps imported from ./custom-feature-api.js.",
+            "The API exports productConfig; primaryRepository(), relatedRepository(entityName), and customStateRepository(featureName), whose repositories provide list(), create(values), update(id, values), remove(id), restore(record), and clear(); primaryRecordLabel(record); and EntityRecord/RecordValue types. EntityRecord is { id, createdAt, updatedAt, values } and values is a string/number/boolean map. Props provide records, onRecordsChanged(), and onSelectRecord(id).",
+            "Use browser APIs directly, never access localStorage, persist custom data through customStateRepository(), and preserve accessible names. Every unsupported requirement in Context is mandatory; do not substitute a simpler interaction. Hard size limit: the complete component must be at most 170 source lines and about 9,000 characters so the single write tool call can finish within its response budget. Implement only the core acceptance behavior; omit commentary and decorative extras.",
+            "Write src/CustomFeature.tsx now, then call finalize_product immediately.",
+          ].join("\n") }],
           details: { route, budget },
         };
       }
@@ -563,7 +630,18 @@ export function registerProductCompiler(
       const { ir, state } = await readState(appRoot);
       const attempts = state.llmRepairAttempts ?? 0;
       onUpdate?.({ content: [{ type: "text", text: `Verifying focused patch (attempt ${attempts + 1})…` }], details: {} });
-      let qa = await runQa(pi, appRoot, signal, dependencies);
+      const customSource = await readFile(path.join(appRoot, "src", "CustomFeature.tsx"), "utf8").catch(() => "");
+      const acceptanceErrors = customFeatureAcceptanceErrors(ir, customSource);
+      let qa = acceptanceErrors.length === 0
+        ? await runQa(pi, appRoot, signal, dependencies)
+        : {
+            passed: false,
+            test: skipped(`Custom acceptance check failed:\n- ${acceptanceErrors.join("\n- ")}`),
+            build: skipped("Build skipped because custom acceptance failed."),
+            startup: skipped("Startup skipped because custom acceptance failed."),
+            failure: classifyFailure("test", `Custom acceptance check failed:\n- ${acceptanceErrors.join("\n- ")}`),
+            repaired: false,
+          };
       const trace = new TraceWriter(appRoot);
       await trace.resume();
       await trace.record({ agent: "qa", action: "verify_after_custom_patch", status: qa.passed ? "success" : "failed", attempt: attempts + 1, category: qa.failure?.category });

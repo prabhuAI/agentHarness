@@ -14,7 +14,7 @@ import { TokenGovernor, weightedTokens } from "../solution/orchestrator/budget.j
 import { deriveJourneys } from "../solution/qa/derive-journeys.js";
 import { classifyFailure, FOREIGN_PORT_MARKER } from "../solution/qa/classify.js";
 import { deterministicRepair } from "../solution/repair/deterministic.js";
-import { coerceStringifiedIR } from "../solution/extensions/product-compiler.js";
+import { coerceStringifiedIR, customFeatureAcceptanceErrors } from "../solution/extensions/product-compiler.js";
 
 const temporaryDirectories: string[] = [];
 afterEach(async () => { await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true }))); });
@@ -406,11 +406,75 @@ describe("Product IR compiler", () => {
     for (const name of names) expect(resolveDesign("tracker", intent, name).layout).toBe("progress-workbench");
   });
 
-  it("routes only unsupported core interactions to bounded custom work", () => {
-    const hybrid = fixture({ customRequirements: ["Render an interactive dependency graph"] });
-    expect(classifyCapabilities(normalizeProductIR(validateProductIR(hybrid))).route).toBe("hybrid");
+  it("compiles known interaction genomes and routes truly unsupported work to custom code", () => {
+    const known = fixture({ customRequirements: ["Render an interactive dependency graph"] });
+    expect(classifyCapabilities(normalizeProductIR(validateProductIR(known))).route).toBe("compile");
+    const graphRoles = fixture({
+      product: { name: "Map", description: "Drag nodes on a dependency graph and connect them with arrows.", targetUser: "Planner", genome: "planner" },
+      customRequirements: ["Highlight nodes with no predecessors as starting points and nodes with no successors as leaves."],
+    });
+    expect(classifyCapabilities(normalizeProductIR(validateProductIR(graphRoles))).route).toBe("compile");
     const custom = fixture({ customRequirements: ["Realtime canvas", "Audio synthesis", "Physics simulation"] });
     expect(classifyCapabilities(normalizeProductIR(validateProductIR(custom))).route).toBe("custom");
+  });
+
+  it("preserves clearly novel interactions described outside customRequirements", () => {
+    const graph = fixture({
+      product: {
+        name: "Relationship map",
+        description: "Show an interactive dependency graph where users drag nodes around a canvas and connect them with arrows.",
+        targetUser: "A planner",
+        genome: "planner",
+      },
+      customRequirements: [],
+    });
+    const graphIr = normalizeProductIR(validateProductIR(graph));
+    expect(graphIr.customRequirements).toEqual([expect.stringMatching(/node-and-edge graph/iu)]);
+    expect(classifyCapabilities(graphIr).route).toBe("compile");
+    expect(customFeatureAcceptanceErrors(graphIr, "localStorage.setItem('x', 'y'); const markerEnd = true;")).toEqual(expect.arrayContaining([
+      expect.stringMatching(/localStorage/iu),
+      expect.stringMatching(/drag interaction/iu),
+    ]));
+    expect(customFeatureAcceptanceErrors(graphIr, "customStateRepository('graph'); onPointerDown(); onPointerUp(); const markerEnd = true;")).toEqual([]);
+
+    const audio = fixture({
+      product: {
+        name: "Voice notebook",
+        description: "Capture microphone audio in the browser, display its waveform, and provide playback for every saved clip.",
+        targetUser: "A learner",
+        genome: "log",
+      },
+      customRequirements: [],
+    });
+    const audioIr = normalizeProductIR(validateProductIR(audio));
+    expect(audioIr.customRequirements).toEqual([expect.stringMatching(/audio capture/iu)]);
+    expect(classifyCapabilities(audioIr).route).toBe("compile");
+    expect(customFeatureAcceptanceErrors(audioIr, "navigator.mediaDevices.getUserMedia({ audio: true }); new MediaRecorder(stream); return <><audio /><canvas aria-label='Waveform' /></>;")).toEqual([]);
+  });
+
+  it("drops a range lifecycle whose source fields are not temporal", () => {
+    const malformed = fixture();
+    const state = malformed.entities[0]!.fields.find((field) => field.id === "status")!;
+    state.derive = {
+      kind: "rangeStatus",
+      startField: "title",
+      endField: "genre",
+      buckets: { upcoming: "On shelf", active: "Lent out", past: "On shelf" },
+    } as never;
+    const ir = normalizeProductIR(validateProductIR(malformed));
+    expect(ir.entities[0].fields.find((field) => field.id === "status")?.derive).toBeUndefined();
+
+    const reusedCompletion = fixture();
+    reusedCompletion.entities[0]!.fields.push(
+      { id: "starts", label: "Starts", type: "date", required: false },
+      { id: "ends", label: "Ends", type: "date", required: false },
+    );
+    reusedCompletion.entities[0]!.fields.find((field) => field.id === "status")!.derive = {
+      kind: "rangeStatus", startField: "starts", endField: "ends", completedField: "ends",
+      buckets: { upcoming: "On shelf", active: "Lent out", past: "On shelf", completed: "On shelf" },
+    } as never;
+    const reusedIr = normalizeProductIR(validateProductIR(reusedCompletion));
+    expect(reusedIr.entities[0].fields.find((field) => field.id === "status")?.derive).toBeUndefined();
   });
 
   it("does not spend custom-code calls on validation and search already built into the runtime", () => {

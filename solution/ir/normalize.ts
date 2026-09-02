@@ -77,7 +77,13 @@ function inferDesignIntent(input: ProductIR): DesignIntent {
 // reference, self-reference, no usable threshold, or a formula that does not
 // parse or references a missing/non-numeric field. Field-id references are run
 // through `identifier` so they match the normalized ids exactly.
-function normalizeDerive(raw: unknown, fieldId: string, fieldIds: Set<string>, numericIds: Set<string>): DerivedFieldSpec | undefined {
+function normalizeDerive(
+  raw: unknown,
+  fieldId: string,
+  fieldIds: Set<string>,
+  numericIds: Set<string>,
+  fieldTypes: Map<string, ProductField["type"]>,
+): DerivedFieldSpec | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const spec = raw as { kind?: unknown; dateField?: unknown; thresholdField?: unknown; thresholdDays?: unknown; soonWithinDays?: unknown; buckets?: Partial<DateThresholdDerive["buckets"]>; expression?: unknown };
   const kind = String(spec.kind);
@@ -100,8 +106,12 @@ function normalizeDerive(raw: unknown, fieldId: string, fieldIds: Set<string>, n
     const completedField = identifier(range.completedField, "");
     const inactiveField = identifier(range.inactiveField, "");
     if (!fieldIds.has(startField) || !fieldIds.has(endField) || startField === endField || startField === fieldId || endField === fieldId) return undefined;
+    if (!["date", "datetime"].includes(fieldTypes.get(startField) ?? "") || !["date", "datetime"].includes(fieldTypes.get(endField) ?? "")) return undefined;
     if (completedField && (!fieldIds.has(completedField) || completedField === fieldId)) return undefined;
+    if (completedField && (completedField === startField || completedField === endField)) return undefined;
+    if (completedField && !["date", "datetime"].includes(fieldTypes.get(completedField) ?? "")) return undefined;
     if (inactiveField && (!fieldIds.has(inactiveField) || inactiveField === fieldId)) return undefined;
+    if (inactiveField && fieldTypes.get(inactiveField) !== "boolean") return undefined;
     const upcoming = clean(String(range.buckets?.upcoming ?? ""));
     const active = clean(String(range.buckets?.active ?? ""));
     const past = clean(String(range.buckets?.past ?? ""));
@@ -221,6 +231,7 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     };
   });
   const normalizedIds = new Set(normalized.map((field) => field.id));
+  const fieldTypes = new Map(normalized.map((field) => [field.id, field.type]));
   // A formula may reference only genuine numeric input fields — not itself, not a
   // date/text field, and not another computed field (which is not in stored values).
   const numericIds = new Set(
@@ -242,7 +253,7 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
         result = { ...result, visibleWhen: { field: controllingField, equals } };
       }
     }
-    const derive = normalizeDerive((source as ProductField | undefined)?.derive, field.id, normalizedIds, numericIds);
+    const derive = normalizeDerive((source as ProductField | undefined)?.derive, field.id, normalizedIds, numericIds, fieldTypes);
     if (derive) result = { ...result, derive };
     return result;
   });
@@ -571,7 +582,34 @@ function ensureRangeStatusInactive(entity: ProductEntity): ProductEntity {
   };
 }
 
+// Preserve unmistakable novel browser interactions even when the interpretation
+// model describes them in the product prose but forgets to repeat them in
+// customRequirements. These signals name reusable interaction classes, not
+// benchmark domains, and deliberately require multiple independent clues so an
+// ordinary dashboard or an entity whose noun is "record" stays deterministic.
+const INTERACTIVE_GRAPH_SIGNAL = /(?=.*\b(?:graph|network|canvas|dependency map)\b)(?=.*\b(?:drag(?:gable|ging)?|rearrang(?:e|ing)|connect(?:ing)?|arrows?|edges?|nodes?)\b)/isu;
+const AUDIO_CAPTURE_SIGNAL = /(?=.*\b(?:audio|microphone|mediarecorder|voice memo|sound recording)\b)(?=.*\b(?:record(?:ing)?|capture|playback|play back|waveform|listen)\b)/isu;
+const GRAPH_REQUIREMENT_COVERAGE = /\b(?:graph|network|canvas|nodes?|edges?)\b/iu;
+const AUDIO_REQUIREMENT_COVERAGE = /\b(?:audio|microphone|mediarecorder|waveform|playback|voice memo)\b/iu;
+
+function inferNovelCustomRequirements(input: ProductIR): string[] {
+  const requirements = uniqueStrings(input.customRequirements ?? []);
+  const prose = [
+    input.product?.description ?? "",
+    ...(input.assumptions ?? []),
+  ].join(" ");
+  const explicit = requirements.join(" ");
+  if (INTERACTIVE_GRAPH_SIGNAL.test(prose) && !GRAPH_REQUIREMENT_COVERAGE.test(explicit)) {
+    requirements.push("Render the described interactive node-and-edge graph with draggable persisted positions and editable relationships.");
+  }
+  if (AUDIO_CAPTURE_SIGNAL.test(prose) && !AUDIO_REQUIREMENT_COVERAGE.test(explicit)) {
+    requirements.push("Support the described in-browser audio capture, playback, and waveform interaction with persisted recordings.");
+  }
+  return requirements;
+}
+
 export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
+  const inferredCustomRequirements = inferNovelCustomRequirements(input);
   const requirementProse = (input.customRequirements ?? []).join(" ");
   const entities = input.entities.map((entity, index) => {
     const prepared = ensureRangeStatusInactive(inferRangeStatus(entity, requirementProse));
@@ -865,7 +903,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     excluded: uniqueStrings(input.excluded ?? []),
     // When the strict deterministic fallback recognized the full overlapping-
     // range invariant, do not route the same prose to bespoke model-authored code.
-    customRequirements: uniqueStrings(input.customRequirements ?? []).filter((requirement) => {
+    customRequirements: inferredCustomRequirements.filter((requirement) => {
       if (rangeConflicts.length > 0 && RANGE_CONFLICT_PATTERN.test(requirement)) return false;
       if (entities.some((entity) => entity.fields.some((field) => field.derive?.kind === "rangeStatus")) && TEMPORAL_STATUS_PATTERN.test(requirement)) return false;
       return true;

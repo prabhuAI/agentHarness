@@ -11,4 +11,5 @@
 - The runner owns the final `app_url`, location-aware `start_command`, independent `harness_checks`, and telemetry fields. Your product-journey test records remain in the specification-defined `tests_run` field.
 - Do not create or edit `result.json`; the outer challenge runner derives its telemetry from Pi.
 - `compile_product` already wrote `product.config.json`, Product IR, the specification, summary, trace, and report. Change runtime files only for unsupported core interactions returned by the compiler, then call `finalize_product`.
+- For a hybrid/custom route, the compiler response contains the complete integration contract and the app already renders `src/CustomFeature.tsx`. Do not inspect files; replace only that small component with inline styles, using `CustomFeatureProps` and the documented helpers from `src/custom-feature-api.ts`. Do not add files or dependencies, or inspect/edit the generic runtime.
 - Never include hidden reasoning, prompts, or source code in the trace.

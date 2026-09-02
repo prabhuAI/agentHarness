@@ -19,6 +19,7 @@ describe("terminating product compiler tool", () => {
     const success: ExecResult = { stdout: "passed", stderr: "", code: 0, killed: false };
     const fakePi = {
       registerTool: (tool: CapturedTool) => { tools.push(tool); },
+      on: () => undefined,
       exec: async () => success,
     } as unknown as ExtensionAPI;
     try {
@@ -38,9 +39,11 @@ describe("terminating product compiler tool", () => {
   it("runs the hybrid compile → focused patch → finalization lifecycle", async () => {
     const appRoot = await mkdtemp(path.join(os.tmpdir(), "agent-cofounder-hybrid-"));
     const tools: CapturedTool[] = [];
+    let toolCallHandler: ((event: { toolName: string; input: Record<string, unknown> }) => { block?: boolean } | undefined) | undefined;
     const success: ExecResult = { stdout: "passed", stderr: "", code: 0, killed: false };
     const fakePi = {
       registerTool: (tool: CapturedTool) => { tools.push(tool); },
+      on: (event: string, handler: typeof toolCallHandler) => { if (event === "tool_call") toolCallHandler = handler; },
       exec: async () => success,
     } as unknown as ExtensionAPI;
     try {
@@ -49,6 +52,13 @@ describe("terminating product compiler tool", () => {
       const compiled = await tools[0]!.execute("call-1", hybrid, undefined, undefined, {});
       expect(compiled.terminate).not.toBe(true);
       expect(compiled.content[0]?.text).toContain("Implement only");
+      expect(compiled.content[0]?.text).toContain("src/CustomFeature.tsx");
+      expect(compiled.content[0]?.text).toContain("Do not read any files");
+      expect(compiled.content[0]?.text).not.toContain("Relevant files: src/App.tsx");
+      expect(toolCallHandler?.({ toolName: "read", input: { path: path.join(appRoot, "src/repository.ts") } })).toMatchObject({ block: true });
+      expect(toolCallHandler?.({ toolName: "read", input: { path: path.join(appRoot, "src/CustomFeature.tsx") } })).toMatchObject({ block: true });
+      expect(toolCallHandler?.({ toolName: "write", input: { path: path.join(appRoot, "src/CustomFeature.tsx") } })).toBeUndefined();
+      expect(toolCallHandler?.({ toolName: "read", input: { path: path.join(appRoot, "src/CustomFeature.tsx") } })).toBeUndefined();
       const finalized = await tools[1]!.execute("call-2", {}, undefined, undefined, {});
       expect(finalized.terminate).toBe(true);
       expect(finalized.content[0]?.text).toContain("VERIFIED_PASS");
@@ -62,6 +72,7 @@ describe("terminating product compiler tool", () => {
     const failure: ExecResult = { stdout: "one compiled journey failed", stderr: "", code: 1, killed: false };
     const fakePi = {
       registerTool: (tool: CapturedTool) => { tools.push(tool); },
+      on: () => undefined,
       exec: async () => failure,
     } as unknown as ExtensionAPI;
     try {
@@ -90,6 +101,7 @@ describe("terminating product compiler tool", () => {
     process.env.MAX_LLM_REPAIR_ATTEMPTS = "1";
     const fakePi = {
       registerTool: (tool: CapturedTool) => { tools.push(tool); },
+      on: () => undefined,
       exec: async () => failure,
     } as unknown as ExtensionAPI;
     try {

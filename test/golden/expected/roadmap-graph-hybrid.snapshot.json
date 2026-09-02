@@ -17,7 +17,9 @@
         "sort",
         "group",
         "transition",
-        "calculate"
+        "calculate",
+        "interactiveGraph",
+        "Render an interactive dependency graph between initiatives"
       ],
       "target_user": "Product teams"
     },
@@ -322,7 +324,7 @@
       ],
       "tagline": ""
     },
-    "summary.md": "# Roadmap\n\nTrack initiatives and their dependencies.\n\n- **Target user:** Product teams\n- **Build route:** hybrid\n- **Genome:** workflow\n- **Presentation:** board / pipeline\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Planned verification journeys\n\n- Application loads and shows a useful empty state\n- Invalid initiative input shows validation without crashing\n- User can add a complete initiative and see it in initiatives\n- initiatives survive a page refresh\n- User can edit an existing initiative\n- User can search initiatives\n- User can narrow initiatives with a meaningful filter\n- initiatives are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing initiative\n"
+    "summary.md": "# Roadmap\n\nTrack initiatives and their dependencies.\n\n- **Target user:** Product teams\n- **Build route:** compile\n- **Genome:** workflow\n- **Presentation:** board / pipeline\n- **Persistence:** browser-local storage\n- **Start:** `npm run dev` → http://localhost:3000\n\n## Planned verification journeys\n\n- Application loads and shows a useful empty state\n- Invalid initiative input shows validation without crashing\n- User can add a complete initiative and see it in initiatives\n- initiatives survive a page refresh\n- User can edit an existing initiative\n- User can search initiatives\n- User can narrow initiatives with a meaningful filter\n- initiatives are grouped by a meaningful category or status\n- Requested derived values update from persisted records\n- User can delete an existing initiative\n"
   },
   "journeys": [
     {
@@ -368,8 +370,8 @@
   ],
   "route": {
     "genome": "workflow",
-    "reason": "The runtime covers the product shell; only listed requirements need custom code.",
-    "route": "hybrid",
+    "reason": "Every required behavior maps to the deterministic runtime.",
+    "route": "compile",
     "supported": [
       "create",
       "edit",
@@ -379,10 +381,10 @@
       "sort",
       "group",
       "transition",
-      "calculate"
-    ],
-    "unsupported": [
+      "calculate",
+      "interactiveGraph",
       "Render an interactive dependency graph between initiatives"
-    ]
+    ],
+    "unsupported": []
   }
 }

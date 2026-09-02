@@ -13,6 +13,7 @@ import {
   completedModelUsageFromEventLine,
   parseArguments,
   parseIdeaInput,
+  providerErrorTextFromEvents,
   runPi,
   runRequiresFailureExit,
 } from "../src/run-challenge.js";
@@ -96,6 +97,25 @@ describe("Pi launch", () => {
       type: "message_end",
       message: { role: "assistant", stopReason: "error", usage: { input: 1000, output: 1000 } },
     }))).toBeUndefined();
+  });
+
+  it("extracts provider errors only from structured assistant error events", () => {
+    const events = [
+      JSON.stringify({
+        type: "tool_execution_end",
+        result: "new DOMException(\"quota\", \"QuotaExceededError\") and HTTP 429 fixture",
+      }),
+      JSON.stringify({
+        type: "message_end",
+        message: { role: "assistant", stopReason: "toolUse", content: "quota exceeded example" },
+      }),
+      JSON.stringify({
+        type: "message_end",
+        message: { role: "assistant", stopReason: "error", errorMessage: "HTTP 429 Too Many Requests" },
+      }),
+    ].join("\n");
+    expect(providerErrorTextFromEvents(events)).toBe("HTTP 429 Too Many Requests");
+    expect(providerErrorTextFromEvents(events.replace('"error"', '"toolUse"'))).toBe("");
   });
 
   it("appends structurally consistent public journey guidance to Pi's built-in system prompt", async () => {

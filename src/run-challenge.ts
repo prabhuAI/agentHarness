@@ -32,6 +32,7 @@ interface Arguments {
 export interface CommandResult {
   exitCode: number;
   timedOut: boolean;
+  budgetExceeded: boolean;
 }
 
 const SOURCE_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
@@ -61,7 +62,7 @@ Environment:
   CHALLENGE_MODEL         Optional Pi model override
   CHALLENGE_THINKING      Optional Pi thinking level (default: off)
   CHALLENGE_TIMEOUT_MS    Wall-clock limit for Pi (default: 900000)
-  CHALLENGE_MAX_MODEL_CALLS Hard completed-call limit (default: 4)
+  CHALLENGE_MAX_MODEL_CALLS Hard completed-call limit (default: 7)
   CHALLENGE_WEIGHTED_TOKEN_BUDGET Hard weighted-token limit (default: 18000)
 `);
 }
@@ -152,6 +153,28 @@ export function completedModelUsageFromEventLine(line: string): { weighted: numb
   }
 }
 
+// Provider diagnostics may be present in Pi's structured JSON stream even when
+// stderr is empty. Only assistant messages explicitly marked as errors are
+// eligible: ordinary tool output can contain words such as "quota" or "429"
+// inside source code and must never be mistaken for a provider failure.
+export function providerErrorTextFromEvents(eventContent: string): string {
+  const errors: string[] = [];
+  for (const line of eventContent.split(/\r?\n/u)) {
+    try {
+      const event = JSON.parse(line) as Record<string, unknown>;
+      if (event.type !== "message_end") continue;
+      const message = event.message as Record<string, unknown> | undefined;
+      if (message?.role !== "assistant" || message.stopReason !== "error") continue;
+      const errorMessage = String(message.errorMessage ?? "").trim();
+      if (errorMessage) errors.push(errorMessage);
+    } catch {
+      // Malformed/unrelated lines stay available in the raw audit log but are
+      // not promoted into provider diagnostics.
+    }
+  }
+  return errors.join("\n");
+}
+
 const LIVE_TOOL_NARRATION: Record<string, string> = {
   compile_product: "🔨 compile_product → Product IR compiled deterministically into the app",
   finalize_product: "📦 finalize_product → run finalized and verified",
@@ -236,8 +259,12 @@ export async function runPi(
       let guardPending = false;
       let completedModelCalls = 0;
       let weightedTokenExpenditure = 0;
-      const configuredCallLimit = Number(process.env.CHALLENGE_MAX_MODEL_CALLS ?? 4);
-      const maximumModelCalls = Number.isSafeInteger(configuredCallLimit) && configuredCallLimit > 0 ? configuredCallLimit : 4;
+      // A bounded custom route can legitimately require: compile, two compact
+      // context reads, write, verify, one targeted repair, and final verify.
+      // Weighted tokens remain the primary hard ceiling; seven calls merely
+      // lets that documented two-attempt lifecycle reach its terminating tool.
+      const configuredCallLimit = Number(process.env.CHALLENGE_MAX_MODEL_CALLS ?? 7);
+      const maximumModelCalls = Number.isSafeInteger(configuredCallLimit) && configuredCallLimit > 0 ? configuredCallLimit : 7;
       const configuredTokenBudget = Number(process.env.CHALLENGE_WEIGHTED_TOKEN_BUDGET ?? 18_000);
       const maximumWeightedTokens = Number.isFinite(configuredTokenBudget) && configuredTokenBudget > 0 ? configuredTokenBudget : 18_000;
       const scheduleForceKill = () => {
@@ -315,7 +342,7 @@ export async function runPi(
         clearTimeout(timeout);
         if (killTimer) clearTimeout(killTimer);
         if (lineBuffer !== "") summarizeEventLine(lineBuffer);
-        resolve({ exitCode: timedOut ? 124 : (code ?? 1), timedOut });
+        resolve({ exitCode: timedOut ? 124 : (code ?? 1), timedOut, budgetExceeded: guardAborted });
       });
     });
   } finally {
@@ -490,14 +517,16 @@ async function main(): Promise<void> {
   // did compile a verifiable Product IR — a clean exit then is success, not a
   // model_output failure, so the diagnosis must not misfire on it.
   const diagnosis = classifyPiFailure(
-    `${withoutAppServerNoise(piStderr)}\n${eventContent}`,
+    `${withoutAppServerNoise(piStderr)}\n${providerErrorTextFromEvents(eventContent)}`,
     pi.exitCode,
     usage.model_calls,
     partial.status !== "failed",
   );
   const failureSummary = pi.timedOut
     ? "Run exceeded CHALLENGE_TIMEOUT_MS and was terminated before finishing."
-    : diagnosis.summary;
+    : pi.budgetExceeded
+      ? "Run exceeded the hard model-call or weighted-token budget and was terminated before finishing."
+      : diagnosis.summary;
   if (failureSummary) console.error(`Run diagnosis: ${failureSummary}`);
   let verification = unavailableAppVerification(
     canVerifyApp ? "app verification had not completed" : "Pi did not complete with audited model usage",
