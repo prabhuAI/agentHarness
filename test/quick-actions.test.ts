@@ -58,3 +58,57 @@ describe("quickActions capability", () => {
     expect(route.unsupported).toHaveLength(0);
   });
 });
+
+// A status-advance button ("move the order to the next stage") is a setValue
+// quick action. The full compile path is validateProductIR -> normalizeProductIR;
+// these guard the validator gate specifically, because it once hard-rejected
+// every set except today/clear even though the schema, prompt, runtime, and
+// normalizer already supported the wider vocabulary. Every other quickActions
+// test uses today/clear, so nothing here previously exercised the gate for the
+// increment/toggle/setValue verbs.
+const pipeline = (quickActions: unknown[]): ProductIR => ({
+  version: "1",
+  product: { name: "Workshop Orders", description: "", targetUser: "", genome: "workflow" },
+  entities: [{
+    name: "order", plural: "orders", primaryField: "customer",
+    fields: [
+      { id: "customer", label: "Customer", type: "text", required: true },
+      { id: "status", label: "Status", type: "status", required: true, options: ["Request", "Quoted", "Building", "Completed"] },
+      { id: "revisions", label: "Revisions", type: "number", required: false },
+      { id: "rush", label: "Rush", type: "boolean", required: false },
+    ],
+  }],
+  capabilities: { create: true, edit: true, delete: true, search: true, filter: true, sort: true, group: false, transition: true, calculate: false },
+  filters: [], calculations: [], charts: [],
+  quickActions: quickActions as ProductIR["quickActions"],
+  persistence: { strategy: "localStorage" }, assumptions: [], excluded: [], customRequirements: [],
+});
+
+describe("quickActions vocabulary passes the validator gate", () => {
+  it("validates a setValue action that advances a status to a declared option", () => {
+    const raw = pipeline([{ id: "build", label: "Start building", field: "status", set: "setValue", value: "Building" }]);
+    expect(() => validateProductIR(raw)).not.toThrow();
+    const ir = normalizeProductIR(validateProductIR(raw));
+    expect(ir.quickActions).toHaveLength(1);
+    expect(ir.quickActions[0]!).toMatchObject({ field: "status", set: "setValue", value: "Building" });
+  });
+
+  it("validates increment and toggle actions against type-matched fields", () => {
+    const raw = pipeline([
+      { id: "bump", label: "+1 revision", field: "revisions", set: "increment", amount: 1 },
+      { id: "flip", label: "Toggle rush", field: "rush", set: "toggle" },
+    ]);
+    expect(() => validateProductIR(raw)).not.toThrow();
+    const ir = normalizeProductIR(validateProductIR(raw));
+    expect(ir.quickActions.map((action) => action.set)).toEqual(["increment", "toggle"]);
+  });
+
+  it("rejects a genuinely unknown set verb", () => {
+    expect(() => validateProductIR(pipeline([{ id: "x", label: "X", field: "status", set: "teleport" }]))).toThrow();
+  });
+
+  it("keeps a status-advance idea on the deterministic compile route", () => {
+    const ir = normalizeProductIR(validateProductIR(pipeline([{ id: "build", label: "Start building", field: "status", set: "setValue", value: "Building" }])));
+    expect(classifyCapabilities(ir).route).toBe("compile");
+  });
+});

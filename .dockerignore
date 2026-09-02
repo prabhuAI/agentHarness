@@ -8,3 +8,5 @@ app-template/dist
 artifacts
 output
 coverage
+.claude
+demo-assets

@@ -346,9 +346,51 @@ const DATE_WINDOW_KEYWORDS: Record<string, DateWindowOperator> = {
 const windowKeyword = (value: string | undefined): DateWindowOperator | undefined =>
   value ? DATE_WINDOW_KEYWORDS[value.toLowerCase().replace(/[^a-z]/gu, "")] : undefined;
 
+const normalizeOptionWord = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/gu, "");
+
+// Pure calendar-position labels — where a record sits on the timeline relative to
+// now. A status whose options are *only* these just re-labels the date axis, so it
+// duplicates the date field and any date-window chips (Today ≈ "Happening today").
+// Deliberately excludes lifecycle words (overdue, due soon, OK): an "Overdue / Due
+// soon / fine" status carries real meaning the raw date does not, so it survives.
+const CALENDAR_POSITION_WORDS = new Set([
+  "today", "thisday", "tomorrow", "yesterday", "later", "earlier", "past",
+  "future", "upcoming", "comingup", "thisweek", "nextweek", "lastweek",
+  "thismonth", "nextmonth", "lastmonth", "thisyear", "soon", "now",
+  "recent", "recently",
+]);
+// A hand-authored (non-derived) status re-bucketing a date is redundant across a
+// broader vocabulary — including the overdue/due-soon words — because the guidance
+// is to express those as a derived dateThreshold, not type them by hand.
+const MANUAL_TIME_BUCKET_WORDS = new Set([...CALENDAR_POSITION_WORDS, "overdue", "duesoon", "duetoday", "due"]);
+
+const allOptionsIn = (field: ProductField, vocabulary: Set<string>): boolean => {
+  const options = field.options ?? [];
+  return options.length >= 2 && options.every((option) => vocabulary.has(normalizeOptionWord(option)));
+};
+
+// Drop a status/category field that merely re-buckets an existing date axis — it
+// only clutters the facet bar with overlapping, mostly-zero time chips. Two cases,
+// only when the entity actually has a date/datetime to fall back on:
+//   • a hand-authored status/category whose options are all time buckets, and
+//   • a derived dateThreshold status whose options are all *calendar-position*
+//     words (a genuine overdue/due-soon lifecycle keeps its meaning and stays).
+// Filters/charts/actions that referenced the dropped field are pruned downstream
+// by the existing validity checks (predicateUsable et al.).
+function pruneRedundantTimeBucketFields(fields: ProductField[]): ProductField[] {
+  const hasDate = fields.some((field) => field.type === "date" || field.type === "datetime");
+  if (!hasDate) return fields;
+  return fields.filter((field) => {
+    if (field.type !== "status" && field.type !== "category") return true;
+    if (!field.derive) return !allOptionsIn(field, MANUAL_TIME_BUCKET_WORDS);
+    if (field.derive.kind === "dateThreshold") return !allOptionsIn(field, CALENDAR_POSITION_WORDS);
+    return true;
+  });
+}
+
 export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
   const entities = input.entities.map((entity, index) => {
-    const fields = normalizeFields(entity);
+    const fields = pruneRedundantTimeBucketFields(normalizeFields(entity));
     // A derived field is computed, never entered, so it can never identify a record.
     const enterable = fields.filter((field) => !field.derive);
     // A date/datetime makes a poor record title: it renders formatted (e.g.

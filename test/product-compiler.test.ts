@@ -12,7 +12,7 @@ import { ProductIRValidationError, validateProductIR } from "../solution/ir/sche
 import type { ProductIR } from "../solution/ir/types.js";
 import { TokenGovernor, weightedTokens } from "../solution/orchestrator/budget.js";
 import { deriveJourneys } from "../solution/qa/derive-journeys.js";
-import { classifyFailure } from "../solution/qa/classify.js";
+import { classifyFailure, FOREIGN_PORT_MARKER } from "../solution/qa/classify.js";
 import { deterministicRepair } from "../solution/repair/deterministic.js";
 import { coerceStringifiedIR } from "../solution/extensions/product-compiler.js";
 
@@ -412,6 +412,19 @@ describe("Product IR compiler", () => {
     expect(classifyCapabilities(normalizeProductIR(validateProductIR(custom))).route).toBe("custom");
   });
 
+  it("does not spend custom-code calls on validation and search already built into the runtime", () => {
+    const repeatedBuiltIns = fixture({
+      customRequirements: [
+        "Email and website fields must validate their formats and show inline errors.",
+        "Search must match across all text fields.",
+      ],
+    });
+    const route = classifyCapabilities(normalizeProductIR(validateProductIR(repeatedBuiltIns)));
+    expect(route.route).toBe("compile");
+    expect(route.unsupported).toEqual([]);
+    expect(route.supported).toEqual(expect.arrayContaining(repeatedBuiltIns.customRequirements));
+  });
+
   it("compiles grouping when the product has a category or status field", () => {
     const grouped = fixture({
       capabilities: { ...fixture().capabilities, group: true },
@@ -457,6 +470,75 @@ describe("Product IR compiler", () => {
     expect(new TokenGovernor().snapshot("compile").state).toBe("green");
   });
 
+  it("keeps a planner an agenda even when it carries an incidental chart (chart renders as a secondary widget)", () => {
+    const planner = fixture({
+      product: { name: "Community Activities", description: "See what's happening today, tomorrow and the coming weeks.", targetUser: "Community coordinator", genome: "planner" },
+      entities: [{
+        name: "activity", plural: "activities", primaryField: "title",
+        fields: [
+          { id: "title", label: "Title", type: "text", required: true },
+          { id: "date", label: "Date", type: "date", required: true },
+          { id: "category", label: "Category", type: "category", required: false, options: ["Fitness", "Arts"], allowCustom: true },
+        ],
+      }],
+      capabilities: { create: true, edit: true, delete: true, search: true, filter: true, sort: true, group: true, transition: false, calculate: true },
+      filters: [], calculations: [],
+      charts: [{ id: "by_category", label: "Activities by category", type: "pie", xField: "category" }],
+    });
+    const ir = normalizeProductIR(validateProductIR(planner));
+    const presentation = resolvePresentation(ir);
+    // The single pie chart must not hijack the layout into a dashboard.
+    expect(presentation.primary).toBe("agenda");
+    expect(presentation.dateField).toBe("date");
+    // The chart survives to render in the secondary chart strip.
+    expect(ir.charts).toHaveLength(1);
+  });
+
+  it("prunes a hand-authored status field that just re-buckets an existing date, along with its redundant filters", () => {
+    const withRecency = fixture({
+      product: { name: "Community Activities", description: "Track community center activities.", targetUser: "Coordinator", genome: "planner" },
+      entities: [{
+        name: "activity", plural: "activities", primaryField: "title",
+        fields: [
+          { id: "title", label: "Title", type: "text", required: true },
+          { id: "date", label: "Date", type: "date", required: true },
+          // A manual status field duplicating what `date` already implies.
+          { id: "recency", label: "When", type: "status", required: false, options: ["Today", "Tomorrow", "Later", "Past"], allowCustom: false },
+        ],
+      }],
+      capabilities: { create: true, edit: true, delete: true, search: true, filter: true, sort: true, group: true, transition: false, calculate: true },
+      filters: [
+        { id: "today", label: "Happening today", field: "date", operator: "today" },
+        { id: "r_today", label: "Today", field: "recency", operator: "equals", value: "Today" },
+        { id: "r_past", label: "Past", field: "recency", operator: "equals", value: "Past" },
+      ],
+      calculations: [], charts: [],
+    });
+    const ir = normalizeProductIR(validateProductIR(withRecency));
+    // The redundant time-bucket field is gone.
+    expect(ir.entities[0].fields.some((field) => field.id === "recency")).toBe(false);
+    // Its filters are pruned with it; the genuine date-window filter remains.
+    expect(ir.filters.some((filter) => filter.field === "recency")).toBe(false);
+    expect(ir.filters.some((filter) => filter.field === "date" && filter.operator === "today")).toBe(true);
+  });
+
+  it("keeps a genuine derived dateThreshold status (the correct pattern), pruning only hand-authored time buckets", () => {
+    const derived = fixture({
+      product: { name: "Library", description: "Track library book loans.", targetUser: "Librarian", genome: "tracker" },
+      entities: [{
+        name: "loan", plural: "loans", primaryField: "title",
+        fields: [
+          { id: "title", label: "Book", type: "text", required: true },
+          { id: "due", label: "Due", type: "date", required: true },
+          { id: "state", label: "State", type: "status", required: false, options: ["Overdue", "Due soon", "OK"], derive: { kind: "dateThreshold", dateField: "due", buckets: { overdue: "Overdue", soon: "Due soon", ok: "OK" } } },
+        ],
+      }],
+      filters: [], calculations: [], charts: [],
+    });
+    const ir = normalizeProductIR(validateProductIR(derived));
+    expect(ir.entities[0].fields.some((field) => field.id === "state")).toBe(true);
+  });
+
   it("classifies failures and applies only known deterministic repairs", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "agent-cofounder-repair-"));
     temporaryDirectories.push(directory);
@@ -469,5 +551,33 @@ describe("Product IR compiler", () => {
     expect((await deterministicRepair(directory, failure)).applied).toBe(true);
     const repaired = JSON.parse(await readFile(path.join(directory, "product.config.json"), "utf8")) as Record<string, unknown>;
     expect(repaired.primaryField).toBe("name");
+    expect(repaired.secondaryFields).toEqual([]);
+    expect(repaired.searchableFields).toEqual([]);
+    expect((await deterministicRepair(directory, failure)).applied).toBe(false);
+  });
+
+  it("refuses unsafe or impossible deterministic repairs", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "agent-cofounder-unrepairable-"));
+    temporaryDirectories.push(directory);
+    const runtimeFailure = classifyFailure("test", "TypeError: Cannot read properties of undefined");
+    expect(runtimeFailure.category).toBe("journey");
+    expect((await deterministicRepair(directory, runtimeFailure)).applied).toBe(false);
+    await writeFile(path.join(directory, "product.config.json"), "not json");
+    const configFailure = classifyFailure("build", "product.config is invalid");
+    expect((await deterministicRepair(directory, configFailure)).applied).toBe(false);
+    await writeFile(path.join(directory, "product.config.json"), JSON.stringify({ fields: [] }));
+    expect((await deterministicRepair(directory, configFailure)).applied).toBe(false);
+  });
+
+  it("classifies a port held by a foreign process as an environmental block, not a runtime failure", () => {
+    const failure = classifyFailure(
+      "startup",
+      `${FOREIGN_PORT_MARKER}: No same-user listener rooted in /work/app owned port 3000`,
+    );
+    expect(failure.category).toBe("environment");
+  });
+
+  it("still classifies a genuine startup failure as runtime", () => {
+    expect(classifyFailure("startup", "HTTP startup probe failed.").category).toBe("runtime");
   });
 });

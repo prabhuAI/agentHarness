@@ -369,7 +369,9 @@ export function computeSummaryValue(summary: SummaryConfig, records: ReadonlyArr
   if (summary.operation === "min") return records.length ? Math.min(...records.map(measure)) : 0;
   if (summary.operation === "max") return records.length ? Math.max(...records.map(measure)) : 0;
   // Conditional aggregates reduce `sumField` over the records matching the predicate.
-  const matching = records.filter((record) => matchesPredicate(record.values[summary.field ?? ""], summary.operator ?? "nonEmpty", summary.value, now, summary.valueEnd));
+  const matching = records.filter((record) => matchesRecordPredicate(record, {
+    field: summary.field ?? "", operator: summary.operator ?? "nonEmpty", value: summary.value, valueEnd: summary.valueEnd,
+  }, now));
   const weighed = (record: { values: Values }) => Number(record.values[summary.sumField ?? ""] || 0);
   if (summary.operation === "sumWhere") return matching.reduce((total, record) => total + weighed(record), 0);
   if (summary.operation === "avgWhere") return matching.length ? matching.reduce((total, record) => total + weighed(record), 0) / matching.length : 0;
@@ -428,7 +430,7 @@ export function matchesPredicate(value: RecordValue | undefined, operator: Predi
     return index !== null && index >= weekStart && index <= weekStart + 6;
   }
   if (operator === "equals") return text === String(expected ?? "");
-  if (operator === "notEquals") return text !== String(expected ?? "");
+  if (operator === "notEquals") return text !== String(expected ?? "") && (valueEnd === undefined || text !== valueEnd);
   if (operator === "contains") return text.toLowerCase().includes(String(expected ?? "").toLowerCase());
   if (operator === "nonEmpty") return text !== "";
   if (operator === "empty") return text === "";
@@ -448,6 +450,21 @@ export function matchesPredicate(value: RecordValue | undefined, operator: Predi
   if (operator === "atMost") return cmp <= 0;
   if (operator === "atLeast") return cmp >= 0;
   return false;
+}
+
+export function matchesRecordPredicate(
+  record: Pick<EntityRecord, "values">,
+  predicate: { field: string; operator: PredicateOperator; value?: string; valueEnd?: string },
+  now: Date = new Date(),
+): boolean {
+  // A numeric/date comparison may name another field as its bound (for example
+  // units_on_hand <= reorder_level). Resolve that field per record; ordinary
+  // literal values continue through unchanged.
+  const resolve = (candidate: string | undefined): string | undefined => candidate
+    && Object.prototype.hasOwnProperty.call(record.values, candidate)
+    ? String(record.values[candidate] ?? "")
+    : candidate;
+  return matchesPredicate(record.values[predicate.field], predicate.operator, resolve(predicate.value), now, resolve(predicate.valueEnd));
 }
 
 function ThemeIcon({ resolved }: { resolved: ResolvedTheme }) {
@@ -523,13 +540,13 @@ export function App() {
   const visible = useMemo(() => derivedRecords.filter((record) => {
     const matchesQuery = !query || productConfig.searchableFields.some((key) => String(record.values[key] ?? "").toLowerCase().includes(query.toLowerCase()));
     const preset = productConfig.filters.find((candidate) => candidate.id === filter);
-    const matchesFilter = !preset || matchesPredicate(record.values[preset.field], preset.operator, preset.value, undefined, preset.valueEnd);
+    const matchesFilter = !preset || matchesRecordPredicate(record, preset);
     return matchesQuery && matchesFilter;
   }).sort((left, right) => {
     if (sort === "priority" && productConfig.priority?.filter) {
       const predicate = productConfig.priority.filter;
-      const leftEligible = matchesPredicate(left.values[predicate.field], predicate.operator, predicate.value, undefined, predicate.valueEnd);
-      const rightEligible = matchesPredicate(right.values[predicate.field], predicate.operator, predicate.value, undefined, predicate.valueEnd);
+      const leftEligible = matchesRecordPredicate(left, predicate);
+      const rightEligible = matchesRecordPredicate(right, predicate);
       if (leftEligible !== rightEligible) return leftEligible ? -1 : 1;
     }
     return compareRecordsBySort(sort, left, right);
@@ -538,7 +555,7 @@ export function App() {
     const priority = productConfig.priority;
     if (!priority) return undefined;
     return [...derivedRecords]
-      .filter((record) => !priority.filter || matchesPredicate(record.values[priority.filter.field], priority.filter.operator, priority.filter.value, undefined, priority.filter.valueEnd))
+      .filter((record) => !priority.filter || matchesRecordPredicate(record, priority.filter))
       .sort((left, right) => compareRecordsBySort("priority", left, right))[0]?.id;
   }, [derivedRecords]);
   const summaries = useMemo(() => productConfig.summaries.map((summary) => ({ ...summary, value: computeSummaryValue(summary, derivedRecords) })), [derivedRecords]);
@@ -700,7 +717,7 @@ export function App() {
     "--layout-gap": `${design.spacing.gap}px`,
   } as CSSProperties;
 
-  const recordCard = (record: EntityRecord, view = viewPlan.primary) => <article className={`card record-${view}${record.id === priorityRecordId ? " is-priority" : ""}`} key={record.id}>
+  const recordCard = (record: EntityRecord, view = viewPlan.primary) => <article data-record-id={record.id} className={`card record-${view}${record.id === priorityRecordId ? " is-priority" : ""}`} key={record.id}>
     <div className="card-top"><h3>{record.id === priorityRecordId && <span className="priority-badge">{productConfig.priority?.label}</span>}<span>{displayValue(productConfig.fields.find((field) => field.key === productConfig.primaryField)!, record.values[productConfig.primaryField])}</span></h3>
       <div className="actions">{productConfig.quickActions.map((action) => <button key={action.id} type="button" className="quick-action" onClick={() => runQuickAction(record, action)}>{action.label}</button>)}{productConfig.capabilities.edit && <button onClick={() => openEdit(record)}>Edit</button>}{productConfig.capabilities.delete && <button className="danger" onClick={() => remove(record)}>Delete</button>}</div></div>
     <dl>{productConfig.secondaryFields.map((key) => { const field = productConfig.fields.find((candidate) => candidate.key === key); const value = record.values[key]; return field && isFieldVisible(field, record.values) && value !== undefined && value !== null && value !== "" ? <div key={key}><dt>{field.label}</dt><dd className={field.type === "status" ? "badge" : ""}>{displayValue(field, value)}</dd></div> : null; })}</dl>
@@ -720,7 +737,7 @@ export function App() {
         {tableColumns.map((field) => <th key={field.key} scope="col">{field.label}</th>)}
         {hasRowActions && <th scope="col" className="col-actions">Actions</th>}
       </tr></thead>
-      <tbody>{rows.map((record) => <tr key={record.id} className={record.id === priorityRecordId ? "is-priority" : ""}>
+      <tbody>{rows.map((record) => <tr key={record.id} data-record-id={record.id} className={record.id === priorityRecordId ? "is-priority" : ""}>
         <th scope="row">{record.id === priorityRecordId && <span className="priority-badge">{productConfig.priority?.label}</span>}{displayValue(primaryFieldConfig, record.values[productConfig.primaryField])}</th>
         {tableColumns.map((field) => { const value = record.values[field.key]; const shown = isFieldVisible(field, record.values) && value !== undefined && value !== null && value !== ""; return <td key={field.key} data-label={field.label}>{shown ? <span className={field.type === "status" ? "badge" : ""}>{displayValue(field, value)}</span> : <span className="muted-cell">—</span>}</td>; })}
         {hasRowActions && <td className="col-actions"><div className="actions">{productConfig.quickActions.map((action) => <button key={action.id} type="button" className="quick-action" onClick={() => runQuickAction(record, action)}>{action.label}</button>)}{productConfig.capabilities.edit && <button onClick={() => openEdit(record)}>Edit</button>}{productConfig.capabilities.delete && <button className="danger" onClick={() => remove(record)}>Delete</button>}</div></td>}

@@ -84,8 +84,11 @@ export function describeStep(event: TraceEventLike): string {
       const g = genome ? ` — genome detected: ${genome}` : "";
       return `Model call → idea interpreted into Product IR${g}, ${entities} entit${entities === 1 ? "y" : "ies"}`;
     }
-    case "product:select_scope":
-      return `Scope chosen → ${num(event.included)} feature${num(event.included) === 1 ? "" : "s"} in, ${num(event.excluded)} deliberately excluded`;
+    case "product:select_scope": {
+      const included = Array.isArray(event.included) ? event.included.length : num(event.included);
+      const excluded = Array.isArray(event.excluded) ? event.excluded.length : num(event.excluded);
+      return `Scope chosen → ${included} feature${included === 1 ? "" : "s"} in, ${excluded} deliberately excluded`;
+    }
     case "router:select_strategy": {
       const route = strategy === "compile"
         ? "compile (deterministic route — 0 extra model calls)"

@@ -19,6 +19,7 @@
     "app:test": "npm --prefix app-template test -- --passWithNoTests",
     "app:build": "npm --prefix app-template run build",
     "benchmark": "node --import tsx benchmarks/run-benchmark.ts",
+    "benchmark:freeze": "node scripts/freeze-benchmark.mjs",
     "submission:freeze": "node scripts/freeze-submission.mjs",
     "check": "npm run typecheck && npm run test && npm run app:test && npm run app:build"
   },

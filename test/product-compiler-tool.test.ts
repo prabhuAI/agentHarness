@@ -22,7 +22,7 @@ describe("terminating product compiler tool", () => {
       exec: async () => success,
     } as unknown as ExtensionAPI;
     try {
-      registerProductCompiler(fakePi, appRoot, { verifyStartup: async () => true });
+      registerProductCompiler(fakePi, appRoot, { verifyStartup: async () => ({ served: true, portBlockedByForeignProcess: false }) });
       expect(tools.map((tool) => tool.name)).toEqual(["compile_product", "finalize_product"]);
       const compiler = tools[0]!;
       const result = await compiler.execute("call-1", PUBLIC_BOOK_LENDING_IR, undefined, undefined, {});
@@ -44,7 +44,7 @@ describe("terminating product compiler tool", () => {
       exec: async () => success,
     } as unknown as ExtensionAPI;
     try {
-      registerProductCompiler(fakePi, appRoot, { verifyStartup: async () => true });
+      registerProductCompiler(fakePi, appRoot, { verifyStartup: async () => ({ served: true, portBlockedByForeignProcess: false }) });
       const hybrid = { ...PUBLIC_BOOK_LENDING_IR, customRequirements: ["Import records from a proprietary device"] };
       const compiled = await tools[0]!.execute("call-1", hybrid, undefined, undefined, {});
       expect(compiled.terminate).not.toBe(true);
@@ -65,7 +65,7 @@ describe("terminating product compiler tool", () => {
       exec: async () => failure,
     } as unknown as ExtensionAPI;
     try {
-      registerProductCompiler(fakePi, appRoot, { verifyStartup: async () => true });
+      registerProductCompiler(fakePi, appRoot, { verifyStartup: async () => ({ served: true, portBlockedByForeignProcess: false }) });
       const compiled = await tools[0]!.execute("call-1", PUBLIC_BOOK_LENDING_IR, undefined, undefined, {});
       expect(compiled.terminate).toBe(true);
       expect(compiled.content[0]?.text).toContain("Deterministic compile invariant failed");
@@ -93,7 +93,7 @@ describe("terminating product compiler tool", () => {
       exec: async () => failure,
     } as unknown as ExtensionAPI;
     try {
-      registerProductCompiler(fakePi, appRoot, { verifyStartup: async () => true });
+      registerProductCompiler(fakePi, appRoot, { verifyStartup: async () => ({ served: true, portBlockedByForeignProcess: false }) });
       const hybrid = { ...PUBLIC_BOOK_LENDING_IR, customRequirements: ["Import records from a proprietary device"] };
       await tools[0]!.execute("call-1", hybrid, undefined, undefined, {});
       const finalized = await tools[1]!.execute("call-2", {}, undefined, undefined, {});

@@ -10,11 +10,11 @@ import type { NormalizedProductIR, RouteDecision } from "../ir/types.js";
 import { generateLaunchKit } from "../launch/generate.js";
 import { TokenGovernor } from "../orchestrator/budget.js";
 import { deriveJourneys, type DerivedJourney } from "../qa/derive-journeys.js";
-import { classifyFailure, type ClassifiedFailure } from "../qa/classify.js";
+import { classifyFailure, type ClassifiedFailure, FOREIGN_PORT_MARKER } from "../qa/classify.js";
 import { deterministicRepair } from "../repair/deterministic.js";
 import { sha256File, sha256Text, TraceWriter } from "../telemetry/trace.js";
 import { verifyRequiredArtifacts } from "../../src/validate-artifacts.js";
-import { verifyAppStartup } from "../../src/verify-app.js";
+import { verifyAppStartup, type StartupProbeResult } from "../../src/verify-app.js";
 
 const fieldSchema = Type.Object({
   id: Type.String({ description: "short snake_case semantic key" }),
@@ -79,12 +79,17 @@ const strictProductIRSchema = Type.Object({
       motion: Type.String({ enum: ["none", "subtle", "expressive"] }),
     }, { description: "Four short visual-intent enums; omit when the deterministic genome default is suitable" })),
   }),
-  entities: Type.Array(Type.Object({
+  // Optional at the tool boundary for the same reason as version: a model that
+  // nests entities inside a stringified `product` (or omits them) must not trigger
+  // a pi-ai schema rejection and a wasted retry. coerceStringifiedIR lifts nested
+  // entities back to the top level; the hand-written validateProductIR still
+  // rejects an IR that genuinely has no entities.
+  entities: Type.Optional(Type.Array(Type.Object({
     name: Type.String({ description: "singular lowercase noun" }),
     plural: Type.Optional(Type.String()),
     primaryField: Type.Optional(Type.String()),
     fields: Type.Array(fieldSchema, { minItems: 1, maxItems: 12 }),
-  }), { minItems: 1, maxItems: 3 }),
+  }), { minItems: 1, maxItems: 3 })),
   capabilities: Type.Optional(Type.Object({
     create: Type.Optional(Type.Boolean()), edit: Type.Optional(Type.Boolean()), delete: Type.Optional(Type.Boolean()), search: Type.Optional(Type.Boolean()),
     filter: Type.Optional(Type.Boolean()), sort: Type.Optional(Type.Boolean()), group: Type.Optional(Type.Boolean()), transition: Type.Optional(Type.Boolean()), calculate: Type.Optional(Type.Boolean()),
@@ -138,7 +143,7 @@ const strictProductIRSchema = Type.Object({
       field: Type.String(),
       operator: Type.String({ enum: PREDICATE_OPERATOR_ENUM }),
       value: Type.Optional(Type.String()),
-      valueEnd: Type.Optional(Type.String({ description: "between only: inclusive upper bound" })),
+      valueEnd: Type.Optional(Type.String({ description: "For between: inclusive upper bound. For notEquals: optional second value to exclude." })),
     }, { description: "Optional subset eligible for priority, e.g. status equals Waiting" })),
   }, { description: "Ordered queue with a highlighted first record. Use for who-is-next, FIFO, oldest-first, triage, or dispatch workflows; never use a customRequirement for these." })),
   persistence: Type.Optional(Type.Object({ strategy: Type.String({ enum: ["localStorage"] }) })),
@@ -243,10 +248,33 @@ function parseIfJsonString(value: unknown): unknown {
 // Undo a model's over-stringification before validation: parse any top-level
 // container that arrived as a JSON string, and repair the common nested case
 // where `entities`, an entity, or its `fields` were each stringified.
+// IR fields that belong at the top level of the tool arguments. A weaker model
+// sometimes nests the entire IR inside `product` (as an object or a JSON string),
+// leaving these absent at the top level — which fails the required-`entities`
+// gate. lift them back out so the single call succeeds without a retry.
+const TOP_LEVEL_IR_KEYS = [
+  "version", "entities", "capabilities", "filters", "calculations", "charts",
+  "quickActions", "standings", "priority", "persistence", "assumptions",
+  "excluded", "customRequirements",
+] as const;
+
 export function coerceStringifiedIR(params: unknown): unknown {
   if (typeof params !== "object" || params === null) return params;
   const out: Record<string, unknown> = { ...(params as Record<string, unknown>) };
   for (const key of Object.keys(out)) out[key] = parseIfJsonString(out[key]);
+  // Undo the "whole IR stuffed into product" shape: lift any top-level IR field
+  // the model tucked inside product, but only when it is missing at the top level
+  // (a genuine top-level value always wins). product keeps its own fields (name,
+  // description, tagline, targetUser, genome, design).
+  if (out.product && typeof out.product === "object" && !Array.isArray(out.product)) {
+    const product = out.product as Record<string, unknown>;
+    for (const key of TOP_LEVEL_IR_KEYS) {
+      if (key in product && out[key] === undefined) {
+        out[key] = parseIfJsonString(product[key]);
+        delete product[key];
+      }
+    }
+  }
   // version is optional at the tool boundary (see strictProductIRSchema); default
   // a missing one so validateProductIR's version check passes without a retry.
   if (out.version === undefined) out.version = "1";
@@ -282,10 +310,32 @@ interface QaResult {
 }
 
 interface CompilerDependencies {
-  verifyStartup: (appRoot: string) => Promise<boolean>;
+  verifyStartup: (appRoot: string) => Promise<StartupProbeResult>;
 }
 
 const skipped = (message: string): ExecResult => ({ stdout: "", stderr: message, code: 1, killed: false });
+
+// Translates the startup probe into an ExecResult the QA pipeline can classify.
+// A port held by a foreign process is tagged so classifyFailure reads it as an
+// environmental block, not a product runtime failure.
+function startupExecResult(probe: StartupProbeResult): ExecResult {
+  if (probe.served) return { stdout: "HTTP startup probe passed.", stderr: "", code: 0, killed: false };
+  if (probe.portBlockedByForeignProcess) {
+    return { stdout: "", stderr: `${FOREIGN_PORT_MARKER}: ${probe.diagnostic ?? "The configured port was held by a process outside the generated app."}`, code: 1, killed: false };
+  }
+  return { stdout: "", stderr: "HTTP startup probe failed.", code: 1, killed: false };
+}
+
+async function probeStartup(
+  verifyStartup: CompilerDependencies["verifyStartup"],
+  appRoot: string,
+  testCode: number,
+  buildCode: number,
+  skippedReason: string,
+): Promise<ExecResult> {
+  if (testCode !== 0 || buildCode !== 0) return skipped(skippedReason);
+  return startupExecResult(await verifyStartup(appRoot));
+}
 
 async function runQa(pi: ExtensionAPI, appRoot: string, signal: AbortSignal | undefined, dependencies: CompilerDependencies): Promise<QaResult> {
   const options = { cwd: appRoot, timeout: 120_000, ...(signal ? { signal } : {}) };
@@ -293,9 +343,7 @@ async function runQa(pi: ExtensionAPI, appRoot: string, signal: AbortSignal | un
   let build = test.code === 0
     ? await pi.exec("npm", ["run", "build"], options)
     : skipped("Build skipped because tests failed.");
-  let startup = test.code === 0 && build.code === 0 && await dependencies.verifyStartup(appRoot)
-    ? { stdout: "HTTP startup probe passed.", stderr: "", code: 0, killed: false }
-    : skipped(test.code === 0 && build.code === 0 ? "HTTP startup probe failed." : "Startup skipped because tests or build failed.");
+  let startup = await probeStartup(dependencies.verifyStartup, appRoot, test.code, build.code, "Startup skipped because tests or build failed.");
   if (test.code === 0 && build.code === 0 && startup.code === 0) return { passed: true, test, build, startup, repaired: false };
   if (startup.code !== 0 && test.code === 0 && build.code === 0) {
     return { passed: false, test, build, startup, failure: classifyFailure("startup", startup.stderr), repaired: false };
@@ -309,9 +357,7 @@ async function runQa(pi: ExtensionAPI, appRoot: string, signal: AbortSignal | un
   build = test.code === 0
     ? await pi.exec("npm", ["run", "build"], options)
     : skipped("Build skipped because repaired tests failed.");
-  startup = test.code === 0 && build.code === 0 && await dependencies.verifyStartup(appRoot)
-    ? { stdout: "HTTP startup probe passed.", stderr: "", code: 0, killed: false }
-    : skipped(test.code === 0 && build.code === 0 ? "HTTP startup probe failed." : "Startup skipped because repaired tests or build failed.");
+  startup = await probeStartup(dependencies.verifyStartup, appRoot, test.code, build.code, "Startup skipped because repaired tests or build failed.");
   const passed = test.code === 0 && build.code === 0 && startup.code === 0;
   return { passed, test, build, startup, failure: passed ? failure : (startup.code !== 0 ? classifyFailure("startup", startup.stderr) : failure), repaired: true };
 }
@@ -396,7 +442,10 @@ export function registerProductCompiler(
     promptSnippet: "Compile a raw idea from one compact Product IR",
     promptGuidelines: [
       "Call compile_product exactly once after interpreting the idea; do not read or edit application files first.",
+      "Pass entities and the other IR sections (capabilities, filters, charts, …) as top-level arguments — not nested inside product, and not as JSON strings. product holds only name/description/tagline/targetUser/genome/design.",
       "Use customRequirements only for essential interactions that cannot be represented by fields, CRUD, search, filters, state transitions, or count/sum calculations.",
+      "Email and URL fields already validate their formats with inline errors, and search checks every id listed in searchableFields. Represent those behaviors in the IR and never repeat them in customRequirements.",
+      "For a priority queue that excludes two terminal statuses, use one priority.filter with operator notEquals, the first excluded status in value, and the second in valueEnd. This is deterministic; never repeat it in customRequirements.",
       "Multiple editable entities are supported deterministically. When scored records involve two participants and the user wants a league table, ladder, or ranking, add both entities plus a standings entry. The two participant fields live on sourceEntity and select records from rowEntity; provide each side's score-for and score-against fields and the win/draw/loss points. Never describe this again in customRequirements.",
       "When a product has multiple entities, set calculation.entity so a metric is counted from the correct record collection (for example, a total of matches must use entity match).",
       "For a status that is a date-based lifecycle (e.g. overdue / due soon / fine from a last-done date and a frequency), add a status field with those options and set its `derive` (kind dateThreshold) instead of a customRequirement — the runtime computes it live and auto-derives its per-band filters and counts.",
@@ -425,10 +474,18 @@ export function registerProductCompiler(
       await trace.reset();
       const ir = normalizeProductIR(validateProductIR(coerceStringifiedIR(params)));
       await trace.record({ agent: "product", action: "interpret_idea", status: "success", genome: ir.product.genome, entities: ir.entities.length, ir_sha256: sha256Text(JSON.stringify(ir)) });
-      await trace.record({ agent: "product", action: "select_scope", status: "success", included: Object.values(ir.capabilities).filter(Boolean).length, excluded: ir.excluded.length });
+      await trace.record({
+        agent: "product",
+        action: "select_scope",
+        status: "success",
+        included: Object.entries(ir.capabilities).filter(([, enabled]) => enabled).map(([name]) => name),
+        assumptions: ir.assumptions,
+        excluded: ir.excluded,
+        customRequirements: ir.customRequirements,
+      });
       const route = classifyCapabilities(ir);
       const budget = governor.snapshot(route.route);
-      await trace.record({ agent: "router", action: "select_strategy", status: "success", strategy: route.route, unsupported: route.unsupported, budget });
+      await trace.record({ agent: "router", action: "select_strategy", status: "success", strategy: route.route, reason: route.reason, supported: route.supported, unsupported: route.unsupported, budget });
       const journeys = deriveJourneys(ir);
       await writeCompiledProduct(appRoot, ir, route, journeys);
       await trace.record({ agent: "compiler", action: "generate_application", status: "success", genome: route.genome, fields: ir.entities[0].fields.length });

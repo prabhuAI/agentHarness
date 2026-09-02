@@ -3,10 +3,35 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { reclaimAppOwnedPort } from "./port-owner.js";
 import { signalProcessTree, usesDetachedProcessGroup } from "./process-tree.js";
 import type { AppVerification, TestRun } from "./types.js";
+import { generatedProcessEnvironment } from "./environment.js";
 
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Reclaims a listener on `port` that a same-user process rooted in `appDirectory`
+ * still holds — a leaked dev server from an earlier run or verification pass. It
+ * never touches a listener it cannot prove is app-owned, so a genuinely foreign
+ * process on the port is left running and reported, not killed.
+ */
+export type ReclaimPort = (
+  port: number,
+  appDirectory: string,
+) => Promise<{ reclaimed: boolean; diagnostic: string }>;
+
+/**
+ * Outcome of the development-server startup probe. `served` is the only success
+ * bit; `portBlockedByForeignProcess` distinguishes an environmental precondition
+ * failure (some other process owns the port) from a genuine product runtime
+ * failure, so callers do not misreport a blocked port as a broken application.
+ */
+export interface StartupProbeResult {
+  served: boolean;
+  portBlockedByForeignProcess: boolean;
+  diagnostic?: string;
+}
 
 interface CommandOutcome {
   exitCode: number;
@@ -29,6 +54,7 @@ export interface VerificationOptions {
   npmCommand?: string;
   vitestCommand?: string;
   port?: number;
+  reclaimPort?: ReclaimPort;
 }
 
 interface CapturedOutput {
@@ -96,7 +122,7 @@ async function runLoggedCommand(
       child = spawn(command, args, {
         cwd,
         detached: usesDetachedProcessGroup(),
-        env: process.env,
+        env: generatedProcessEnvironment(),
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
       });
@@ -179,9 +205,24 @@ async function waitForHttp(
   while (Date.now() < deadline && childIsRunning()) {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
-      await response.text();
+      const html = await response.text();
       if (response.ok) {
-        await delay(300);
+        // A request for index.html proves only that Vite opened its socket. Warm
+        // the module entry points too so esbuild finishes transforming the app
+        // before teardown; otherwise killing the server mid-scan produces a
+        // misleading EPIPE and can make an otherwise healthy probe look noisy.
+        const moduleSources = [...html.matchAll(/<script[^>]+type=["']module["'][^>]+src=["']([^"']+)["']/giu)]
+          .map((match) => match[1]!)
+          .concat(["/src/App.tsx", "/src/styles.css"]);
+        const warmed = await Promise.all([...new Set(moduleSources)].map(async (source) => {
+          const moduleResponse = await fetch(new URL(source, url), { signal: AbortSignal.timeout(2_000) });
+          await moduleResponse.text();
+          return moduleResponse.ok;
+        }));
+        if (!warmed.every(Boolean)) throw new Error("Development server module warm-up failed");
+        // Vite's import-analysis warm-up continues briefly after returning the
+        // entry module response. Let that bounded work drain before SIGTERM.
+        await delay(1_000);
         return childIsRunning();
       }
     } catch {
@@ -207,10 +248,24 @@ async function verifyDevelopmentServer(
   timeoutMs: number,
   npmCommand: string,
   port: number,
-): Promise<boolean> {
+  reclaimPort: ReclaimPort,
+): Promise<StartupProbeResult> {
+  // safeWriteLog writes each log path exactly once (exclusive flag), so any note
+  // recorded before the probe is accumulated here and prepended to the single
+  // final write rather than written separately (a second write would be dropped).
+  let logPrelude = "";
   if (await portHasListener(port)) {
-    await safeWriteLog(logPath, `Port ${port} already had a listener before app verification.\n`);
-    return false;
+    // A listener already on the port is usually a dev server leaked by an
+    // earlier run or verification pass. Reclaim it when it is app-owned so a
+    // stale same-user process is not misread as a product failure; a listener
+    // we cannot prove is app-owned (a genuinely foreign process) is left alone
+    // and reported as an environmental block rather than a runtime failure.
+    const reclamation = await reclaimPort(port, appDirectory);
+    if (!reclamation.reclaimed) {
+      await safeWriteLog(logPath, `Port ${port} was held by a process outside the generated app before verification: ${reclamation.diagnostic}\n`);
+      return { served: false, portBlockedByForeignProcess: true, diagnostic: reclamation.diagnostic };
+    }
+    logPrelude += `Reclaimed a leaked app-owned listener on port ${port} before verification: ${reclamation.diagnostic}\n`;
   }
 
   const captured: CapturedOutput = { chunks: [], length: 0, truncated: false };
@@ -221,13 +276,13 @@ async function verifyDevelopmentServer(
     child = spawn(npmCommand, args, {
       cwd: appDirectory,
       detached: usesDetachedProcessGroup(),
-      env: process.env,
+      env: generatedProcessEnvironment(),
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (error) {
-    await safeWriteLog(logPath, `${String(error)}\n`);
-    return false;
+    await safeWriteLog(logPath, `${logPrelude}${String(error)}\n`);
+    return { served: false, portBlockedByForeignProcess: false };
   }
 
   child.stdout?.on("data", (chunk: Buffer) => {
@@ -280,14 +335,14 @@ async function verifyDevelopmentServer(
   }
 
   const portClosed = await waitForPortToClose(port, 2_000);
-  await safeWriteLog(logPath, renderOutput(captured));
-  return served && childClosed && portClosed;
+  await safeWriteLog(logPath, `${logPrelude}${renderOutput(captured)}`);
+  return { served: served && childClosed && portClosed, portBlockedByForeignProcess: false };
 }
 
 export async function verifyAppStartup(
   appDirectory: string,
-  options: Pick<VerificationOptions, "serverTimeoutMs" | "npmCommand" | "port"> = {},
-): Promise<boolean> {
+  options: Pick<VerificationOptions, "serverTimeoutMs" | "npmCommand" | "port" | "reclaimPort"> = {},
+): Promise<StartupProbeResult> {
   const logDirectory = await mkdtemp(path.join(os.tmpdir(), "compilekit-startup-"));
   try {
     return await verifyDevelopmentServer(
@@ -296,6 +351,7 @@ export async function verifyAppStartup(
       options.serverTimeoutMs ?? 20_000,
       options.npmCommand ?? commandName("npm"),
       options.port ?? 3000,
+      options.reclaimPort ?? reclaimAppOwnedPort,
     );
   } finally {
     await rm(logDirectory, { recursive: true, force: true });
@@ -406,13 +462,15 @@ export async function verifyGeneratedApp(
       path.join(artifactDirectory, "app-build.log"),
       commandTimeoutMs,
     );
-    const serverPassed = await verifyDevelopmentServer(
+    const startup = await verifyDevelopmentServer(
       appDirectory,
       path.join(artifactDirectory, "app-dev.log"),
       serverTimeoutMs,
       npmCommand,
       port,
+      options.reclaimPort ?? reclaimAppOwnedPort,
     );
+    const serverPassed = startup.served;
 
     const checks = [
       testRun(

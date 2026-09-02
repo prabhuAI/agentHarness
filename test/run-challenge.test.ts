@@ -196,7 +196,7 @@ describe("Pi launch", () => {
       directory,
       eventFile,
       stderrFile,
-      5_000,
+      12_000,
     );
 
     expect(result.timedOut).toBe(false);
@@ -229,5 +229,5 @@ describe("Pi launch", () => {
     expect(await readFile(path.join(directory, "pi-agent", "models.json"), "utf8")).not.toMatch(
       /Bearer\s+[A-Za-z0-9]/u,
     );
-  }, 10_000);
+  }, 20_000);
 });

@@ -81,20 +81,30 @@ export function resolvePresentation(ir: NormalizedProductIR): PresentationPlan {
     || ir.quickActions.some((action) => action.set === "today")
     || Boolean(ir.priority);
 
+  // Planning is time-anchored: a planner/log/event product reads as an agenda.
+  const agendaIntent = ir.product.genome === "planner" || (dateField && eventLanguage) || (ir.product.genome === "log" && dateField);
+
   let primary: PrimaryView;
   let reason: string;
   if (ir.standings.length > 0) {
     primary = "standings";
     reason = "scored participant aggregation";
-  } else if (ir.charts.length > 0 || ir.product.genome === "dashboard") {
+  } else if (ir.product.genome === "dashboard") {
+    // Explicit dashboard intent — a metrics/monitoring product.
     primary = "dashboard";
-    reason = ir.charts.length > 0 ? "chart-led monitoring" : "metrics dashboard product";
-  } else if (ir.product.genome === "planner" || (dateField && eventLanguage) || (ir.product.genome === "log" && dateField)) {
-    // Planning is time-anchored; it outranks a status board even when a status
-    // field is present. A log is a dated event stream, so it reads as an agenda
-    // too — but only when it actually has a date axis to order by.
+    reason = "metrics dashboard product";
+  } else if (agendaIntent) {
+    // Planning outranks a status board even when a status field is present, and it
+    // outranks an *incidental* chart: a planner that happens to carry one pie chart
+    // is still an agenda — the chart renders in the secondary chart strip, not as
+    // the whole layout. A log is a dated event stream, so it reads as an agenda too,
+    // but only when it actually has a date axis to order by.
     primary = "agenda";
     reason = ir.product.genome === "log" ? `chronological log by ${dateField!.id}` : dateField ? `date-centered planning by ${dateField.id}` : "planning workspace";
+  } else if (ir.charts.length > 0) {
+    // A chart-led product with no agenda intent: monitor it as a dashboard.
+    primary = "dashboard";
+    reason = "chart-led monitoring";
   } else if (statusField && (ir.capabilities.transition || ir.product.genome === "workflow")) {
     primary = "board";
     reason = `lifecycle grouped by ${statusField.id}`;

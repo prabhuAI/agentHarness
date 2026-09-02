@@ -10,6 +10,20 @@ const destination = path.join(root, "submission", "verification");
 const replace = process.argv.includes("--replace");
 
 const required = ["result.json", "idea_spec.json", "product-ir.json", "summary.md", "trace.jsonl"];
+const [{ stdout: commit }, { stdout: npm }, { stdout: status }] = await Promise.all([
+  exec("git", ["rev-parse", "HEAD"], { cwd: root }),
+  exec("npm", ["--version"]),
+  exec("git", ["status", "--porcelain"], { cwd: root }),
+]);
+if (!process.version.startsWith("v22.19.")) {
+  throw new Error(`Refusing to freeze: evidence must be produced with Node 22.19.x, not ${process.version}.`);
+}
+if (npm.trim() !== "10.9.3") {
+  throw new Error(`Refusing to freeze: evidence must be produced with npm 10.9.3, not ${npm.trim()}.`);
+}
+if (status.trim() !== "") {
+  throw new Error("Refusing to freeze: commit the reviewed implementation first so evidence identifies the exact clean source tree.");
+}
 let result;
 try {
   result = JSON.parse(await readFile(path.join(app, "result.json"), "utf8"));
@@ -33,15 +47,10 @@ else {
 await mkdir(destination, { recursive: true });
 for (const name of required) await cp(path.join(app, name), path.join(destination, name));
 
-const [{ stdout: commit }, { stdout: node }, { stdout: npm }] = await Promise.all([
-  exec("git", ["rev-parse", "HEAD"], { cwd: root }),
-  exec(process.execPath, ["--version"]),
-  exec("npm", ["--version"]),
-]);
 const metadata = {
   frozen_at: new Date().toISOString(),
   commit: commit.trim(),
-  runtime: { node: node.trim(), npm: npm.trim() },
+  runtime: { node: process.version, npm: npm.trim() },
   provider_models: [...new Set((result.call_log ?? []).map((entry) => entry.model).filter(Boolean))],
   commands: ["npm run check", "npm run challenge", "npm run validate:result -- output/app/result.json"],
   note: "Raw provider events and session logs are intentionally excluded because they may contain prompts, machine paths, or credentials.",

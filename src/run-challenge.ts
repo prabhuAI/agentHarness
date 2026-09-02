@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { prepareOutput } from "./prepare-output.js";
+import { challengeProcessEnvironment, generatedProcessEnvironment } from "./environment.js";
 import { classifyPiFailure, matchProviderError } from "./classify-pi-failure.js";
 import { auditAppPortAfterPi } from "./port-owner.js";
 import { signalProcessTree, terminateProcessTree, usesDetachedProcessGroup } from "./process-tree.js";
@@ -106,7 +107,7 @@ function commandName(name: string): string {
 
 async function runInherited(command: string, args: string[], cwd: string): Promise<number> {
   return await new Promise<number>((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: "inherit", env: process.env, shell: false });
+    const child = spawn(command, args, { cwd, stdio: "inherit", env: generatedProcessEnvironment(), shell: false });
     child.once("error", reject);
     child.once("close", (code) => resolve(code ?? 1));
   });
@@ -220,7 +221,7 @@ export async function runPi(
         cwd,
         detached: usesDetachedProcessGroup(),
         env: {
-          ...process.env,
+          ...challengeProcessEnvironment(),
           PI_CODING_AGENT_DIR: piAgentDirectory,
           PI_OFFLINE: "1",
         },

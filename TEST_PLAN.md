@@ -27,6 +27,9 @@
 | TC-021 | Expand omitted capabilities and empty optional sections deterministically | Unit | P0 | `test/product-compiler.test.ts` |
 | TC-022 | Infer omitted primary fields in related entities without crashing | Integration | P0 | `test/league-fixture.test.ts` |
 | TC-023 | Order an eligible FIFO queue, move the Next up marker after edit, persist, and build | UI/integration | P0 | `test/waitlist-fixture.test.ts`, `test/fixtures/waitlist-app.fixture.tsx` |
+| TC-024 | Keep provider credentials out of generated app test/build/dev processes | Security | P0 | `test/environment.test.ts` |
+| TC-025 | Produce a categorized 20-case benchmark with tested aggregate and percentile metrics | Benchmark | P0 | `test/benchmark-report.test.ts`, `benchmarks/report.ts` |
+| TC-026 | Require explicit scope assumptions, exclusions, and routing rationale in trace evidence | Contract | P0 | `test/validate-artifacts.test.ts` |
 
 ## Application-readiness rubric coverage
 
@@ -51,4 +54,4 @@ npm run validate:result -- output/app/result.json
 npm run submission:freeze
 ```
 
-Require every command to pass on Node.js 22.19.x. Then run `npm run benchmark -- --limit 120`, inspect the frozen bundle, and commit it only when it contains no secret or machine-specific data. Browser-based hidden evaluation remains the final authority for responsive and product-specific UX.
+Require every command to pass on Node.js 22.19.x. Then run `npm run benchmark -- --limit 20` and `npm run benchmark:freeze`, inspect both evidence bundles, and commit them only when they contain no secret or machine-specific data. Expand to the full suite when budget permits. Browser-based hidden evaluation remains the final authority for responsive and product-specific UX.

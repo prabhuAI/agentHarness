@@ -31,8 +31,35 @@ describe("tool-argument robustness", () => {
     const stringified = { ...baseArgs, entities: JSON.stringify(entitiesArray) };
     // The strict shape would reject a string here; the tolerant tool schema accepts it.
     expect(Value.Check(productIRSchema, stringified)).toBe(true);
-    // A genuinely broken IR (no entities at all) is still rejected.
-    expect(Value.Check(productIRSchema, { ...baseArgs })).toBe(false);
+    // Missing/nested entities is accepted at the tool boundary (no validation loop);
+    // coerceStringifiedIR + validateProductIR enforce that real entities exist.
+    expect(Value.Check(productIRSchema, { ...baseArgs })).toBe(true);
+    expect(() => validateProductIR(coerceStringifiedIR({ ...baseArgs }))).toThrow();
+  });
+
+  it("lifts an entire IR the model nested inside product (object form) back to the top level", () => {
+    const nested = { product: { name: "Weight Tracker", genome: "tracker", entities: entitiesArray, capabilities: baseArgs.capabilities } };
+    // The tolerant schema accepts this shape, so pi-ai never rejects the call.
+    expect(Value.Check(productIRSchema, nested)).toBe(true);
+    const coerced = coerceStringifiedIR(nested) as Record<string, unknown>;
+    expect(Array.isArray(coerced.entities)).toBe(true);
+    expect((coerced.entities as Array<{ name: string }>)[0]?.name).toBe("weighin");
+    // product keeps only its own fields.
+    expect("entities" in (coerced.product as object)).toBe(false);
+    // The lifted IR validates and normalizes without a second model call.
+    expect(() => normalizeProductIR(validateProductIR(coerced))).not.toThrow();
+  });
+
+  it("lifts an IR nested inside product as a JSON string", () => {
+    const nested = { product: JSON.stringify({ name: "Weight Tracker", genome: "tracker", entities: entitiesArray }) };
+    const coerced = coerceStringifiedIR(nested) as Record<string, unknown>;
+    expect((coerced.entities as Array<{ name: string }>)[0]?.name).toBe("weighin");
+  });
+
+  it("does not overwrite a genuine top-level field with a nested duplicate", () => {
+    const other = [{ name: "other", plural: "others", fields: [{ id: "x", label: "X", type: "text", required: true }] }];
+    const coerced = coerceStringifiedIR({ entities: entitiesArray, product: { name: "T", entities: other } }) as Record<string, unknown>;
+    expect((coerced.entities as Array<{ name: string }>)[0]?.name).toBe("weighin");
   });
 
   it("coerces a stringified entities array back into JSON", () => {

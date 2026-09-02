@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App, chartSeries, compareRecordsBySort, computeDerivedValue, computeSummaryValue, matchesPredicate, withDerivedValues } from "./App.js";
+import { App, chartSeries, compareRecordsBySort, computeDerivedValue, computeSummaryValue, matchesPredicate, matchesRecordPredicate, withDerivedValues } from "./App.js";
 import { type ChartConfig, type FieldConfig, type FilterPreset, productConfig, type SortOption, type SummaryConfig } from "./product-config.js";
 import { createRepository, storageKeyFor } from "./repository.js";
 import { resolveViewPlan } from "./view-plan.js";
@@ -56,7 +56,27 @@ async function createRecord(overrides: Record<string, string | boolean> = {}) {
 }
 
 function findMatchingFilter(filters: FilterPreset[], values: Record<string, string | boolean>): FilterPreset | undefined {
-  return filters.find((preset) => matchesPredicate(values[preset.field], preset.operator, preset.value));
+  return filters.find((preset) => matchesRecordPredicate({ values }, preset));
+}
+
+function recordContainerFor(primaryValue: string): HTMLElement {
+  const match = screen.getAllByText(primaryValue)
+    .map((element) => element.closest<HTMLElement>("[data-record-id]"))
+    .find((element): element is HTMLElement => Boolean(element));
+  expect(match, `A rendered record should contain ${primaryValue}`).toBeDefined();
+  return match!;
+}
+
+function nonMatchingEditableValue(field: FieldConfig, preset: FilterPreset, values: Record<string, string | boolean>): string | boolean | undefined {
+  const candidates: Array<string | boolean> = [
+    ...(field.options ?? []),
+    ...(field.required ? [] : [""]),
+    ...(field.type === "number" || field.type === "currency" ? ["0", "999999"] : ["Different value"]),
+    ...(field.type === "date" || field.type === "datetime" ? ["2000-01-01"] : []),
+    false, true,
+  ];
+  return candidates.find((candidate) => candidate !== values[field.key]
+    && !matchesRecordPredicate({ values: { ...values, [field.key]: candidate } }, preset));
 }
 
 describe("compiled product runtime", () => {
@@ -283,6 +303,19 @@ describe("compiled product runtime", () => {
     expect(matchesPredicate("", "thisMonth", undefined, now)).toBe(false);
   });
 
+  it("resolves another field as a per-record comparison bound", () => {
+    const base = { id: "stock", createdAt: "", updatedAt: "", values: { units_on_hand: 3, reorder_level: 5 } };
+    const lowStock = { field: "units_on_hand", operator: "atMost" as const, value: "reorder_level" };
+    expect(matchesRecordPredicate(base, lowStock)).toBe(true);
+    expect(matchesRecordPredicate({ ...base, values: { ...base.values, units_on_hand: 8 } }, lowStock)).toBe(false);
+  });
+
+  it("supports excluding two terminal values with one priority predicate", () => {
+    expect(matchesPredicate("Screening", "notEquals", "Hired", new Date(), "Rejected")).toBe(true);
+    expect(matchesPredicate("Hired", "notEquals", "Hired", new Date(), "Rejected")).toBe(false);
+    expect(matchesPredicate("Rejected", "notEquals", "Hired", new Date(), "Rejected")).toBe(false);
+  });
+
   it("selects a filter from projected values instead of assuming the first filter matches", () => {
     const filters: FilterPreset[] = [
       { id: "on_shelf", label: "On shelf", field: "status", operator: "equals", value: "On shelf" },
@@ -403,7 +436,7 @@ describe("compiled product runtime", () => {
     // summary is a facet chip the strip is omitted entirely, so the labelled
     // region legitimately does not exist.
     const tileSummaries = productConfig.summaries.filter((summary) => !isFacetChip(summary));
-    const summaryRegion = screen.queryByLabelText("Summary");
+    const summaryRegion = document.querySelector<HTMLElement>(".stat-strip[aria-label='Summary']");
     if (tileSummaries.length === 0) {
       expect(summaryRegion).toBeNull();
     } else {
@@ -421,7 +454,20 @@ describe("compiled product runtime", () => {
       }
     }
     for (const chart of productConfig.charts) {
-      expect(screen.getByRole("img", { name: `${chart.label} line chart with 1 points` })).toBeInTheDocument();
+      // Each chart type renders a distinct accessible figure. Categorical
+      // charts (bar/pie) draw immediately; a line chart needs at least two
+      // points to connect, so with a single created record it shows its
+      // empty-state hint instead of a role="img" figure.
+      if (chart.type === "pie") {
+        expect(screen.getByRole("img", { name: `${chart.label} pie chart` })).toBeInTheDocument();
+      } else if (chart.type === "bar") {
+        expect(screen.getByRole("img", { name: `${chart.label} bar chart` })).toBeInTheDocument();
+      } else {
+        expect(screen.queryByRole("img", {
+          name: (accessibleName) => accessibleName.startsWith(`${chart.label} line chart`),
+        })).toBeNull();
+        expect(screen.getAllByText("Add at least two dated entries to see this trend.").length).toBeGreaterThan(0);
+      }
     }
     const groupField = productConfig.fields.find((field) => field.key === productConfig.presentation.groupField);
     if (groupField) {
@@ -446,7 +492,7 @@ describe("compiled product runtime", () => {
       expect(screen.getAllByText(primaryValue).length).toBeGreaterThan(0);
       await user.click(filterGroup.getByRole("button", { name: new RegExp(`^all ${escape(productConfig.entityNamePlural)}`, "i") }));
     }
-    await user.click(screen.getByRole("button", { name: /edit/i }));
+    await user.click(within(recordContainerFor(primaryValue)).getByRole("button", { name: /^edit$/i }));
     const editDialog = screen.getByRole("dialog");
     const primaryField = productConfig.fields.find((field) => field.key === productConfig.primaryField)!;
     const editedValue = primaryField.options?.find((option) => option !== primaryValue) ?? (primaryField.allowCustom ? "Edited custom value" : "Edited sample value");
@@ -454,25 +500,20 @@ describe("compiled product runtime", () => {
     let editedFilterValue: string | boolean | undefined;
     if (editableFilter && editableFilter.field !== primaryField.key) {
       const filterField = productConfig.fields.find((field) => field.key === editableFilter.field)!;
-      if (editableFilter.operator === "equals") editedFilterValue = filterField.options?.find((option) => option !== editableFilter.value) ?? "Different value";
-      else if (editableFilter.operator === "nonEmpty") editedFilterValue = "";
-      else if (editableFilter.operator === "empty") editedFilterValue = "Now filled";
-      else if (editableFilter.operator === "truthy") editedFilterValue = false;
-      else if (editableFilter.operator === "falsy") editedFilterValue = true;
-      else editedFilterValue = "2000-01-01";
-      await fillField(user, editDialog, filterField, editedFilterValue);
+      editedFilterValue = nonMatchingEditableValue(filterField, editableFilter, created);
+      if (editedFilterValue !== undefined) await fillField(user, editDialog, filterField, editedFilterValue);
     }
     await user.click(within(editDialog).getByRole("button", { name: /save changes/i }));
     expect(screen.getAllByText(editedValue).length).toBeGreaterThan(0);
     const updatedStored = JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]");
     expect(updatedStored[0].values[productConfig.primaryField]).toBe(editedValue);
     if (editableFilter && editedFilterValue !== undefined) {
-      expect(matchesPredicate(updatedStored[0].values[editableFilter.field], editableFilter.operator, editableFilter.value)).toBe(false);
+      expect(matchesRecordPredicate(updatedStored[0], editableFilter)).toBe(false);
     }
     cleanup();
     render(<App />);
     expect(screen.getAllByText(editedValue).length).toBeGreaterThan(0);
-    await user.click(screen.getByRole("button", { name: /delete/i }));
+    await user.click(within(recordContainerFor(editedValue)).getByRole("button", { name: /^delete$/i }));
     expect(screen.getByText(new RegExp(`no ${productConfig.entityNamePlural}`, "i"))).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /undo/i }));
     expect(screen.getAllByText(editedValue).length).toBeGreaterThan(0);
@@ -484,17 +525,34 @@ describe("compiled product runtime", () => {
     render(<App />);
     await createRecord();
     const action = productConfig.quickActions[0];
+    // Capture the prior value so increment/toggle can be checked relative to it.
+    const beforeStored = JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]");
+    const prior = beforeStored[beforeStored.length - 1]?.values[action.field];
     const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-    await user.click(screen.getAllByRole("button", { name: new RegExp(escape(action.label), "i") })[0]);
+    const primaryValue = String(beforeStored[beforeStored.length - 1]?.values[productConfig.primaryField] ?? "");
+    await user.click(within(recordContainerFor(primaryValue)).getByRole("button", { name: new RegExp(`^${escape(action.label)}$`, "i") }));
     const stored = JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]");
     const saved = stored[stored.length - 1];
-    if (action.set === "today") {
-      const now = new Date();
-      const pad = (n: number) => String(n).padStart(2, "0");
-      const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-      expect(String(saved.values[action.field]).startsWith(today)).toBe(true);
-    } else {
-      expect(saved.values[action.field]).toBe("");
+    // Each verb persists a distinct outcome; mirror the runtime's runQuickAction.
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    switch (action.set) {
+      case "today":
+      case "now":
+        expect(String(saved.values[action.field]).startsWith(today)).toBe(true);
+        break;
+      case "increment":
+        expect(Number(saved.values[action.field])).toBe((Number(prior) || 0) + (action.amount ?? 1));
+        break;
+      case "toggle":
+        expect(saved.values[action.field]).toBe(!(prior === true || prior === "true"));
+        break;
+      case "setValue":
+        expect(saved.values[action.field]).toBe(action.value ?? "");
+        break;
+      default: // clear
+        expect(saved.values[action.field]).toBe("");
     }
   });
 });

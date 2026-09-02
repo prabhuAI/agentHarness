@@ -206,6 +206,76 @@ describe("app verification", () => {
     }
   }, 45_000);
 
+  it("reclaims a leaked app-owned listener and then verifies the generated app serves", async () => {
+    const { appDirectory, artifactDirectory } = await createTestApp();
+    const port = await getFreePort();
+    const squatter = http.createServer((_request, response) => response.end("leaked dev server"));
+    await new Promise<void>((resolve, reject) => {
+      squatter.once("error", reject);
+      squatter.listen({ host: "0.0.0.0", port }, resolve);
+    });
+
+    let reclaimCalls = 0;
+    const result = await verifyGeneratedApp(appDirectory, artifactDirectory, {
+      commandTimeoutMs: 30_000,
+      displayRoot: path.dirname(appDirectory),
+      serverTimeoutMs: 10_000,
+      port,
+      // Simulate an app-owned leaked listener being reclaimed: free the port,
+      // then wait for it to close so the generated app can bind on --strictPort.
+      reclaimPort: async () => {
+        reclaimCalls += 1;
+        await new Promise<void>((resolve, reject) => {
+          squatter.close((error) => (error ? reject(error) : resolve()));
+        });
+        for (let attempt = 0; attempt < 50 && (await portHasListener(port)); attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return { reclaimed: true, diagnostic: `Reclaimed port ${port} after SIGTERM` };
+      },
+    });
+
+    expect(reclaimCalls).toBe(1);
+    expect(result.passed).toBe(true);
+    expect(result.checks.map((entry) => entry.result)).toEqual(["passed", "passed", "passed"]);
+  }, 45_000);
+
+  it("honors a reclamation that could not clear a foreign process: never probes or delivers it", async () => {
+    let requests = 0;
+    const squatter = http.createServer((_request, response) => {
+      requests += 1;
+      response.end("not the generated app");
+    });
+    const port = await getFreePort();
+    await new Promise<void>((resolve, reject) => {
+      squatter.once("error", reject);
+      squatter.listen({ host: "0.0.0.0", port }, resolve);
+    });
+
+    const artifactDirectory = await mkdtemp(path.join(os.tmpdir(), "agent-cofounder-foreign-port-"));
+    temporaryDirectories.push(artifactDirectory);
+    let reclaimCalls = 0;
+    try {
+      const result = await verifyGeneratedApp(path.resolve("app-template"), artifactDirectory, {
+        commandTimeoutMs: 30_000,
+        serverTimeoutMs: 2_000,
+        port,
+        reclaimPort: async () => {
+          reclaimCalls += 1;
+          return { reclaimed: false, diagnostic: "No same-user listener rooted in the app owned the port" };
+        },
+      });
+
+      expect(reclaimCalls).toBe(1);
+      expect(result.checks[2]?.result).toBe("failed");
+      expect(requests).toBe(0);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        squatter.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  }, 45_000);
+
   it("passes a generated app with participant-authored tests, a build, and its own server", async () => {
     const { appDirectory, artifactDirectory } = await createTestApp();
     const port = await getFreePort();

@@ -28,6 +28,12 @@ export async function verifyRequiredArtifacts(appDirectory: string): Promise<Tes
       ["started", "success", "failed", "skipped"].includes(String(event.status)));
     const validOrder = expectedPrefix.every((action, index) => isRecord(trace[index]) && trace[index].action === action) &&
       trace.some((event) => isRecord(event) && event.agent === "qa" && String(event.action).startsWith("verify"));
+    const scopeEvent = trace.find((event) => isRecord(event) && event.action === "select_scope");
+    const routeEvent = trace.find((event) => isRecord(event) && event.action === "select_strategy");
+    const validDecisions = isRecord(scopeEvent) && Array.isArray(scopeEvent.included) &&
+      Array.isArray(scopeEvent.assumptions) && Array.isArray(scopeEvent.excluded) && Array.isArray(scopeEvent.customRequirements) &&
+      isRecord(routeEvent) && typeof routeEvent.reason === "string" && routeEvent.reason.length > 0 &&
+      Array.isArray(routeEvent.supported) && Array.isArray(routeEvent.unsupported);
     const finalEvent = trace.at(-1);
     const declaredArtifacts = isRecord(finalEvent) && isRecord(finalEvent.artifacts) ? finalEvent.artifacts : undefined;
     const requiredHashes: Record<string, string> = {
@@ -40,7 +46,7 @@ export async function verifyRequiredArtifacts(appDirectory: string): Promise<Tes
       finalEvent.status === "success" && declaredArtifacts !== undefined &&
       Object.entries(requiredHashes).every(([name, hash]) => declaredArtifacts[name] === hash);
     const forbiddenTrace = /chain[-_ ]of[-_ ]thought|full_prompt|source_code/iu.test(traceRaw);
-    const passed = validSpec && validIr && validTrace && validOrder && validDelivery && !forbiddenTrace && summary.includes("## Verified journeys");
+    const passed = validSpec && validIr && validTrace && validOrder && validDecisions && validDelivery && !forbiddenTrace && summary.includes("## Verified journeys");
     return {
       command: "validate required artifacts",
       journey: "idea_spec.json, product-ir.json, summary.md, and auditable trace.jsonl are complete",

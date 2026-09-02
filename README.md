@@ -180,12 +180,15 @@ Novel core interactions can still take the fallback path: the same Pi session ma
 | `npm run challenge` | Execute the public idea through Pi and the product compiler |
 | `npm run challenge -- --prepare-only` | Reset the generated workspace without a model call |
 | `npm run check` | Run the repository gate: type checks, harness tests, runtime journeys, and template build |
-| `npm run benchmark -- --limit 20` | Run an audited multi-idea benchmark; use `--limit 120` for the full suite |
+| `npm run benchmark -- --limit 20` | Run the fixed 20-case varied benchmark and write aggregate success/efficiency metrics |
+| `npm run benchmark:freeze` | Copy a completed Node 22.19/npm 10.9.3 benchmark report into `submission/` |
 | `npm run validate:result -- output/app/result.json` | Validate schema and telemetry reconciliation |
 | `npm run submission:freeze` | Freeze a sanitized bundle from a fully successful scored run |
 | `npm --prefix output/app run dev` | Serve the generated product on port 3000 |
 
 Set `CHALLENGE_LAUNCH_MODE=1` to generate the optional post-verification `launch-kit.md`. Keep it disabled for scored runs.
+
+The first 20 benchmark inputs are hand-written and categorized: workflows, dates, derived state, formulas, validation, queues, multi-entity relationships, standings, and two deliberately custom interactions. The report includes functional, first-pass, one-call, build, journey, and persistence rates plus median/p95 weighted tokens. Run it with provider credentials exported in the shell; the runner never reads `.env` files. To replace selected rows after a compiler fix without discarding the other measurements, use `npm run benchmark -- --ids job-application-pipeline,research-library --resume`.
 
 See [PRESENTATION_GUIDE.md](PRESENTATION_GUIDE.md) for the architecture, demo, and judge Q&A; [TEST_PLAN.md](TEST_PLAN.md) for acceptance coverage; and [SUBMISSION.md](SUBMISSION.md) for the final evidence workflow.
 

@@ -15,6 +15,8 @@ export CHALLENGE_PROVIDER="berget"
 export CHALLENGE_MODEL="zai-org/GLM-5.2"
 npm run challenge
 npm run validate:result -- output/app/result.json
+npm run benchmark -- --limit 20
+npm run benchmark:freeze
 npm run submission:freeze
 ```
 
@@ -24,4 +26,4 @@ The equivalent Docker workflow is documented in `README.md`; it exists for repro
 
 “Freeze the sanitized submission evidence bundle” means copying the artifacts from one completed, successful, independently verified run into a stable committed directory after removing sensitive/raw logs. It does not mean inventing results, committing an API key, or committing disposable `output/` files. Until a real provider-backed run succeeds, `submission/verification/` should remain absent.
 
-Before the final push, review `submission/verification/result.json`, confirm its commit metadata, and ensure `git diff --check`, `npm run check`, and CI are green.
+Both freeze commands reject the wrong runtime; the single-run freezer also rejects a dirty tree so its commit metadata identifies the exact implementation. Before the final push, review `submission/verification/result.json` and `submission/benchmark-report.json`, confirm the metadata, and ensure `git diff --check`, `npm run check`, and CI are green.
