@@ -1,17 +1,17 @@
 {
   "product": {
     "name": "Home Library",
-    "description": "A simple personal tracker for the books on your shelves at home — what they are, who you've lent them to, and which are currently out.",
-    "targetUser": "A single home user keeping track of their own book collection and informal loans to family",
+    "description": "A simple personal home library tracker. Add each book with title, author, and type; note who has borrowed one and clear it when it comes back; see all books in one list and filter to just those currently lent out.",
     "genome": "tracker",
+    "targetUser": "One person keeping track of their own books at home",
+    "tagline": "",
+    "accent": "#5b5bd6",
     "design": {
       "tone": "warm",
       "density": "comfortable",
       "contrast": "balanced",
       "motion": "subtle"
-    },
-    "tagline": "",
-    "accent": "#5b5bd6"
+    }
   },
   "entities": [
     {
@@ -24,30 +24,29 @@
           "label": "Title",
           "type": "text",
           "required": true,
-          "placeholder": "e.g. The Hobbit"
+          "placeholder": "e.g. The Hitchhiker's Guide to the Galaxy"
         },
         {
           "id": "author",
           "label": "Author",
           "type": "text",
           "required": false,
-          "placeholder": "e.g. J.R.R. Tolkien"
+          "placeholder": "e.g. Douglas Adams"
         },
         {
-          "id": "category",
-          "label": "Category",
+          "id": "type",
+          "label": "Type",
           "type": "category",
           "required": false,
+          "placeholder": "Novel, Cookbook, Reference...",
           "options": [
             "Novel",
             "Cookbook",
             "Reference",
             "Biography",
-            "History",
-            "Science",
-            "Children's",
             "Poetry",
-            "Other"
+            "Children's",
+            "Non-fiction"
           ],
           "allowCustom": true
         },
@@ -56,7 +55,13 @@
           "label": "Borrowed by",
           "type": "text",
           "required": false,
-          "placeholder": "Who has it right now"
+          "placeholder": "Who has it right now?"
+        },
+        {
+          "id": "lent_on",
+          "label": "Lent on",
+          "type": "date",
+          "required": false
         },
         {
           "id": "status",
@@ -79,43 +84,26 @@
   ],
   "filters": [
     {
+      "id": "lent_out",
+      "label": "Lent out",
+      "field": "status",
+      "operator": "equals",
+      "value": "Lent out"
+    },
+    {
       "id": "on_shelf",
       "label": "On shelf",
       "field": "status",
       "operator": "equals",
       "value": "On shelf"
-    },
-    {
-      "id": "lent_out",
-      "label": "Lent out",
-      "field": "status",
-      "operator": "equals",
-      "value": "Lent out"
     }
   ],
-  "calculations": [
+  "charts": [
     {
-      "id": "total_books",
-      "label": "Total books",
-      "entity": "book",
-      "operation": "count"
-    },
-    {
-      "id": "lent_out",
-      "label": "Lent out",
-      "entity": "book",
-      "operation": "countWhere",
-      "field": "status",
-      "operator": "equals",
-      "value": "Lent out"
-    },
-    {
-      "id": "status_on_shelf_count",
-      "label": "On shelf",
-      "operation": "countWhere",
-      "field": "status",
-      "operator": "equals",
-      "value": "On shelf"
+      "id": "books_by_type",
+      "label": "Books by type",
+      "type": "pie",
+      "xField": "type"
     }
   ],
   "quickActions": [
@@ -127,11 +115,10 @@
     }
   ],
   "assumptions": [
-    "Single local user on their own computer, no login or sharing",
-    "Status derives live from whether a borrower name is filled in",
-    "'Returned' button clears the borrower name",
-    "Category suggestions include common book types with free-text override",
-    "Browser-local storage only; no cloud sync"
+    "Single local user, no login",
+    "Borrower is a free-text name, not a separate contacts list",
+    "Lent-on date is optional extra detail; presence of a borrower name is what marks a book lent out",
+    "Lent out status auto-derives from the borrower field so it can never drift from the truth"
   ],
   "version": "1",
   "capabilities": {
@@ -146,7 +133,24 @@
     "calculate": true,
     "export": false
   },
-  "charts": [],
+  "calculations": [
+    {
+      "id": "status_on_shelf_count",
+      "label": "On shelf",
+      "operation": "countWhere",
+      "field": "status",
+      "operator": "equals",
+      "value": "On shelf"
+    },
+    {
+      "id": "status_lent_out_count",
+      "label": "Lent out",
+      "operation": "countWhere",
+      "field": "status",
+      "operator": "equals",
+      "value": "Lent out"
+    }
+  ],
   "persistence": {
     "strategy": "localStorage"
   },

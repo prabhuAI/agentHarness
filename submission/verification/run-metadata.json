@@ -1,9 +1,9 @@
 {
-  "frozen_at": "2026-08-28T15:02:25.992Z",
-  "commit": "1451e417f699c0c9ab0ec1bf2eecef9e53678bea",
+  "frozen_at": "2026-09-02T14:24:57.156Z",
+  "commit": "e575df3e51bc1629ebe796f4ea2746bc2af46298",
   "runtime": {
-    "node": "v26.7.0",
-    "npm": "11.19.0"
+    "node": "v22.19.0",
+    "npm": "10.9.3"
   },
   "provider_models": [
     "berget/zai-org/GLM-5.2"

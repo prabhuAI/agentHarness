@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-02T09:33:51.712Z",
+  "generated_at": "2026-09-02T14:23:20.043Z",
   "runtime": {
     "node": "v22.19.0",
     "npm": "10.9.3"
@@ -8,25 +8,24 @@
   "model": "zai-org/GLM-5.2",
   "summary": {
     "total": 20,
-    "successful": 18,
-    "functional_success_rate": 0.9,
+    "successful": 20,
+    "functional_success_rate": 1,
     "first_pass_success_rate": 1,
-    "one_call_rate": 0.9,
-    "build_success_rate": 0.9,
-    "journey_success_rate": 0.9,
-    "persistence_success_rate": 0.9,
+    "one_call_rate": 1,
+    "build_success_rate": 1,
+    "journey_success_rate": 1,
+    "persistence_success_rate": 1,
     "weighted_tokens": {
-      "median_successful": 2564.4,
-      "p95_successful": 8264.2,
-      "total_all_runs": 132264.6
+      "median_successful": 2600.4,
+      "p95_successful": 3751.6,
+      "total_all_runs": 57534.60000000001
     },
     "runtime_ms": {
       "median": 80644,
       "p95": 104730
     },
     "status_counts": {
-      "failed": 2,
-      "success": 18
+      "success": 20
     },
     "category_results": {
       "calculation": {
@@ -46,8 +45,8 @@
       },
       "custom": {
         "total": 2,
-        "successful": 0,
-        "success_rate": 0
+        "successful": 2,
+        "success_rate": 1
       },
       "dates": {
         "total": 1,
@@ -444,38 +443,38 @@
       "id": "dependency-roadmap",
       "category": "custom",
       "idea": "Plan product initiatives with title, owner, quarter and state, but the heart of it is an interactive dependency graph where I draw arrows between initiatives and rearrange nodes.",
-      "status": "failed",
-      "functional_success": false,
+      "status": "success",
+      "functional_success": true,
       "first_pass_success": true,
-      "build_success": false,
-      "journey_success": false,
-      "persistence_success": false,
-      "model_calls": 3,
-      "input_tokens": 35194,
-      "output_tokens": 846,
-      "cache_read_tokens": 22976,
-      "weighted_tokens": 40029.6,
+      "build_success": true,
+      "journey_success": true,
+      "persistence_success": true,
+      "model_calls": 1,
+      "input_tokens": 10,
+      "output_tokens": 972,
+      "cache_read_tokens": 8256,
+      "weighted_tokens": 3751.6,
       "repair_attempts": 0,
-      "runtime_ms": 74679
+      "runtime_ms": 102954
     },
     {
       "index": 20,
       "id": "audio-practice",
       "category": "custom",
       "idea": "I am practising pronunciation. Save phrases and difficulty, record audio in the browser, play attempts back, and draw a waveform for every recording. Keep it local and simple.",
-      "status": "failed",
-      "functional_success": false,
+      "status": "success",
+      "functional_success": true,
       "first_pass_success": true,
-      "build_success": false,
-      "journey_success": false,
-      "persistence_success": false,
-      "model_calls": 4,
-      "input_tokens": 35250,
-      "output_tokens": 1082,
-      "cache_read_tokens": 30976,
-      "weighted_tokens": 41593.6,
+      "build_success": true,
+      "journey_success": true,
+      "persistence_success": true,
+      "model_calls": 1,
+      "input_tokens": 12,
+      "output_tokens": 768,
+      "cache_read_tokens": 8256,
+      "weighted_tokens": 3141.6,
       "repair_attempts": 0,
-      "runtime_ms": 85149
+      "runtime_ms": 71329
     }
   ]
 }

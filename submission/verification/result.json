@@ -11,14 +11,14 @@
     "filter",
     "sort",
     "group",
-    "calculate"
+    "calculate",
+    "chart"
   ],
   "assumptions": [
-    "Single local user on their own computer, no login or sharing",
-    "Status derives live from whether a borrower name is filled in",
-    "'Returned' button clears the borrower name",
-    "Category suggestions include common book types with free-text override",
-    "Browser-local storage only; no cloud sync"
+    "Single local user, no login",
+    "Borrower is a free-text name, not a separate contacts list",
+    "Lent-on date is optional extra detail; presence of a borrower name is what marks a book lent out",
+    "Lent out status auto-derives from the borrower field so it can never drift from the truth"
   ],
   "tests_run": [
     {
@@ -89,7 +89,7 @@
   ],
   "harness_checks": [
     {
-      "command": "output/app/node_modules/.bin/vitest run --reporter=json --outputFile=artifacts/runs/2026-08-28T14-56-59-551Z/app-test-results.json --passWithNoTests=false",
+      "command": "output/app/node_modules/.bin/vitest run --reporter=json --outputFile=artifacts/runs/2026-09-02T14-23-45-574Z/app-test-results.json --passWithNoTests=false",
       "journey": "The generated app's Vitest report contained at least one completed test and no failed, skipped, or todo tests",
       "result": "passed"
     },
@@ -110,27 +110,27 @@
     }
   ],
   "model_calls": 1,
-  "input_tokens": 2,
-  "output_tokens": 666,
-  "cache_read_tokens": 7232,
+  "input_tokens": 199,
+  "output_tokens": 599,
+  "cache_read_tokens": 8192,
   "cache_write_tokens": 0,
-  "total_tokens": 7900,
+  "total_tokens": 8990,
   "reasoning_tokens": 0,
   "cost_total": 0,
   "call_log": [
     {
       "index": 1,
       "model": "berget/zai-org/GLM-5.2",
-      "input_tokens": 2,
-      "output_tokens": 666,
-      "cache_read_tokens": 7232,
+      "input_tokens": 199,
+      "output_tokens": 599,
+      "cache_read_tokens": 8192,
       "cache_write_tokens": 0,
-      "total_tokens": 7900,
+      "total_tokens": 8990,
       "reasoning_tokens": 0,
       "cost_total": 0
     }
   ],
-  "weighted_token_expenditure": 2723.2,
+  "weighted_token_expenditure": 2815.2,
   "pi_exit_code": 0,
   "telemetry_source": "pi-json-event-stream",
   "port_reclamation": {

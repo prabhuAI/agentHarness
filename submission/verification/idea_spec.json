@@ -1,6 +1,6 @@
 {
-  "target_user": "A single home user keeping track of their own book collection and informal loans to family",
-  "core_utility": "A simple personal tracker for the books on your shelves at home — what they are, who you've lent them to, and which are currently out.",
+  "target_user": "One person keeping track of their own books at home",
+  "core_utility": "A simple personal home library tracker. Add each book with title, author, and type; note who has borrowed one and clear it when it comes back; see all books in one list and filter to just those currently lent out.",
   "included_features": [
     "create",
     "edit",
@@ -9,14 +9,14 @@
     "filter",
     "sort",
     "group",
-    "calculate"
+    "calculate",
+    "chart"
   ],
   "excluded_features": [],
   "assumptions": [
-    "Single local user on their own computer, no login or sharing",
-    "Status derives live from whether a borrower name is filled in",
-    "'Returned' button clears the borrower name",
-    "Category suggestions include common book types with free-text override",
-    "Browser-local storage only; no cloud sync"
+    "Single local user, no login",
+    "Borrower is a free-text name, not a separate contacts list",
+    "Lent-on date is optional extra detail; presence of a borrower name is what marks a book lent out",
+    "Lent out status auto-derives from the borrower field so it can never drift from the truth"
   ]
 }

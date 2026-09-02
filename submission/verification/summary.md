@@ -1,8 +1,8 @@
 # Home Library
 
-A simple personal tracker for the books on your shelves at home — what they are, who you've lent them to, and which are currently out.
+A simple personal home library tracker. Add each book with title, author, and type; note who has borrowed one and clear it when it comes back; see all books in one list and filter to just those currently lent out.
 
-- **Target user:** A single home user keeping track of their own book collection and informal loans to family
+- **Target user:** One person keeping track of their own books at home
 - **Build route:** compile
 - **Genome:** tracker
 - **Persistence:** browser-local storage
