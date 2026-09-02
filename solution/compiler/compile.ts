@@ -3,7 +3,7 @@ import path from "node:path";
 import { resolveDesign, type CompiledDesign } from "../design/catalog.js";
 import { resolvePresentation, type PresentationPlan } from "../design/presentation.js";
 import { genomeFor } from "../genomes/index.js";
-import type { NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductFilter, ProductPriority, ProductQuickAction, ProductStandings, RouteDecision } from "../ir/types.js";
+import type { NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductFilter, ProductPriority, ProductQuickAction, ProductRangeConflict, ProductStandings, RouteDecision } from "../ir/types.js";
 import type { DerivedJourney } from "../qa/derive-journeys.js";
 
 interface CompiledConfig {
@@ -24,6 +24,7 @@ interface CompiledConfig {
   summaries: ProductCalculation[];
   charts: ProductChart[];
   quickActions: ProductQuickAction[];
+  rangeConflicts?: ProductRangeConflict[];
   sorts: Array<{ id: string; label: string; field?: string; direction?: "asc" | "desc"; type?: string }>;
   capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean; export: boolean };
   fields: Array<Record<string, unknown>>;
@@ -39,6 +40,7 @@ interface CompiledEntityConfig {
   secondaryFields: string[];
   searchableFields: string[];
   fields: Array<Record<string, unknown>>;
+  rangeConflicts?: ProductRangeConflict[];
 }
 
 function compileFields(entity: ProductEntity): Array<Record<string, unknown>> {
@@ -58,14 +60,25 @@ function compileFields(entity: ProductEntity): Array<Record<string, unknown>> {
   }));
 }
 
-function compileEntity(entity: ProductEntity): CompiledEntityConfig {
+function compileSecondaryFields(entity: ProductEntity, rangeConflicts: ProductRangeConflict[]): string[] {
+  const ordinary = entity.fields.filter((field) => field.id !== entity.primaryField).slice(0, 4).map((field) => field.id);
+  const rangeContext = rangeConflicts
+    .filter((rule) => rule.entity === entity.name)
+    .flatMap((rule) => [rule.startField, rule.endField, ...(rule.detailFields ?? [])]);
+  return [...new Set([...ordinary, ...rangeContext])].filter((field) => field !== entity.primaryField).slice(0, 7);
+}
+
+function compileEntity(entity: ProductEntity, rangeConflicts: ProductRangeConflict[]): CompiledEntityConfig {
   return {
     name: entity.name,
     plural: entity.plural,
     primaryField: entity.primaryField,
-    secondaryFields: entity.fields.filter((field) => field.id !== entity.primaryField).slice(0, 4).map((field) => field.id),
+    secondaryFields: compileSecondaryFields(entity, rangeConflicts),
     searchableFields: entity.fields.filter((field) => ["text", "longText", "category", "status", "email", "url"].includes(field.type)).map((field) => field.id),
     fields: compileFields(entity),
+    ...(rangeConflicts.some((rule) => rule.entity === entity.name)
+      ? { rangeConflicts: rangeConflicts.filter((rule) => rule.entity === entity.name) }
+      : {}),
   };
 }
 
@@ -101,7 +114,7 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
   const genome = genomeFor(ir);
   const searchableFields = entity.fields.filter((field) => ["text", "longText", "category", "status", "email", "url"].includes(field.type)).map((field) => field.id);
   const hasGroupableField = entity.fields.some((field) => field.type === "category" || field.type === "status");
-  const secondaryFields = entity.fields.filter((field) => field.id !== entity.primaryField).slice(0, 4).map((field) => field.id);
+  const secondaryFields = compileSecondaryFields(entity, ir.rangeConflicts);
   const primaryCalculations = ir.calculations.filter((calculation) => !calculation.entity || calculation.entity === entity.name);
   const summaries = primaryCalculations.length > 0 ? primaryCalculations : [{ id: "total", label: `Total ${entity.plural}`, operation: "count" as const }];
   const presentation = resolvePresentation(ir);
@@ -126,6 +139,9 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
     summaries,
     charts: ir.charts,
     quickActions: ir.quickActions,
+    ...(ir.rangeConflicts.some((rule) => rule.entity === entity.name)
+      ? { rangeConflicts: ir.rangeConflicts.filter((rule) => rule.entity === entity.name) }
+      : {}),
     sorts: compileSorts(entity, presentation, ir.priority),
     capabilities: {
       create: ir.capabilities.create,
@@ -137,7 +153,7 @@ export function compileConfig(ir: NormalizedProductIR): CompiledConfig {
       export: ir.capabilities.export,
     },
     fields: compileFields(entity),
-    ...(ir.entities.length > 1 ? { entities: ir.entities.map(compileEntity) } : {}),
+    ...(ir.entities.length > 1 ? { entities: ir.entities.map((candidate) => compileEntity(candidate, ir.rangeConflicts)) } : {}),
     ...(ir.standings.length > 0 ? { standings: ir.standings } : {}),
     ...(ir.priority ? { priority: ir.priority } : {}),
   };
@@ -152,8 +168,10 @@ export async function writeCompiledProduct(
   const config = compileConfig(ir);
   // Keep legacy single-entity Product IR artifacts byte-stable. The normalized
   // empty array is an internal convenience and carries no product meaning.
-  const { standings, ...legacyIr } = ir;
-  const serializedIr = standings.length > 0 ? ir : legacyIr;
+  const { standings, rangeConflicts, ...legacyIr } = ir;
+  const serializedIr = standings.length > 0 || rangeConflicts.length > 0
+    ? { ...legacyIr, ...(standings.length > 0 ? { standings } : {}), ...(rangeConflicts.length > 0 ? { rangeConflicts } : {}) }
+    : legacyIr;
   const ideaSpec = {
     target_user: ir.product.targetUser,
     core_utility: ir.product.description,

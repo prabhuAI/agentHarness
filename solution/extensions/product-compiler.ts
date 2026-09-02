@@ -32,21 +32,30 @@ const fieldSchema = Type.Object({
   })),
   refEntity: Type.Optional(Type.String({ description: "reference type only: singular name of the entity this field links to; must be a different entity in this IR" })),
   derive: Type.Optional(Type.Object({
-    kind: Type.String({ enum: ["dateThreshold", "formula", "presence"], description: "dateThreshold = a date-based status; formula = a number computed by arithmetic over other fields; presence = a two-state status determined by whether another field is filled in" }),
+    kind: Type.String({ enum: ["dateThreshold", "formula", "presence", "rangeStatus"], description: "dateThreshold = elapsed-date threshold; rangeStatus = upcoming/active/past from start/end with optional completion override; formula = arithmetic; presence = two states from whether another field is filled" }),
     dateField: Type.Optional(Type.String({ description: "dateThreshold only: id of the date field the elapsed span is measured from (e.g. last_watered)" })),
     thresholdField: Type.Optional(Type.String({ description: "id of a number field giving the threshold in days (e.g. watering_frequency); use this or thresholdDays" })),
     thresholdDays: Type.Optional(Type.Number({ description: "fixed threshold span in days when there is no per-record threshold field" })),
     soonWithinDays: Type.Optional(Type.Number({ description: "days before the threshold that count as the 'soon' band (default 0)" })),
     buckets: Type.Optional(Type.Object({
-      overdue: Type.String({ description: "option label when the elapsed span has passed the threshold" }),
-      soon: Type.String({ description: "option label when within soonWithinDays of the threshold" }),
-      ok: Type.String({ description: "option label otherwise" }),
-    }, { description: "dateThreshold only: each label must be one of this field's options" })),
+      overdue: Type.Optional(Type.String({ description: "dateThreshold: label when elapsed span passed threshold" })),
+      soon: Type.Optional(Type.String({ description: "dateThreshold: label near threshold" })),
+      ok: Type.Optional(Type.String({ description: "dateThreshold: label before threshold" })),
+      upcoming: Type.Optional(Type.String({ description: "rangeStatus: label before start" })),
+      active: Type.Optional(Type.String({ description: "rangeStatus: label from start through end" })),
+      past: Type.Optional(Type.String({ description: "rangeStatus: label after end when not completed" })),
+      completed: Type.Optional(Type.String({ description: "rangeStatus: label when completedField is filled" })),
+      inactive: Type.Optional(Type.String({ description: "rangeStatus: label when inactiveField is true (for example Cancelled or Voided)" })),
+    }, { description: "Labels for dateThreshold or rangeStatus; each must be one of this field's options" })),
     expression: Type.Optional(Type.String({ description: "formula only: arithmetic over other number/currency field ids and numeric literals, using + - * / and parentheses (e.g. \"target_amount - current_amount\", \"price / 12\", \"weight * (1 + reps / 30)\")" })),
     sourceField: Type.Optional(Type.String({ description: "presence only: id of the field whose non-empty value drives this status (e.g. borrower)" })),
     whenPresent: Type.Optional(Type.String({ description: "presence only: status label when the source field is filled in (e.g. \"Lent out\")" })),
     whenEmpty: Type.Optional(Type.String({ description: "presence only: status label when the source field is empty (e.g. \"On shelf\")" })),
-  }, { description: "Compute this field's value instead of taking user input. Use kind dateThreshold on a status field for a date-based lifecycle (overdue / due soon / fine); kind formula on a number/currency field for a value derived by arithmetic; or kind presence on a status field whose two states are exactly whether another field is filled in (e.g. lent-out vs on-shelf from a borrower field). Either way, do not also list it as a customRequirement." })),
+    startField: Type.Optional(Type.String({ description: "rangeStatus only: inclusive start date/datetime field" })),
+    endField: Type.Optional(Type.String({ description: "rangeStatus only: inclusive end date/datetime field" })),
+    completedField: Type.Optional(Type.String({ description: "rangeStatus only: optional return/completion date field overriding the time bucket" })),
+    inactiveField: Type.Optional(Type.String({ description: "rangeStatus only: optional boolean cancellation/void field overriding every time/completion bucket" })),
+  }, { description: "Compute this field instead of taking input. Use dateThreshold for overdue bands, rangeStatus for reservation/rental state from start/end and return/completion, formula for arithmetic, or presence for two states from a field being filled. Never repeat it in customRequirements." })),
 });
 // Shared predicate operators for filters, conditional calculations, and priority.
 // equals/notEquals/contains test text; greaterThan/lessThan/atLeast/atMost/between
@@ -121,6 +130,18 @@ const strictProductIRSchema = Type.Object({
     amount: Type.Optional(Type.Number({ description: "increment only: step to add (may be negative); defaults to 1" })),
     value: Type.Optional(Type.String({ description: "setValue only: the option to set the category/status field to" })),
   }), { maxItems: 4, description: "One-tap per-record buttons that set a field to a computed value. Use this — never a customRequirement — for \"mark done today\", \"+1\" (increment a count/streak/stock), toggle a flag, or advance a status (setValue)." })),
+  rangeConflicts: Type.Optional(Type.Array(Type.Object({
+    id: Type.String(),
+    entity: Type.Optional(Type.String({ description: "Entity whose records must not overlap; omit for the primary entity" })),
+    matchField: Type.String({ description: "Resource/subject field that must match before two ranges conflict, e.g. item, room, vehicle, or employee" }),
+    startField: Type.String({ description: "Date/datetime field containing the inclusive range start" }),
+    endField: Type.String({ description: "Date/datetime field containing the inclusive range end" }),
+    ignoreWhen: Type.Optional(Type.Object({
+      field: Type.String({ description: "Status/category field that can release the reserved range" }),
+      values: Type.Array(Type.String(), { minItems: 1, maxItems: 4, description: "States that do not reserve the range, e.g. Cancelled" }),
+    })),
+    detailFields: Type.Optional(Type.Array(Type.String(), { maxItems: 3, description: "Fields shown when explaining a conflict, e.g. customer" })),
+  }), { maxItems: 3, description: "Deterministically blocks create/edit when the same subject has an inclusive overlapping date range, and shows live availability in the form. Use for bookings, reservations, hires, room scheduling, or assignments; never repeat this rule in customRequirements." })),
   standings: Type.Optional(Type.Array(Type.Object({
     id: Type.String(),
     label: Type.String({ description: "Visible table heading, e.g. League table or Standings" }),
@@ -254,7 +275,7 @@ function parseIfJsonString(value: unknown): unknown {
 // gate. lift them back out so the single call succeeds without a retry.
 const TOP_LEVEL_IR_KEYS = [
   "version", "entities", "capabilities", "filters", "calculations", "charts",
-  "quickActions", "standings", "priority", "persistence", "assumptions",
+  "quickActions", "rangeConflicts", "standings", "priority", "persistence", "assumptions",
   "excluded", "customRequirements",
 ] as const;
 
@@ -449,10 +470,12 @@ export function registerProductCompiler(
       "Multiple editable entities are supported deterministically. When scored records involve two participants and the user wants a league table, ladder, or ranking, add both entities plus a standings entry. The two participant fields live on sourceEntity and select records from rowEntity; provide each side's score-for and score-against fields and the win/draw/loss points. Never describe this again in customRequirements.",
       "When a product has multiple entities, set calculation.entity so a metric is counted from the correct record collection (for example, a total of matches must use entity match).",
       "For a status that is a date-based lifecycle (e.g. overdue / due soon / fine from a last-done date and a frequency), add a status field with those options and set its `derive` (kind dateThreshold) instead of a customRequirement — the runtime computes it live and auto-derives its per-band filters and counts.",
+      "For a reservation/rental lifecycle determined by an inclusive start/end range, use a status field with `derive` kind rangeStatus and buckets upcoming/active/past. Add completedField plus a completed bucket when a return/completion date overrides the time state. If the lifecycle includes Cancelled or Voided, add a boolean inactiveField plus its inactive bucket. Never repeat automatic status changes in customRequirements.",
       "A status the user sets by hand (marking an item Lent then Returned, a bill Paid, a task Done) is a plain status field with `transition` enabled — the user edits it directly. Never add a customRequirement to auto-flip a status from whether another field is filled in or cleared; that coupling is ordinary editing, and a manually-set status field with its options covers it.",
       "When the idea asks to see a number graphed or tracked over time (a weight chart, spend trend, progress over dates), add a `charts` entry (type line) with the date field as xField and the number/currency field as yField — never a customRequirement. The runtime renders it deterministically.",
       "For a breakdown by category rather than over time (spend by category, count by status, share of each type), add a `charts` entry type bar or pie with the category/status field as xField; set yField to a number/currency field to sum it per group, or omit yField to count records. For an average/min/max headline metric, use calculation operations average/min/max (or avgWhere/minWhere/maxWhere with a predicate) — never a customRequirement.",
       "For a one-tap per-record button, add a `quickActions` entry: set today/now to stamp a date/datetime (\"Done!\"), clear to empty a field (\"Returned\"), increment with `amount` to bump a number/currency count/streak/stock (\"+1\"), toggle to flip a boolean, or setValue with `value` to advance a status. Never a customRequirement.",
+      "When records for the same resource must never overlap in time (equipment booking, room reservation, vehicle hire, staff assignment), add a `rangeConflicts` entry with matchField, startField, endField, and optional ignoreWhen/detailFields. Endpoints are inclusive; the runtime shows availability while editing and blocks conflicting create/edit saves. Never repeat it in customRequirements.",
       "Only use a `reference` field (with refEntity) for a real link between two entities the user manages separately (a loan references a book; a task references a project). A person's name written on the record — borrower, owner, assignee — is a plain text field, not a reference and not a second entity.",
       "Set capabilities.export true only when the idea explicitly asks to export, download, back up, or import data (e.g. \"export to CSV\", \"download my data\"). It is off by default; do not enable it for an ordinary tracker that never mentions it.",
       "For a per-record number computed by arithmetic from other number/currency fields (remaining = target − current, monthly = price ÷ 12, one-rep-max = weight × (1 + reps ÷ 30)), add a number/currency field with `derive` kind formula and an `expression` over the other field ids — never a customRequirement. The runtime evaluates it live.",

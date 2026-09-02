@@ -248,13 +248,14 @@ describe("Product IR compiler", () => {
     const sparse = {
       version: "1",
       product: { name: "Book Shelf", targetUser: "A reader" },
-      entities: [{ name: "book", plural: "books", fields: [
+      entities: [{ name: "book", fields: [
         { id: "title", label: "Title", type: "text" },
         { id: "genre", label: "Genre", type: "select", options: ["Novel", "Cookbook", "Reference"] },
       ] }],
     };
     const ir = normalizeProductIR(validateProductIR(sparse));
     expect(ir.product.genome).toBe("tracker");
+    expect(ir.entities[0].plural).toBe("books"); // omitted presentation metadata defaults without a repair call
     expect(ir.entities[0].primaryField).toBe("title"); // omitted primary falls back safely
     expect(ir.entities[0].fields[0]!.required).toBe(true); // primary is always required
     expect(ir.entities[0].fields[1]!.required).toBe(false); // omitted required defaults to false
@@ -423,6 +424,62 @@ describe("Product IR compiler", () => {
     expect(route.route).toBe("compile");
     expect(route.unsupported).toEqual([]);
     expect(route.supported).toEqual(expect.arrayContaining(repeatedBuiltIns.customRequirements));
+  });
+
+  it("compiles overlapping resource ranges deterministically, including prose fallback", () => {
+    const booking = fixture({
+      product: { name: "Equipment reservations", description: "Never double-book the same item for overlapping dates.", targetUser: "Rental owner", genome: "planner" },
+      entities: [{
+        name: "reservation", plural: "reservations", primaryField: "item",
+        fields: [
+          { id: "item", label: "Item", type: "text", required: true },
+          { id: "customer", label: "Customer", type: "text", required: true },
+          { id: "start_date", label: "Start date", type: "date", required: true },
+          { id: "end_date", label: "End date", type: "date", required: true },
+          { id: "return_date", label: "Return date", type: "date", required: false },
+          { id: "state", label: "State", type: "status", required: false, options: ["Reserved", "Out", "Returned", "Cancelled"], derive: {
+            kind: "dateThreshold", dateField: "end_date", thresholdDays: 0,
+            buckets: { overdue: "Reserved", soon: "Reserved", ok: "Reserved" },
+          } },
+        ],
+      }],
+      filters: [{ id: "currently_out", label: "Currently rented", field: "state", operator: "notEquals", value: "Returned" }],
+      calculations: [{ id: "currently_out", label: "Currently rented out", operation: "countWhere", field: "state", operator: "notEquals", value: "Returned" }],
+      customRequirements: [
+        "Before saving, block booking conflicts when the same item has an inclusive overlapping date range; ignore Cancelled and show the customer.",
+        "When start and end include today, automatically set its status to Out; when return_date is set, set its status to Returned.",
+      ],
+    });
+    const ir = normalizeProductIR(validateProductIR(booking));
+    expect(ir.rangeConflicts).toEqual([expect.objectContaining({
+      entity: "reservation", matchField: "item", startField: "start_date", endField: "end_date",
+      ignoreWhen: { field: "state", values: ["Cancelled"] }, detailFields: ["customer"],
+    })]);
+    expect(ir.customRequirements).toEqual([]);
+    expect(ir.entities[0].fields.find((field) => field.id === "state")?.derive).toMatchObject({
+      kind: "rangeStatus", startField: "start_date", endField: "end_date", completedField: "return_date", inactiveField: "cancelled",
+      buckets: { upcoming: "Reserved", active: "Out", past: "Out", completed: "Returned", inactive: "Cancelled" },
+    });
+    expect(ir.entities[0].fields).toContainEqual(expect.objectContaining({ id: "cancelled", type: "boolean", required: false }));
+    expect(ir.filters).toContainEqual(expect.objectContaining({ id: "currently_out", operator: "equals", value: "Out" }));
+    expect(ir.calculations).toContainEqual(expect.objectContaining({ id: "currently_out", operator: "equals", value: "Out" }));
+    expect(classifyCapabilities(ir)).toMatchObject({ route: "compile", supported: expect.arrayContaining(["non_overlapping_ranges"]) });
+    expect(compileConfig(ir).rangeConflicts).toHaveLength(1);
+    expect(deriveJourneys(ir).map((journey) => journey.id)).toContain("range_conflict");
+  });
+
+  it("repairs a future-labelled today filter into a dynamic after-today filter", () => {
+    const planner = fixture({
+      entities: [{ name: "booking", plural: "bookings", primaryField: "name", fields: [
+        { id: "name", label: "Name", type: "text", required: true },
+        { id: "starts", label: "Start date", type: "date", required: true },
+      ] }],
+      filters: [{ id: "future", label: "Future reservations", field: "starts", operator: "today" }],
+      calculations: [],
+    });
+    expect(normalizeProductIR(validateProductIR(planner)).filters).toContainEqual({
+      id: "future", label: "Future reservations", field: "starts", operator: "after", value: "today",
+    });
   });
 
   it("compiles grouping when the product has a category or status field", () => {

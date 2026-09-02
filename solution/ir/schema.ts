@@ -47,7 +47,10 @@ export function validateProductIR(value: unknown): ProductIR {
   else value.entities.forEach((entity, entityIndex) => {
     if (!isRecord(entity)) { issues.push(`entities[${entityIndex}] must be an object`); return; }
     if (typeof entity.name !== "string" || entity.name.trim() === "") issues.push(`entities[${entityIndex}].name is required`);
-    if (typeof entity.plural !== "string" || entity.plural.trim() === "") issues.push(`entities[${entityIndex}].plural is required`);
+    // plural is presentation metadata, not structural intent. The normalizer
+    // deterministically falls back to `${name}s`, so omitting or blanking it
+    // must not spend a repair/model call.
+    if (entity.plural !== undefined && typeof entity.plural !== "string") issues.push(`entities[${entityIndex}].plural must be a string`);
     if (!Array.isArray(entity.fields) || entity.fields.length === 0) issues.push(`entities[${entityIndex}] needs fields`);
     else entity.fields.forEach((field, fieldIndex) => {
       if (!isRecord(field)) { issues.push(`entities[${entityIndex}].fields[${fieldIndex}] must be an object`); return; }
@@ -97,6 +100,11 @@ export function validateProductIR(value: unknown): ProductIR {
                 if (mistyped(derive.buckets[band])) issues.push(`field ${fieldIndex}.derive.buckets.${band} must be a string`);
               }
             }
+          } else if (derive.kind === "rangeStatus") {
+            for (const key of ["startField", "endField", "completedField", "inactiveField"] as const) {
+              if (mistyped(derive[key])) issues.push(`field ${fieldIndex}.derive.${key} must be a string`);
+            }
+            if (derive.buckets !== undefined && !isRecord(derive.buckets)) issues.push(`field ${fieldIndex}.derive.buckets must be an object`);
           }
         }
       }
@@ -133,6 +141,23 @@ export function validateProductIR(value: unknown): ProductIR {
   else if (Array.isArray(value.quickActions)) value.quickActions.forEach((action, index) => {
     if (!isRecord(action) || typeof action.id !== "string" || typeof action.label !== "string" || typeof action.field !== "string") issues.push(`quickActions[${index}] is invalid`);
     else if (!(QUICK_ACTION_SETS as readonly string[]).includes(String(action.set))) issues.push(`quickActions[${index}].set must be one of ${QUICK_ACTION_SETS.join(", ")}`);
+  });
+  // Range conflicts are recoverable: normalization drops entries whose entity
+  // or fields do not resolve. Reject only structurally mistyped values here.
+  if (value.rangeConflicts !== undefined && !Array.isArray(value.rangeConflicts)) issues.push("rangeConflicts must be an array");
+  else if (Array.isArray(value.rangeConflicts)) value.rangeConflicts.forEach((rule, index) => {
+    if (!isRecord(rule)) { issues.push(`rangeConflicts[${index}] must be an object`); return; }
+    for (const key of ["id", "entity", "matchField", "startField", "endField"] as const) {
+      if (rule[key] !== undefined && typeof rule[key] !== "string") issues.push(`rangeConflicts[${index}].${key} must be a string`);
+    }
+    if (rule.detailFields !== undefined && !strings(rule.detailFields)) issues.push(`rangeConflicts[${index}].detailFields must be strings`);
+    if (rule.ignoreWhen !== undefined) {
+      if (!isRecord(rule.ignoreWhen)) issues.push(`rangeConflicts[${index}].ignoreWhen must be an object`);
+      else {
+        if (rule.ignoreWhen.field !== undefined && typeof rule.ignoreWhen.field !== "string") issues.push(`rangeConflicts[${index}].ignoreWhen.field must be a string`);
+        if (rule.ignoreWhen.values !== undefined && !strings(rule.ignoreWhen.values)) issues.push(`rangeConflicts[${index}].ignoreWhen.values must be strings`);
+      }
+    }
   });
   if (value.standings !== undefined && !Array.isArray(value.standings)) issues.push("standings must be an array");
   else if (Array.isArray(value.standings)) value.standings.forEach((table, index) => {

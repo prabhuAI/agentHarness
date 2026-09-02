@@ -56,7 +56,7 @@ export const CALCULATION_OPERATIONS = [
 ] as const;
 export type CalculationOperation = (typeof CALCULATION_OPERATIONS)[number];
 
-export const DERIVED_FIELD_KINDS = ["dateThreshold", "formula", "presence"] as const;
+export const DERIVED_FIELD_KINDS = ["dateThreshold", "formula", "presence", "rangeStatus"] as const;
 export type DerivedFieldKind = (typeof DERIVED_FIELD_KINDS)[number];
 
 export const CHART_TYPES = ["line", "bar", "pie"] as const;
@@ -132,7 +132,26 @@ export interface PresenceDerive {
   whenEmpty: string;
 }
 
-export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive | PresenceDerive;
+// A live lifecycle derived from where today falls relative to a stored range,
+// optionally overridden when a completion/return field is filled.
+export interface RangeStatusDerive {
+  kind: "rangeStatus";
+  startField: string;
+  endField: string;
+  completedField?: string;
+  // Optional boolean field that overrides the timeline into an inactive state
+  // such as Cancelled or Voided.
+  inactiveField?: string;
+  buckets: {
+    upcoming: string;
+    active: string;
+    past: string;
+    completed?: string;
+    inactive?: string;
+  };
+}
+
+export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive | PresenceDerive | RangeStatusDerive;
 
 export interface ProductField {
   id: string;
@@ -243,6 +262,29 @@ export interface ProductQuickAction {
   value?: string;
 }
 
+// Prevents two records for the same subject from occupying overlapping date
+// ranges. This is the domain-neutral primitive behind equipment bookings, room
+// reservations, vehicle hires, staff assignments, and similar scheduling rules.
+// Range endpoints are inclusive: [a, b] conflicts with [b, c].
+export interface ProductRangeConflict {
+  id: string;
+  // Entity whose records are constrained. Optional for a single-entity IR and
+  // normalized to the primary entity when omitted.
+  entity?: string;
+  // Records are compared only when this field has the same normalized value.
+  matchField: string;
+  startField: string;
+  endField: string;
+  // Records in one of these states do not reserve the range (for example,
+  // Cancelled). The same exemption applies to the candidate being saved.
+  ignoreWhen?: {
+    field: string;
+    values: string[];
+  };
+  // Extra values shown with a conflicting record, such as a customer or owner.
+  detailFields?: string[];
+}
+
 export interface ProductCapabilities {
   create: boolean;
   edit: boolean;
@@ -277,6 +319,7 @@ export interface ProductIR {
   calculations: ProductCalculation[];
   charts: ProductChart[];
   quickActions: ProductQuickAction[];
+  rangeConflicts?: ProductRangeConflict[];
   standings?: ProductStandings[];
   priority?: ProductPriority;
   persistence: { strategy: "localStorage" };
@@ -290,6 +333,7 @@ export interface NormalizedProductIR extends ProductIR {
   entities: [ProductEntity, ...ProductEntity[]];
   capabilities: ProductCapabilities;
   standings: ProductStandings[];
+  rangeConflicts: ProductRangeConflict[];
 }
 
 export type BuildRoute = "compile" | "hybrid" | "custom";

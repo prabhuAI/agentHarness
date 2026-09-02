@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { type EntityConfig, type FieldConfig, productConfig, type StandingsConfig } from "./product-config.js";
 import { createRepository, type EntityRecord, type RecordValue } from "./repository.js";
+import { evaluateRangeConflict } from "./range-conflicts.js";
 
 type Values = Record<string, RecordValue>;
 type RecordsByEntity = Record<string, EntityRecord[]>;
@@ -97,6 +98,10 @@ export function RelatedWorkspace({ primaryRecords }: { primaryRecords: EntityRec
     }
     return displayRecordValue(entity, entity.primaryField, record.values[entity.primaryField]);
   };
+  const rangeEvaluations = editing ? (editing.entity.rangeConflicts ?? []).map((rule) => ({
+    rule,
+    evaluation: evaluateRangeConflict(rule, values, recordsFor(editing.entity.name), editing.id),
+  })) : [];
 
   const open = (entity: EntityConfig, record?: EntityRecord) => {
     setEditing({ entity, id: record?.id });
@@ -123,6 +128,10 @@ export function RelatedWorkspace({ primaryRecords }: { primaryRecords: EntityRec
     if (table) {
       const [left, right] = table.participants;
       if (values[left.entityField] && values[left.entityField] === values[right.entityField]) nextErrors[right.entityField] = "Choose two different participants.";
+    }
+    for (const { rule, evaluation } of rangeEvaluations) {
+      if (evaluation.invalidOrder) nextErrors[rule.endField] = "End must be on or after start.";
+      else if (evaluation.conflicts.length > 0) nextErrors[rule.matchField] = "Unavailable for this period. Choose different dates or another item.";
     }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
@@ -190,6 +199,9 @@ export function RelatedWorkspace({ primaryRecords }: { primaryRecords: EntityRec
     </section>)}</div>
     <dialog ref={dialog}><form onSubmit={submit} noValidate><div className="dialog-head"><div><p className="eyebrow">{editing?.id ? "Update" : "New entry"}</p><h2>{editing ? `${editing.id ? "Edit" : "Add"} ${editing.entity.name}` : "Add record"}</h2></div><button type="button" className="icon-button" aria-label="Close related record" onClick={() => dialog.current?.close()}>×</button></div>
       <div className="form-grid">{editing?.entity.fields.filter((field) => !field.derive).map((field) => renderField(editing.entity, field))}</div>
+      {rangeEvaluations.map(({ rule, evaluation }) => !evaluation.ready || evaluation.invalidOrder ? null : evaluation.conflicts.length === 0
+        ? <div className="availability availability-free" role="status" key={rule.id}>Available for this period.</div>
+        : <div className="availability availability-conflict" role="alert" key={rule.id}><strong>Unavailable for this period.</strong><span>Conflicts with {evaluation.conflicts.length} existing record{evaluation.conflicts.length === 1 ? "" : "s"}.</span></div>)}
       <div className="dialog-actions"><button type="button" className="secondary" onClick={() => dialog.current?.close()}>Cancel</button><button type="submit" className="primary">{editing?.id ? "Save changes" : `Add ${editing?.entity.name ?? "record"}`}</button></div>
     </form></dialog>
   </section>;

@@ -68,11 +68,15 @@ function recordContainerFor(primaryValue: string): HTMLElement {
 }
 
 function nonMatchingEditableValue(field: FieldConfig, preset: FilterPreset, values: Record<string, string | boolean>): string | boolean | undefined {
+  const rangeRule = productConfig.rangeConflicts.find((rule) => rule.startField === field.key || rule.endField === field.key);
+  const dateCandidates = field.type === "date" || field.type === "datetime"
+    ? (rangeRule?.endField === field.key ? ["2099-01-01"] : ["2000-01-01"])
+    : [];
   const candidates: Array<string | boolean> = [
     ...(field.options ?? []),
+    ...dateCandidates,
     ...(field.required ? [] : [""]),
     ...(field.type === "number" || field.type === "currency" ? ["0", "999999"] : ["Different value"]),
-    ...(field.type === "date" || field.type === "datetime" ? ["2000-01-01"] : []),
     false, true,
   ];
   return candidates.find((candidate) => candidate !== values[field.key]
@@ -273,6 +277,23 @@ describe("compiled product runtime", () => {
     expect(computeDerivedValue(status, {}, now)).toBe("On shelf"); // no borrower key at all
   });
 
+  it("derives reservation status from an inclusive range and completion override", () => {
+    const status: FieldConfig = {
+      key: "status", label: "Status", type: "status", options: ["Reserved", "Out", "Returned", "Cancelled"],
+      derive: {
+        kind: "rangeStatus", startField: "start", endField: "end", completedField: "returned",
+        inactiveField: "cancelled",
+        buckets: { upcoming: "Reserved", active: "Out", past: "Out", completed: "Returned", inactive: "Cancelled" },
+      },
+    };
+    const now = new Date(2026, 8, 12, 12);
+    expect(computeDerivedValue(status, { start: "2026-09-13", end: "2026-09-15" }, now)).toBe("Reserved");
+    expect(computeDerivedValue(status, { start: "2026-09-12", end: "2026-09-12" }, now)).toBe("Out");
+    expect(computeDerivedValue(status, { start: "2026-09-01", end: "2026-09-10" }, now)).toBe("Out");
+    expect(computeDerivedValue(status, { start: "2026-09-01", end: "2026-09-20", returned: "2026-09-11" }, now)).toBe("Returned");
+    expect(computeDerivedValue(status, { start: "2026-09-01", end: "2026-09-20", returned: "2026-09-11", cancelled: true }, now)).toBe("Cancelled");
+  });
+
   it("counts a presence-derived status from stored records that only carry the source field", () => {
     // The reported bug: a book with a borrower recorded but no stored status was
     // counted as "On shelf", so "Lent out" showed 0. With status derived from the
@@ -301,6 +322,8 @@ describe("compiled product runtime", () => {
     expect(matchesPredicate("2026-08-01", "thisMonth", undefined, now)).toBe(true);
     expect(matchesPredicate("2026-07-31", "thisMonth", undefined, now)).toBe(false);
     expect(matchesPredicate("", "thisMonth", undefined, now)).toBe(false);
+    expect(matchesPredicate("2026-08-20", "after", "today", now)).toBe(true);
+    expect(matchesPredicate("2026-08-18", "after", "today", now)).toBe(false);
   });
 
   it("resolves another field as a per-record comparison bound", () => {
@@ -554,5 +577,46 @@ describe("compiled product runtime", () => {
       default: // clear
         expect(saved.values[action.field]).toBe("");
     }
+  });
+
+  it("shows availability and blocks an inclusive overlapping range for the same subject", async () => {
+    const rule = productConfig.rangeConflicts[0];
+    if (!rule) return;
+    const user = userEvent.setup();
+    render(<App />);
+    const ignored = new Set((rule.ignoreWhen?.values ?? []).map((value) => value.toLowerCase()));
+    const stateField = rule.ignoreWhen ? productConfig.fields.find((field) => field.key === rule.ignoreWhen?.field) : undefined;
+    const activeState = stateField?.options?.find((option) => !ignored.has(option.toLowerCase())) ?? "Active";
+    const completedField = stateField?.derive?.kind === "rangeStatus" ? stateField.derive.completedField : undefined;
+    const inactiveField = stateField?.derive?.kind === "rangeStatus" ? stateField.derive.inactiveField : undefined;
+    const shared = {
+      [rule.matchField]: "Shared resource",
+      [rule.startField]: "2026-10-10",
+      [rule.endField]: "2026-10-12",
+      ...(rule.ignoreWhen ? { [rule.ignoreWhen.field]: activeState } : {}),
+      ...(completedField ? { [completedField]: "" } : {}),
+      ...(inactiveField ? { [inactiveField]: false } : {}),
+    };
+    await createRecord(shared);
+    expect(JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]")).toHaveLength(1);
+
+    await user.click(screen.getAllByRole("button", { name: new RegExp(`add ${productConfig.entityName}`, "i") })[0]);
+    const dialog = screen.getByRole("dialog");
+    for (const field of productConfig.fields.filter((candidate) => !candidate.derive)) {
+      const value = shared[field.key as keyof typeof shared] ?? field.options?.[0] ?? sampleValue(field);
+      await fillField(user, dialog, field, value);
+    }
+    // Touching the existing end date is an overlap because endpoints are inclusive.
+    await fillField(user, dialog, productConfig.fields.find((field) => field.key === rule.startField)!, "2026-10-12");
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(/unavailable for this period/i);
+    await user.click(within(dialog).getByRole("button", { name: new RegExp(`add ${productConfig.entityName}`, "i") }));
+    expect(JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]")).toHaveLength(1);
+    expect(within(dialog).getByText(/choose different dates or another item/i)).toBeInTheDocument();
+
+    // A different subject with the same dates becomes available and can be saved.
+    await fillField(user, dialog, productConfig.fields.find((field) => field.key === rule.matchField)!, "Another resource");
+    expect(within(dialog).getByRole("status")).toHaveTextContent(/available for this period/i);
+    await user.click(within(dialog).getByRole("button", { name: new RegExp(`add ${productConfig.entityName}`, "i") }));
+    expect(JSON.parse(window.localStorage.getItem(storageKeyFor(productConfig.name)) ?? "[]")).toHaveLength(2);
   });
 });

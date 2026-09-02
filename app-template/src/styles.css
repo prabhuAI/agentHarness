@@ -329,6 +329,10 @@ dialog form { padding: calc(var(--panel-space) + 4px); }
 .check { display: flex !important; align-items: center; gap: 8px; min-height: 44px; }
 .check input { width: auto; min-height: auto; }
 .error { display: block; margin-top: 5px; color: var(--danger); font-weight: 650; }
+.availability { display: grid; gap: 5px; margin: -10px 0 22px; padding: 12px 14px; border: 1px solid; border-radius: 10px; font-size: 13px; }
+.availability-free { border-color: color-mix(in srgb, #15803d 38%, var(--border)); background: color-mix(in srgb, #dcfce7 58%, var(--surface)); color: color-mix(in srgb, #166534 84%, var(--ink)); }
+.availability-conflict { border-color: color-mix(in srgb, var(--danger) 42%, var(--border)); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); }
+.availability ul { margin: 2px 0 0; padding-left: 20px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 

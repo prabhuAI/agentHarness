@@ -25,6 +25,7 @@ export function classifyCapabilities(ir: NormalizedProductIR): RouteDecision {
   // Trend charts are a deterministic runtime feature, not a custom requirement,
   // so they count as supported and never push the idea off the compile route.
   if (ir.charts.length > 0) supported.push("chart");
+  if (ir.rangeConflicts.length > 0) supported.push("non_overlapping_ranges");
   supported.push(...repeatedBuiltIns);
   if (unsupported.length === 0) return {
     route: "compile", genome: ir.product.genome, supported, unsupported: [],

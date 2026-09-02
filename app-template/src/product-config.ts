@@ -33,7 +33,15 @@ export interface PresenceDerive {
   whenPresent: string;
   whenEmpty: string;
 }
-export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive | PresenceDerive;
+export interface RangeStatusDerive {
+  kind: "rangeStatus";
+  startField: string;
+  endField: string;
+  completedField?: string;
+  inactiveField?: string;
+  buckets: { upcoming: string; active: string; past: string; completed?: string; inactive?: string };
+}
+export type DerivedFieldSpec = DateThresholdDerive | FormulaDerive | PresenceDerive | RangeStatusDerive;
 
 export interface FieldConfig {
   key: string;
@@ -153,6 +161,16 @@ export interface QuickActionConfig {
   value?: string;
 }
 
+export interface RangeConflictConfig {
+  id: string;
+  entity?: string;
+  matchField: string;
+  startField: string;
+  endField: string;
+  ignoreWhen?: { field: string; values: string[] };
+  detailFields?: string[];
+}
+
 export interface EntityConfig {
   name: string;
   plural: string;
@@ -160,6 +178,7 @@ export interface EntityConfig {
   secondaryFields: string[];
   searchableFields: string[];
   fields: FieldConfig[];
+  rangeConflicts?: RangeConflictConfig[];
 }
 
 export interface StandingsConfig {
@@ -193,6 +212,7 @@ export interface ProductConfig {
   summaries: SummaryConfig[];
   charts: ChartConfig[];
   quickActions: QuickActionConfig[];
+  rangeConflicts: RangeConflictConfig[];
   sorts: SortOption[];
   capabilities: { create: boolean; edit: boolean; delete: boolean; search: boolean; sort: boolean; group: boolean; export: boolean };
   entities?: EntityConfig[];
@@ -241,6 +261,7 @@ export const productConfig: ProductConfig = {
   },
   charts: parsedConfig.charts ?? [],
   quickActions: parsedConfig.quickActions ?? [],
+  rangeConflicts: parsedConfig.rangeConflicts ?? [],
   sorts: parsedConfig.sorts && parsedConfig.sorts.length > 0 ? parsedConfig.sorts : DEFAULT_SORTS,
   entities: parsedConfig.entities ?? [],
   standings: parsedConfig.standings ?? [],

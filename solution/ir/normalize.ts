@@ -1,5 +1,5 @@
 import { analyzeFormula } from "./formula.js";
-import type { ChartType, DateThresholdDerive, DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductField, ProductFilter, ProductIR, ProductPriority, ProductQuickAction, ProductStandings } from "./types.js";
+import type { ChartType, DateThresholdDerive, DateWindowOperator, DerivedFieldSpec, DesignIntent, FilterOperator, Genome, NormalizedProductIR, ProductCalculation, ProductChart, ProductEntity, ProductField, ProductFilter, ProductIR, ProductPriority, ProductQuickAction, ProductRangeConflict, ProductStandings } from "./types.js";
 import { CHART_TYPES, DATE_COMPARISON_OPERATORS, DATE_WINDOW_OPERATORS, DERIVED_FIELD_KINDS, FIELD_TYPES, FILTER_OPERATORS, GENOMES, QUICK_ACTION_SETS, type FieldType } from "./types.js";
 
 // Operators that require a non-empty comparison `value` (between additionally
@@ -93,6 +93,28 @@ function normalizeDerive(raw: unknown, fieldId: string, fieldIds: Set<string>, n
     if (!whenPresent || !whenEmpty || whenPresent === whenEmpty) return undefined;
     return { kind: "presence", sourceField, whenPresent, whenEmpty };
   }
+  if (kind === "rangeStatus") {
+    const range = raw as { startField?: unknown; endField?: unknown; completedField?: unknown; inactiveField?: unknown; buckets?: Record<string, unknown> };
+    const startField = identifier(range.startField, "");
+    const endField = identifier(range.endField, "");
+    const completedField = identifier(range.completedField, "");
+    const inactiveField = identifier(range.inactiveField, "");
+    if (!fieldIds.has(startField) || !fieldIds.has(endField) || startField === endField || startField === fieldId || endField === fieldId) return undefined;
+    if (completedField && (!fieldIds.has(completedField) || completedField === fieldId)) return undefined;
+    if (inactiveField && (!fieldIds.has(inactiveField) || inactiveField === fieldId)) return undefined;
+    const upcoming = clean(String(range.buckets?.upcoming ?? ""));
+    const active = clean(String(range.buckets?.active ?? ""));
+    const past = clean(String(range.buckets?.past ?? ""));
+    const completed = clean(String(range.buckets?.completed ?? ""));
+    const inactive = clean(String(range.buckets?.inactive ?? ""));
+    if (!upcoming || !active || !past || (completedField && !completed) || (inactiveField && !inactive)) return undefined;
+    return {
+      kind: "rangeStatus", startField, endField,
+      ...(completedField ? { completedField } : {}),
+      ...(inactiveField ? { inactiveField } : {}),
+      buckets: { upcoming, active, past, ...(completed ? { completed } : {}), ...(inactive ? { inactive } : {}) },
+    };
+  }
   if (kind === "formula") {
     const expression = clean(String(spec.expression ?? ""));
     if (!expression) return undefined;
@@ -114,6 +136,10 @@ function normalizeDerive(raw: unknown, fieldId: string, fieldIds: Set<string>, n
   const soon = clean(String(buckets.soon ?? ""));
   const ok = clean(String(buckets.ok ?? ""));
   if (!overdue || !soon || !ok) return undefined;
+  // A three-band derivation whose every bucket is identical computes no state at
+  // all. Drop it so a model-authored manual lifecycle remains editable instead
+  // of becoming a permanently fixed status.
+  if (new Set([overdue.toLowerCase(), soon.toLowerCase(), ok.toLowerCase()]).size < 2) return undefined;
   const soonWithinDays = Number(spec.soonWithinDays);
   return {
     kind: "dateThreshold",
@@ -140,9 +166,10 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     const buckets = (rawDerive as { buckets?: Partial<DateThresholdDerive["buckets"]> } | undefined)?.buckets;
     const isPresenceDerive = deriveKind === "presence";
     const isFormulaDerive = deriveKind === "formula";
+    const isRangeStatusDerive = deriveKind === "rangeStatus";
     // Only a date-threshold lifecycle folds its bucket labels into options (so the
     // facet machinery derives per-band filters and counts); a formula stays numeric.
-    const isDateThresholdDerive = deriveKind === "dateThreshold" || (!isPresenceDerive && !isFormulaDerive && Boolean(buckets));
+    const isDateThresholdDerive = deriveKind === "dateThreshold" || (!isPresenceDerive && !isFormulaDerive && !isRangeStatusDerive && Boolean(buckets));
     if (isDateThresholdDerive && buckets) {
       const bands = [buckets.overdue, buckets.soon, buckets.ok].filter((value): value is string => typeof value === "string");
       options = uniqueStrings([...(options ?? []), ...bands]);
@@ -155,6 +182,12 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
       const labels = [presence.whenEmpty, presence.whenPresent].filter((value): value is string => typeof value === "string" && value.trim() !== "");
       options = uniqueStrings([...(options ?? []), ...labels]);
     }
+    if (isRangeStatusDerive) {
+      const rangeBuckets = (rawDerive as { buckets?: Record<string, unknown> }).buckets;
+      const labels = [rangeBuckets?.upcoming, rangeBuckets?.active, rangeBuckets?.past, rangeBuckets?.completed, rangeBuckets?.inactive]
+        .filter((value): value is string => typeof value === "string" && value.trim() !== "");
+      options = uniqueStrings([...(options ?? []), ...labels]);
+    }
     // A field carrying an enumerated option list is a choice control regardless of
     // the type the model tagged it with. Weaker models often emit `text` with
     // `options`; coercing to `category` makes the runtime render a select and lets
@@ -164,7 +197,7 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     // A date-threshold field is a computed lifecycle: force `status` so it groups,
     // filters, and badges like one. A formula field is a computed number: force a
     // numeric type so it renders and sums as a number, never a free-text input.
-    if (isDateThresholdDerive || isPresenceDerive) type = "status";
+    if (isDateThresholdDerive || isPresenceDerive || isRangeStatusDerive) type = "status";
     else if (isFormulaDerive) type = field.type === "currency" ? "currency" : "number";
     // A category dropdown defaults to accepting custom input when the model didn't say
     // otherwise: it matches the "prefer suggestions with custom input" guidance and keeps
@@ -213,6 +246,84 @@ function normalizeFields(entity: ProductEntity): ProductField[] {
     if (derive) result = { ...result, derive };
     return result;
   });
+}
+
+const RANGE_CONFLICT_PATTERN = /(overlap|double[ -]?book|booking conflict|reservation conflict|same .{0,24}(?:period|date|time)|available before)/iu;
+
+function normalizeRangeConflicts(input: ProductIR, entities: ProductEntity[]): ProductRangeConflict[] {
+  const entityMap = new Map(entities.map((entity) => [identifier(entity.name, ""), entity]));
+  const normalizeOne = (raw: Partial<ProductRangeConflict>, index: number): ProductRangeConflict | undefined => {
+    const entityName = identifier(raw.entity ?? entities[0]?.name, "");
+    const entity = entityMap.get(entityName);
+    if (!entity) return undefined;
+    const fields = new Map(entity.fields.map((field) => [field.id, field]));
+    const matchField = identifier(raw.matchField, "");
+    const startField = identifier(raw.startField, "");
+    const endField = identifier(raw.endField, "");
+    const start = fields.get(startField);
+    const end = fields.get(endField);
+    const match = fields.get(matchField);
+    if (!match || !start || !end || startField === endField) return undefined;
+    if (!(["date", "datetime"] as const).includes(start.type as "date" | "datetime") ||
+      !(["date", "datetime"] as const).includes(end.type as "date" | "datetime")) return undefined;
+    const rawIgnore = raw.ignoreWhen;
+    const ignoreField = rawIgnore ? identifier(rawIgnore.field, "") : "";
+    const ignoreTarget = fields.get(ignoreField);
+    const requestedValues = uniqueStrings(rawIgnore?.values ?? []);
+    const canonicalValues = requestedValues.map((value) =>
+      ignoreTarget?.options?.find((option) => option.toLowerCase() === value.toLowerCase()) ?? value);
+    const detailFields = [...new Set((raw.detailFields ?? []).map((field) => identifier(field, "")))]
+      .filter((field) => field !== matchField && field !== startField && field !== endField && fields.has(field))
+      .slice(0, 3);
+    return {
+      id: identifier(raw.id, `range_conflict_${index + 1}`),
+      entity: entity.name,
+      matchField,
+      startField,
+      endField,
+      ...(ignoreTarget && canonicalValues.length > 0 ? { ignoreWhen: { field: ignoreField, values: canonicalValues } } : {}),
+      ...(detailFields.length > 0 ? { detailFields } : {}),
+    };
+  };
+
+  const explicit = (input.rangeConflicts ?? [])
+    .map((rule, index) => normalizeOne(rule, index))
+    .filter((rule): rule is ProductRangeConflict => Boolean(rule));
+  if (explicit.length > 0) return explicit.filter((rule, index, all) =>
+    all.findIndex((candidate) => `${candidate.entity}:${candidate.matchField}:${candidate.startField}:${candidate.endField}` ===
+      `${rule.entity}:${rule.matchField}:${rule.startField}:${rule.endField}`) === index);
+
+  // Compatibility fallback for models that describe this common invariant in
+  // prose. Inference is intentionally strict: conflict language plus one entity
+  // with an identifiable start field, end field, and resource-like match field.
+  const prose = `${input.product?.description ?? ""} ${(input.customRequirements ?? []).join(" ")}`;
+  if (!RANGE_CONFLICT_PATTERN.test(prose)) return [];
+  const semantic = (field: ProductField): string => `${field.id} ${field.label}`.toLowerCase();
+  for (const entity of entities) {
+    const start = entity.fields.find((field) => (field.type === "date" || field.type === "datetime") && /(^|\W)(start|from|begin|pickup|check[ -]?in)(\W|$)/u.test(semantic(field)));
+    const end = entity.fields.find((field) => (field.type === "date" || field.type === "datetime") && /(^|\W)(end|until|return|due|dropoff|check[ -]?out)(\W|$)/u.test(semantic(field)));
+    const match = entity.fields.find((field) => ["text", "category", "reference"].includes(field.type) && /(^|\W)(item|equipment|resource|asset|room|vehicle|property|unit|seat|camera|lens)(\W|$)/u.test(semantic(field)));
+    if (!start || !end || !match || start.id === end.id) continue;
+    const ignoredField = entity.fields.find((field) => (field.type === "status" || field.type === "category") &&
+      field.options?.some((option) => /^cancell?ed$/iu.test(option)));
+    const ignoredValues = ignoredField?.options?.filter((option) => /^cancell?ed$/iu.test(option)) ?? [];
+    const detailFields = entity.fields
+      .filter((field) => field.id !== match.id && ["text", "email"].includes(field.type))
+      .sort((left, right) => Number(!/customer|client|guest|owner|assignee/iu.test(semantic(left))) - Number(!/customer|client|guest|owner|assignee/iu.test(semantic(right))))
+      .slice(0, 2)
+      .map((field) => field.id);
+    const inferred = normalizeOne({
+      id: "no_overlapping_ranges",
+      entity: entity.name,
+      matchField: match.id,
+      startField: start.id,
+      endField: end.id,
+      ...(ignoredField && ignoredValues.length > 0 ? { ignoreWhen: { field: ignoredField.id, values: ignoredValues } } : {}),
+      detailFields,
+    }, 0);
+    return inferred ? [inferred] : [];
+  }
+  return [];
 }
 
 const OPTION_DERIVATION_RANGE = { min: 2, max: 8 };
@@ -310,6 +421,12 @@ function dedupeCalculationsByLabel(calculations: ProductCalculation[], defaultEn
   });
 }
 
+function impliedActiveStatus(field: ProductField | undefined, label: string): string | undefined {
+  if (!field || field.type !== "status" || !/(current|active|in[ _-]?progress|ongoing)/iu.test(label)) return undefined;
+  const activeWords = new Set(["active", "out", "rented", "checked out", "in progress", "ongoing"]);
+  return field.options?.find((option) => activeWords.has(option.trim().toLowerCase()));
+}
+
 // A predicate is usable only if its field exists, an `equals` carries a value,
 // and a date-window operator targets an actual date field. Dropping the rest
 // stops a model's malformed filter/metric (e.g. countWhere on a field with no
@@ -388,9 +505,77 @@ function pruneRedundantTimeBucketFields(fields: ProductField[]): ProductField[] 
   });
 }
 
+const TEMPORAL_STATUS_PATTERN = /^(?=.*(?:automatically|auto-set|set its status))(?=.*\bstart)(?=.*\bend)(?=.*\bstatus).+$/iu;
+
+function inferRangeStatus(entity: ProductEntity, prose: string): ProductEntity {
+  if (!TEMPORAL_STATUS_PATTERN.test(prose)) return entity;
+  const semantic = (field: ProductField): string => `${field.id} ${field.label}`.toLowerCase();
+  const start = entity.fields.find((field) => (field.type === "date" || field.type === "datetime") && /(^|\W)(start|begin|pickup|check[ -]?in)(\W|$)/u.test(semantic(field)));
+  const end = entity.fields.find((field) => (field.type === "date" || field.type === "datetime") && /(^|\W)(end|due|dropoff|check[ -]?out)(\W|$)/u.test(semantic(field)));
+  const completedField = entity.fields.find((field) => field.id !== end?.id && (field.type === "date" || field.type === "datetime") && /(^|\W)(return|completed|finished|closed)(\W|$)/u.test(semantic(field)));
+  const status = entity.fields.find((field) => field.type === "status" && (field.options?.length ?? 0) >= 2);
+  const option = (words: string[]) => status?.options?.find((candidate) => words.includes(candidate.trim().toLowerCase()));
+  const upcoming = option(["reserved", "scheduled", "upcoming", "booked", "pending"]);
+  const active = option(["out", "active", "rented", "checked out", "in progress", "ongoing"]);
+  const completed = option(["returned", "completed", "complete", "finished", "closed"]);
+  if (!start || !end || !status || !upcoming || !active || (completedField && !completed)) return entity;
+  return {
+    ...entity,
+    fields: entity.fields.map((field) => field === status ? {
+      ...field,
+      derive: {
+        kind: "rangeStatus",
+        startField: start.id,
+        endField: end.id,
+        ...(completedField ? { completedField: completedField.id } : {}),
+        buckets: { upcoming, active, past: active, ...(completed ? { completed } : {}) },
+      },
+    } : field),
+  };
+}
+
+// A timeline-derived status cannot also be typed manually. When its lifecycle
+// includes a cancelled/voided state, give that state a real boolean input and
+// make it an explicit override. This also repairs otherwise-good model IR that
+// lists "Cancelled" as an option/filter but cannot ever produce that value.
+function ensureRangeStatusInactive(entity: ProductEntity): ProductEntity {
+  const status = entity.fields.find((field) => field.derive?.kind === "rangeStatus");
+  if (!status || status.derive?.kind !== "rangeStatus") return entity;
+  const inactive = status.options?.find((candidate) => ["cancelled", "canceled", "voided", "inactive"].includes(candidate.trim().toLowerCase()));
+  if (!inactive) return entity;
+
+  const derive = status.derive;
+  const existingOverride = derive.inactiveField
+    ? entity.fields.find((field) => field.id === derive.inactiveField)
+    : entity.fields.find((field) => field.type === "boolean" && /(^|\W)(cancel|void|inactive)(\W|$)/iu.test(`${field.id} ${field.label}`));
+  const occupied = new Set(entity.fields.map((field) => identifier(field.id, "")));
+  let override = existingOverride;
+  if (!override) {
+    let id = "cancelled";
+    let suffix = 2;
+    while (occupied.has(id)) id = `cancelled_${suffix++}`;
+    override = { id, label: inactive, type: "boolean", required: false };
+  }
+
+  const fields = existingOverride ? entity.fields : [...entity.fields, override];
+  return {
+    ...entity,
+    fields: fields.map((field) => field.id === status.id ? {
+      ...field,
+      derive: {
+        ...derive,
+        inactiveField: override.id,
+        buckets: { ...derive.buckets, inactive },
+      },
+    } : field),
+  };
+}
+
 export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
+  const requirementProse = (input.customRequirements ?? []).join(" ");
   const entities = input.entities.map((entity, index) => {
-    const fields = pruneRedundantTimeBucketFields(normalizeFields(entity));
+    const prepared = ensureRangeStatusInactive(inferRangeStatus(entity, requirementProse));
+    const fields = pruneRedundantTimeBucketFields(normalizeFields(prepared));
     // A derived field is computed, never entered, so it can never identify a record.
     const enterable = fields.filter((field) => !field.derive);
     // A date/datetime makes a poor record title: it renders formatted (e.g.
@@ -409,7 +594,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     const requiredFields = fields.map((field) => field.id === primaryField ? { ...field, required: true } : field);
     return {
       name: clean(entity.name) || `item ${index + 1}`,
-      plural: clean(entity.plural) || `${clean(entity.name)}s`,
+      plural: clean(String(entity.plural ?? "")) || `${clean(entity.name)}s`,
       primaryField,
       fields: requiredFields,
     };
@@ -466,15 +651,23 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
       const field = identifier(filter.field, "");
       const type = primaryFieldMap.get(field)?.type;
       const base = { id: identifier(filter.id, `filter_${index + 1}`), label: clean(filter.label), field };
+      if ((type === "date" || type === "datetime") && filter.operator === "today" && /future|upcoming|later/iu.test(`${filter.id} ${filter.label}`)) {
+        return { ...base, operator: "after" as const, value: "today" };
+      }
       // Repair a model that expressed a date window as a fake value (equals
       // "thisMonth") into the real window operator so it actually filters.
       const asWindow = windowKeyword(filter.value);
       if (asWindow && (type === "date" || type === "datetime")) return { ...base, operator: asWindow };
+      // "Currently active" is a positive state, not every state except one
+      // terminal value. Repair the common model shorthand `notEquals Returned`
+      // when the lifecycle has an explicit active option such as Out.
+      const active = filter.operator === "notEquals" ? impliedActiveStatus(primaryFieldMap.get(field), `${filter.id} ${filter.label}`) : undefined;
+      if (active) return { ...base, operator: "equals" as const, value: active };
       return { ...base, operator: filter.operator, ...(filter.value !== undefined ? { value: filter.value } : {}), ...(filter.valueEnd !== undefined ? { valueEnd: filter.valueEnd } : {}) };
     })
     .filter((filter) => predicateUsable(filter.field, filter.operator, filter.value, primaryFieldMap, filter.valueEnd));
   let calculations = (input.calculations ?? [])
-    .map((calculation, index) => {
+    .map((calculation, index): ProductCalculation => {
       const id = identifier(calculation.id, `metric_${index + 1}`);
       const label = clean(calculation.label);
       const explicitEntity = calculation.entity ? identifier(calculation.entity, "") : "";
@@ -486,7 +679,19 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
         ? entities.find((entity) => searchableName.includes(identifier(entity.plural, "")) || searchableName.includes(identifier(entity.name, "")))?.name
         : undefined;
       const entity = entities.some((candidate) => candidate.name === explicitEntity) ? explicitEntity : inferredEntity;
-      return { ...calculation, id, label, ...(entity ? { entity } : {}), ...(calculation.field ? { field: identifier(calculation.field, "") } : {}), ...(calculation.sumField ? { sumField: identifier(calculation.sumField, "") } : {}) };
+      const field = calculation.field ? identifier(calculation.field, "") : "";
+      const active = calculation.operator === "notEquals" ? impliedActiveStatus(primaryFieldMap.get(field), `${id} ${label}`) : undefined;
+      const normalized: ProductCalculation = {
+        ...calculation,
+        id,
+        label,
+        ...(entity ? { entity } : {}),
+        ...(field ? { field } : {}),
+        ...(calculation.sumField ? { sumField: identifier(calculation.sumField, "") } : {}),
+      };
+      if (!active) return normalized;
+      const { valueEnd: _unusedValueEnd, ...withoutUpperBound } = normalized;
+      return { ...withoutUpperBound, operator: "equals", value: active };
     })
     .filter((calculation) => {
       if (calculation.operation === "count") return true;
@@ -592,6 +797,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     }
   }
   const entityMap = new Map(entities.map((entity) => [identifier(entity.name, ""), entity]));
+  const rangeConflicts = normalizeRangeConflicts(input, entities);
   const standings = (input.standings ?? []).map((table, index): ProductStandings | undefined => {
     const rowEntity = identifier(String(table?.rowEntity ?? ""), "");
     const sourceEntity = identifier(String(table?.sourceEntity ?? ""), "");
@@ -631,7 +837,7 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
   // Exclude the raw input.priority from the passthrough spread: it is re-emitted
   // below only when it normalized to a usable value, so an unusable one is dropped
   // rather than leaked through `...input` untouched.
-  const { priority: _rawPriority, ...inputWithoutPriority } = input;
+  const { priority: _rawPriority, rangeConflicts: _rawRangeConflicts, ...inputWithoutPriority } = input;
   return {
     ...inputWithoutPriority,
     version: "1",
@@ -651,11 +857,18 @@ export function normalizeProductIR(input: ProductIR): NormalizedProductIR {
     calculations,
     charts,
     quickActions,
+    rangeConflicts,
     standings,
     ...(priority ? { priority } : {}),
     persistence: { strategy: "localStorage" },
     assumptions: uniqueStrings(input.assumptions ?? []),
     excluded: uniqueStrings(input.excluded ?? []),
-    customRequirements: uniqueStrings(input.customRequirements ?? []),
+    // When the strict deterministic fallback recognized the full overlapping-
+    // range invariant, do not route the same prose to bespoke model-authored code.
+    customRequirements: uniqueStrings(input.customRequirements ?? []).filter((requirement) => {
+      if (rangeConflicts.length > 0 && RANGE_CONFLICT_PATTERN.test(requirement)) return false;
+      if (entities.some((entity) => entity.fields.some((field) => field.derive?.kind === "rangeStatus")) && TEMPORAL_STATUS_PATTERN.test(requirement)) return false;
+      return true;
+    }),
   };
 }

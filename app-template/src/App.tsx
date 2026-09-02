@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { type ChartConfig, FieldConfig, type PredicateOperator, productConfig, type QuickActionConfig, type SummaryConfig } from "./product-config.js";
+import { type ChartConfig, FieldConfig, type PredicateOperator, productConfig, type QuickActionConfig, type RangeConflictConfig, type SummaryConfig } from "./product-config.js";
 import { evaluateFormula } from "./formula.js";
 import { createRepository, EntityRecord, RecordValue } from "./repository.js";
 import { referenceLabel, referenceOptions, referenceTarget } from "./relations.js";
@@ -7,6 +7,7 @@ import { parseImportedRecords, recordsToCsv, recordsToJson } from "./io.js";
 import { RelatedWorkspace } from "./RelatedWorkspace.js";
 import { CollectionView } from "./CollectionView.js";
 import { resolveViewPlan } from "./view-plan.js";
+import { evaluateRangeConflict } from "./range-conflicts.js";
 import {
   loadThemePreference,
   nextPreference,
@@ -59,6 +60,17 @@ export function computeDerivedValue(field: FieldConfig, values: Values, now: Dat
     // never drift from it: filling the source reads as `whenPresent`, clearing
     // it (e.g. via a "Returned" quick action) reads as `whenEmpty`.
     return String(values[spec.sourceField] ?? "").trim() !== "" ? spec.whenPresent : spec.whenEmpty;
+  }
+  if (spec.kind === "rangeStatus") {
+    if (spec.inactiveField && Boolean(values[spec.inactiveField]) && spec.buckets.inactive) return spec.buckets.inactive;
+    if (spec.completedField && String(values[spec.completedField] ?? "").trim() !== "" && spec.buckets.completed) return spec.buckets.completed;
+    const start = dayIndex(values[spec.startField]);
+    const end = dayIndex(values[spec.endField]);
+    if (start === null || end === null || end < start) return "";
+    const today = Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86_400_000);
+    if (today < start) return spec.buckets.upcoming;
+    if (today <= end) return spec.buckets.active;
+    return spec.buckets.past;
   }
   if (spec.kind === "formula") {
     // Resolve each referenced field to its numeric value; a blank or non-numeric
@@ -436,14 +448,20 @@ export function matchesPredicate(value: RecordValue | undefined, operator: Predi
   if (operator === "empty") return text === "";
   if (operator === "truthy") return value === true || text === "true";
   if (operator === "falsy") return value === false || text === "false" || text === "";
+  // A comparison bound may explicitly mean the current calendar day. Keeping
+  // this dynamic lets "future reservations" remain correct after every refresh.
+  const pad = (part: number) => String(part).padStart(2, "0");
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const resolvedExpected = expected?.trim().toLowerCase() === "today" ? today : expected;
+  const resolvedEnd = valueEnd?.trim().toLowerCase() === "today" ? today : valueEnd;
   // Range/comparison. before/after are date-field aliases of lessThan/greaterThan;
   // between is an inclusive [expected, valueEnd] window.
   if (operator === "between") {
-    const low = compareValues(value, expected);
-    const high = compareValues(value, valueEnd);
+    const low = compareValues(value, resolvedExpected);
+    const high = compareValues(value, resolvedEnd);
     return low !== null && high !== null && low >= 0 && high <= 0;
   }
-  const cmp = compareValues(value, expected);
+  const cmp = compareValues(value, resolvedExpected);
   if (cmp === null) return false;
   if (operator === "lessThan" || operator === "before") return cmp < 0;
   if (operator === "greaterThan" || operator === "after") return cmp > 0;
@@ -537,6 +555,10 @@ export function App() {
   // Records with every derived field computed against today, so filtering,
   // grouping, counting, and display all see the live values, not the raw store.
   const derivedRecords = useMemo(() => records.map((record) => ({ ...record, values: withDerivedValues(record.values) })), [records]);
+  const rangeEvaluations = useMemo(() => productConfig.rangeConflicts.map((rule) => ({
+    rule,
+    evaluation: evaluateRangeConflict(rule, withDerivedValues(values), derivedRecords, editingId),
+  })), [values, derivedRecords, editingId]);
   const visible = useMemo(() => derivedRecords.filter((record) => {
     const matchesQuery = !query || productConfig.searchableFields.some((key) => String(record.values[key] ?? "").toLowerCase().includes(query.toLowerCase()));
     const preset = productConfig.filters.find((candidate) => candidate.id === filter);
@@ -598,6 +620,12 @@ export function App() {
     setErrors((current) => {
       const next = { ...current };
       delete next[key];
+      for (const rule of productConfig.rangeConflicts) {
+        if ([rule.matchField, rule.startField, rule.endField, rule.ignoreWhen?.field].includes(key)) {
+          delete next[rule.matchField];
+          delete next[rule.endField];
+        }
+      }
       for (const field of productConfig.fields) {
         if (field.visibleWhen?.field === key) delete next[field.key];
       }
@@ -608,6 +636,10 @@ export function App() {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const nextErrors = validate(values);
+    for (const { rule, evaluation } of rangeEvaluations) {
+      if (evaluation.invalidOrder) nextErrors[rule.endField] = "End must be on or after start.";
+      else if (evaluation.conflicts.length > 0) nextErrors[rule.matchField] = "Unavailable for this period. Choose different dates or another item.";
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
     try {
@@ -730,6 +762,12 @@ export function App() {
     .map((key) => productConfig.fields.find((field) => field.key === key))
     .filter((field): field is FieldConfig => Boolean(field));
   const hasRowActions = productConfig.capabilities.edit || productConfig.capabilities.delete || productConfig.quickActions.length > 0;
+  const fieldLabel = (key: string): string => productConfig.fields.find((field) => field.key === key)?.label ?? key;
+  const conflictDescription = (rule: RangeConflictConfig, record: EntityRecord): string => {
+    const range = `${String(record.values[rule.startField] ?? "?")} – ${String(record.values[rule.endField] ?? "?")}`;
+    const details = (rule.detailFields ?? []).map((key) => `${fieldLabel(key)}: ${String(record.values[key] ?? "—")}`).join(", ");
+    return details ? `${range} (${details})` : range;
+  };
   const recordTable = (rows: EntityRecord[]) => <div className="table-view" role="region" aria-label={`${productConfig.entityNamePlural} table`}>
     <table className="data-table">
       <thead><tr>
@@ -813,6 +851,13 @@ export function App() {
     </main>
     <dialog ref={dialog} onCancel={close}><form onSubmit={submit} noValidate><div className="dialog-head"><div><p className="eyebrow">{editingId ? "Update" : "New entry"}</p><h2>{editingId ? `Edit ${productConfig.entityName}` : `Add ${productConfig.entityName}`}</h2></div><button type="button" className="icon-button" aria-label="Close" onClick={close}>×</button></div>
       <div className="form-grid">{productConfig.fields.filter((field) => !field.derive && isFieldVisible(field, values)).map((field) => <Field key={field.key} field={field} value={values[field.key]} error={errors[field.key]} onChange={(value) => updateValue(field.key, value)} />)}</div>
+      {rangeEvaluations.map(({ rule, evaluation }) => !evaluation.ready || evaluation.invalidOrder ? null : evaluation.conflicts.length === 0
+        ? <div className="availability availability-free" role="status" key={rule.id}>Available for this period.</div>
+        : <div className="availability availability-conflict" role="alert" key={rule.id}>
+          <strong>Unavailable for this period.</strong>
+          <span>Conflicts with {evaluation.conflicts.length} existing {evaluation.conflicts.length === 1 ? productConfig.entityName : productConfig.entityNamePlural}:</span>
+          <ul>{evaluation.conflicts.map((record) => <li key={record.id}>{conflictDescription(rule, record)}</li>)}</ul>
+        </div>)}
       <div className="dialog-actions"><button type="button" className="secondary" onClick={close}>Cancel</button><button className="primary" type="submit">{editingId ? "Save changes" : `Add ${productConfig.entityName}`}</button></div></form></dialog>
   </div>;
 }

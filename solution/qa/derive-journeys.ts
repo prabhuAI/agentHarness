@@ -22,6 +22,10 @@ export function deriveJourneys(ir: NormalizedProductIR): DerivedJourney[] {
   if (ir.capabilities.calculate && ir.calculations.length > 0) journeys.push({ id: "calculate", description: "Requested derived values update from persisted records" });
   if (ir.capabilities.delete) journeys.push({ id: "delete", description: `User can delete an existing ${entity.name}` });
   if (ir.quickActions.length > 0) journeys.push({ id: "quick_action", description: `A one-tap action updates a ${entity.name} field and persists` });
+  if (ir.rangeConflicts.some((rule) => rule.entity === entity.name)) journeys.push({
+    id: "range_conflict",
+    description: `Overlapping date ranges for the same ${entity.name} subject are blocked before save`,
+  });
   if (ir.priority) journeys.push({ id: "priority", description: `${ir.priority.label} identifies the first eligible ${entity.name} in priority order` });
   if (ir.entities.length > 1) journeys.push({ id: "related_entities", description: `User can add, edit, and persist records for all ${ir.entities.length} related entities` });
   if (ir.standings.length > 0) journeys.push({ id: "standings", description: "Standings recalculate from scored records and rank participants by points and score difference" });
